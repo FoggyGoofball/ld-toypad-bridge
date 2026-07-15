@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LD-ToyPad Bridge</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>LD-ToyPad Bridge</h1>
+      <p id="meta">Connecting...</p>
+    </header>
+
+    <section class="panel zones-strip">
+      <h2>Zones</h2>
+      <p id="portalTelemetry" class="portal-telemetry">Portal lights: waiting for packet data...</p>
+      <div id="zones" class="zones"></div>
+    </section>
+
+    <div class="app-layout">
+      <section class="panel catalog-panel">
+        <h2>Place Toy</h2>
+      <form id="placeForm" class="row">
+        <label class="search-field">
+          Filter
+          <input id="toyFilter" type="search" placeholder="Search by name, world, or id">
+        </label>
+        <label>
+          Zone
+          <select id="zoneSelect">
+            <option value="0">Left</option>
+            <option value="1" selected>Center</option>
+            <option value="2">Right</option>
+          </select>
+        </label>
+        <label>
+          Slot
+          <select id="slotSelect">
+            <option value="">Auto</option>
+            <option value="0">1</option>
+            <option value="1">2</option>
+            <option value="2">3</option>
+          </select>
+        </label>
+        <button type="submit">Place</button>
+      </form>
+
+      <div class="catalog-tabs">
+        <div>
+          <h3>Type</h3>
+          <div id="typeTabs" class="tab-row"></div>
+        </div>
+        <div>
+          <h3>Franchise</h3>
+          <div id="worldTabs" class="tab-row"></div>
+        </div>
+        <div>
+          <h3>Release</h3>
+          <div id="releaseTabs" class="tab-row"></div>
+        </div>
+        <div>
+          <h3>Ownership</h3>
+          <div id="ownershipTabs" class="tab-row"></div>
+        </div>
+      </div>
+
+      <p id="toyCount">Loading catalog...</p>
+
+      <div id="toyGrid" class="toy-grid"></div>
+      <p id="statusLine"></p>
+      </section>
+    </div>
+  </main>
+
+  <div id="placeModal" class="modal" hidden>
+    <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="placeModalTitle">
+      <h3 id="placeModalTitle">Place Toy</h3>
+      <p id="placeModalMeta">Choose a zone:</p>
+      <div class="row modal-actions">
+        <button type="button" data-modal-place-zone="0">Place Left</button>
+        <button type="button" data-modal-place-zone="1">Place Center</button>
+        <button type="button" data-modal-place-zone="2">Place Right</button>
+      </div>
+      <div class="row">
+        <button type="button" id="placeModalCancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

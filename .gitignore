@@ -1,0 +1,23 @@
+# Node
+node_modules/
+npm-debug.log*
+package-lock.json
+
+# Build artifacts
+sprx-plugin/build/
+sprx-plugin/obj/
+sprx-plugin/*.elf
+sprx-plugin/*.sprx
+sprx-plugin/*.self
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log

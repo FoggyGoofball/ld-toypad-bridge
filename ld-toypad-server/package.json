@@ -1,0 +1,14 @@
+{
+  "name": "ld-toypad-server",
+  "version": "1.0.0",
+  "description": "Network bridge server for LEGO Dimensions Toy Pad emulation on PS3",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "images:sync": "node scripts/sync-fandom-images.js"
+  },
+  "dependencies": {
+    "yargs": "^17.7.2"
+  }
+}

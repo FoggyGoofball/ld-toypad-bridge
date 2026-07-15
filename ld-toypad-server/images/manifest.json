@@ -1,0 +1,4191 @@
+{
+  "1": {
+    "itemId": 1,
+    "name": "Batman",
+    "status": "downloaded",
+    "sourcePageTitle": "Batman",
+    "sourceFileTitle": "BatmanNew2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/5/56/BatmanNew2.png/revision/latest?cb=20151128135009",
+    "savedFileName": "1.png",
+    "attemptedTitles": [
+      "Batman"
+    ],
+    "updatedAt": "2026-07-14T19:36:35.197Z"
+  },
+  "2": {
+    "itemId": 2,
+    "name": "Gandalf",
+    "status": "downloaded",
+    "sourcePageTitle": "Gandalf the Grey",
+    "sourceFileTitle": "GandalfNew2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/4f/GandalfNew2.png/revision/latest?cb=20151128134837",
+    "savedFileName": "2.png",
+    "attemptedTitles": [
+      "Gandalf the Grey"
+    ],
+    "updatedAt": "2026-07-14T19:37:58.260Z"
+  },
+  "3": {
+    "itemId": 3,
+    "name": "Wyldstyle",
+    "status": "downloaded",
+    "sourcePageTitle": "Wyldstyle",
+    "sourceFileTitle": "WyldstyleNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/82/WyldstyleNew.png/revision/latest?cb=20151021120145",
+    "savedFileName": "3.png",
+    "attemptedTitles": [
+      "Wyldstyle"
+    ],
+    "updatedAt": "2026-07-14T19:39:16.545Z"
+  },
+  "4": {
+    "itemId": 4,
+    "name": "Aquaman",
+    "status": "downloaded",
+    "sourcePageTitle": "Aquaman",
+    "sourceFileTitle": "Aquaman1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/e1/Aquaman1.png/revision/latest?cb=20160316134516",
+    "savedFileName": "4.png",
+    "attemptedTitles": [
+      "Aquaman"
+    ],
+    "updatedAt": "2026-07-14T19:36:30.667Z"
+  },
+  "5": {
+    "itemId": 5,
+    "name": "Bad Cop",
+    "status": "downloaded",
+    "sourcePageTitle": "Bad Cop",
+    "sourceFileTitle": "BadCopNew2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/d3/BadCopNew2.png/revision/latest?cb=20151212132126",
+    "savedFileName": "5.png",
+    "attemptedTitles": [
+      "Bad Cop"
+    ],
+    "updatedAt": "2026-07-14T19:39:07.157Z"
+  },
+  "6": {
+    "itemId": 6,
+    "name": "Bane",
+    "status": "downloaded",
+    "sourcePageTitle": "Bane",
+    "sourceFileTitle": "BaneNormal.jpeg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c7/BaneNormal.jpeg/revision/latest?cb=20160512172352",
+    "savedFileName": "6.jpeg",
+    "attemptedTitles": [
+      "Bane"
+    ],
+    "updatedAt": "2026-07-14T19:36:32.948Z"
+  },
+  "7": {
+    "itemId": 7,
+    "name": "Bart",
+    "status": "downloaded",
+    "sourcePageTitle": "Bart Simpson",
+    "sourceFileTitle": "Bart Simpson.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/65/Bart_Simpson.png/revision/latest?cb=20160506132923",
+    "savedFileName": "7.png",
+    "attemptedTitles": [
+      "Bart",
+      "search:Bart Simpson"
+    ],
+    "updatedAt": "2026-07-14T19:39:22.868Z"
+  },
+  "8": {
+    "itemId": 8,
+    "name": "Benny",
+    "status": "downloaded",
+    "sourcePageTitle": "Benny",
+    "sourceFileTitle": "BetterBennyImage.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/0a/BetterBennyImage.png/revision/latest?cb=20160524050812",
+    "savedFileName": "8.png",
+    "attemptedTitles": [
+      "Benny"
+    ],
+    "updatedAt": "2026-07-14T19:39:09.520Z"
+  },
+  "9": {
+    "itemId": 9,
+    "name": "Chell",
+    "status": "downloaded",
+    "sourcePageTitle": "Chell",
+    "sourceFileTitle": "ChellNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/5/55/ChellNew.png/revision/latest?cb=20151005195430",
+    "savedFileName": "9.png",
+    "attemptedTitles": [
+      "Chell"
+    ],
+    "updatedAt": "2026-07-14T19:38:28.677Z"
+  },
+  "10": {
+    "itemId": 10,
+    "name": "Cole",
+    "status": "downloaded",
+    "sourcePageTitle": "Cole",
+    "sourceFileTitle": "BetterColeImage.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/74/BetterColeImage.png/revision/latest?cb=20160511133301",
+    "savedFileName": "10.png",
+    "attemptedTitles": [
+      "Cole"
+    ],
+    "updatedAt": "2026-07-14T19:38:12.174Z"
+  },
+  "11": {
+    "itemId": 11,
+    "name": "Cragger",
+    "status": "downloaded",
+    "sourcePageTitle": "Cragger",
+    "sourceFileTitle": "CraggerNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/1/14/CraggerNew.png/revision/latest?cb=20151212131917",
+    "savedFileName": "11.png",
+    "attemptedTitles": [
+      "Cragger"
+    ],
+    "updatedAt": "2026-07-14T19:37:39.339Z"
+  },
+  "12": {
+    "itemId": 12,
+    "name": "Cyborg",
+    "status": "downloaded",
+    "sourcePageTitle": "Cyborg",
+    "sourceFileTitle": "CyborgBig.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/78/CyborgBig.png/revision/latest?cb=20151021120549",
+    "savedFileName": "12.png",
+    "attemptedTitles": [
+      "Cyborg"
+    ],
+    "updatedAt": "2026-07-14T19:36:37.589Z"
+  },
+  "13": {
+    "itemId": 13,
+    "name": "Cyberman",
+    "status": "downloaded",
+    "sourcePageTitle": "Cyberman",
+    "sourceFileTitle": "CybermanNew2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/d6/CybermanNew2.png/revision/latest?cb=20160124180258",
+    "savedFileName": "13.png",
+    "attemptedTitles": [
+      "Cyberman"
+    ],
+    "updatedAt": "2026-07-14T19:36:53.577Z"
+  },
+  "14": {
+    "itemId": 14,
+    "name": "Doc Brown",
+    "status": "downloaded",
+    "sourcePageTitle": "Doc Brown",
+    "sourceFileTitle": "DocBrown1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/b1/DocBrown1.png/revision/latest?cb=20160119134604",
+    "savedFileName": "14.png",
+    "attemptedTitles": [
+      "Doc Brown"
+    ],
+    "updatedAt": "2026-07-14T19:36:14.149Z"
+  },
+  "15": {
+    "itemId": 15,
+    "name": "The Doctor",
+    "status": "downloaded",
+    "sourcePageTitle": "The Doctor",
+    "sourceFileTitle": "Screenshot 2015-09-24 at 3.34.55 PM.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/42/Screenshot_2015-09-24_at_3.34.55_PM.png/revision/latest?cb=20150924193600",
+    "savedFileName": "15.png",
+    "attemptedTitles": [
+      "The Doctor"
+    ],
+    "updatedAt": "2026-07-14T19:36:56.114Z"
+  },
+  "16": {
+    "itemId": 16,
+    "name": "Emmet",
+    "status": "downloaded",
+    "sourcePageTitle": "Emmet",
+    "sourceFileTitle": "EmmetNew2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c3/EmmetNew2.png/revision/latest?cb=20151122192846",
+    "savedFileName": "16.png",
+    "attemptedTitles": [
+      "Emmet"
+    ],
+    "updatedAt": "2026-07-14T19:39:11.899Z"
+  },
+  "17": {
+    "itemId": 17,
+    "name": "Eris",
+    "status": "downloaded",
+    "sourcePageTitle": "Eris",
+    "sourceFileTitle": "ErisNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/03/ErisNew.png/revision/latest?cb=20151025161845",
+    "savedFileName": "17.png",
+    "attemptedTitles": [
+      "Eris"
+    ],
+    "updatedAt": "2026-07-14T19:37:41.764Z"
+  },
+  "18": {
+    "itemId": 18,
+    "name": "Gimli",
+    "status": "downloaded",
+    "sourcePageTitle": "Gimli",
+    "sourceFileTitle": "GimliNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/7e/GimliNew.png/revision/latest?cb=20151027193120",
+    "savedFileName": "18.png",
+    "attemptedTitles": [
+      "Gimli"
+    ],
+    "updatedAt": "2026-07-14T19:38:00.483Z"
+  },
+  "19": {
+    "itemId": 19,
+    "name": "Smeagol",
+    "status": "downloaded",
+    "sourcePageTitle": "Gollum",
+    "sourceFileTitle": "GollumNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/3/3d/GollumNew.png/revision/latest?cb=20151021120846",
+    "savedFileName": "19.png",
+    "attemptedTitles": [
+      "Gollum"
+    ],
+    "updatedAt": "2026-07-14T19:38:05.115Z"
+  },
+  "20": {
+    "itemId": 20,
+    "name": "Harley Quinn",
+    "status": "downloaded",
+    "sourcePageTitle": "Harley Quinn",
+    "sourceFileTitle": "Harley1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/ab/Harley1.png/revision/latest?cb=20160119134355",
+    "savedFileName": "20.png",
+    "attemptedTitles": [
+      "Harley Quinn"
+    ],
+    "updatedAt": "2026-07-14T19:36:42.278Z"
+  },
+  "21": {
+    "itemId": 21,
+    "name": "Homer",
+    "status": "downloaded",
+    "sourcePageTitle": "Homer Simpson",
+    "sourceFileTitle": "Angry Homer HD.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/07/Angry_Homer_HD.png/revision/latest?cb=20160828122418",
+    "savedFileName": "21.png",
+    "attemptedTitles": [
+      "Homer",
+      "search:Homer Simpson"
+    ],
+    "updatedAt": "2026-07-14T19:39:29.429Z"
+  },
+  "22": {
+    "itemId": 22,
+    "name": "Jay",
+    "status": "downloaded",
+    "sourcePageTitle": "Jay",
+    "sourceFileTitle": "JayNew2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c0/JayNew2.png/revision/latest?cb=20151021115315",
+    "savedFileName": "22.png",
+    "attemptedTitles": [
+      "Jay"
+    ],
+    "updatedAt": "2026-07-14T19:38:14.358Z"
+  },
+  "23": {
+    "itemId": 23,
+    "name": "Joker",
+    "status": "downloaded",
+    "sourcePageTitle": "The Joker",
+    "sourceFileTitle": "TheJoker1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/ad/TheJoker1.png/revision/latest?cb=20160119135023",
+    "savedFileName": "23.png",
+    "attemptedTitles": [
+      "Joker"
+    ],
+    "updatedAt": "2026-07-14T19:36:44.519Z"
+  },
+  "24": {
+    "itemId": 24,
+    "name": "Kai",
+    "status": "downloaded",
+    "sourcePageTitle": "Kai",
+    "sourceFileTitle": "Kai3.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/Kai3.png/revision/latest?cb=20151107090037",
+    "savedFileName": "24.png",
+    "attemptedTitles": [
+      "Kai"
+    ],
+    "updatedAt": "2026-07-14T19:38:16.679Z"
+  },
+  "25": {
+    "itemId": 25,
+    "name": "ACU",
+    "status": "downloaded",
+    "sourcePageTitle": "ACU Trooper",
+    "sourceFileTitle": "ACUTrooper.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/ed/ACUTrooper.png/revision/latest?cb=20151005195137",
+    "savedFileName": "25.png",
+    "attemptedTitles": [
+      "ACU Trooper"
+    ],
+    "updatedAt": "2026-07-14T19:37:32.304Z"
+  },
+  "26": {
+    "itemId": 26,
+    "name": "Gamer Kid",
+    "status": "downloaded",
+    "sourcePageTitle": "Gamer Kid",
+    "sourceFileTitle": "BetterGamerImage.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/2/2d/BetterGamerImage.png/revision/latest?cb=20160320012621",
+    "savedFileName": "26.png",
+    "attemptedTitles": [
+      "Gamer Kid"
+    ],
+    "updatedAt": "2026-07-14T19:38:07.397Z"
+  },
+  "27": {
+    "itemId": 27,
+    "name": "Krusty",
+    "status": "downloaded",
+    "sourcePageTitle": "Krusty the Clown",
+    "sourceFileTitle": "Krusty.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/1/17/Krusty.png/revision/latest?cb=20151111064259",
+    "savedFileName": "27.png",
+    "attemptedTitles": [
+      "Krusty",
+      "search:Krusty the Clown"
+    ],
+    "updatedAt": "2026-07-14T19:39:35.657Z"
+  },
+  "28": {
+    "itemId": 28,
+    "name": "Laval",
+    "status": "downloaded",
+    "sourcePageTitle": "Laval",
+    "sourceFileTitle": "LavalNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/b2/LavalNew.png/revision/latest?cb=20151021120712",
+    "savedFileName": "28.png",
+    "attemptedTitles": [
+      "Laval"
+    ],
+    "updatedAt": "2026-07-14T19:37:44.193Z"
+  },
+  "29": {
+    "itemId": 29,
+    "name": "Legolas",
+    "status": "downloaded",
+    "sourcePageTitle": "Legolas",
+    "sourceFileTitle": "LegolasNewFinal.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/fe/LegolasNewFinal.png/revision/latest?cb=20151211155600",
+    "savedFileName": "29.png",
+    "attemptedTitles": [
+      "Legolas"
+    ],
+    "updatedAt": "2026-07-14T19:38:02.774Z"
+  },
+  "30": {
+    "itemId": 30,
+    "name": "Lloyd",
+    "status": "downloaded",
+    "sourcePageTitle": "Lloyd",
+    "sourceFileTitle": "LloydNewFinal.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/61/LloydNewFinal.png/revision/latest?cb=20160511120126",
+    "savedFileName": "30.png",
+    "attemptedTitles": [
+      "Lloyd"
+    ],
+    "updatedAt": "2026-07-14T19:38:19.129Z"
+  },
+  "31": {
+    "itemId": 31,
+    "name": "Marty Mcfly",
+    "status": "downloaded",
+    "sourcePageTitle": "Marty McFly",
+    "sourceFileTitle": "MartyNew3.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/6b/MartyNew3.png/revision/latest?cb=20151005195811",
+    "savedFileName": "31.png",
+    "attemptedTitles": [
+      "Marty McFly"
+    ],
+    "updatedAt": "2026-07-14T19:36:16.557Z"
+  },
+  "32": {
+    "itemId": 32,
+    "name": "Nya",
+    "status": "downloaded",
+    "sourcePageTitle": "Nya",
+    "sourceFileTitle": "NyaNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c6/NyaNew.png/revision/latest?cb=20151021115718",
+    "savedFileName": "32.png",
+    "attemptedTitles": [
+      "Nya"
+    ],
+    "updatedAt": "2026-07-14T19:38:21.523Z"
+  },
+  "33": {
+    "itemId": 33,
+    "name": "Owen",
+    "status": "downloaded",
+    "sourcePageTitle": "Owen Grady",
+    "sourceFileTitle": "OwenNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/2/24/OwenNew.png/revision/latest?cb=20151005200532",
+    "savedFileName": "33.png",
+    "attemptedTitles": [
+      "Owen Grady"
+    ],
+    "updatedAt": "2026-07-14T19:37:34.715Z"
+  },
+  "34": {
+    "itemId": 34,
+    "name": "Peter Venkman",
+    "status": "downloaded",
+    "sourcePageTitle": "Peter Venkman",
+    "sourceFileTitle": "Peter Venkman1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/2/2f/Peter_Venkman1.png/revision/latest?cb=20160119132222",
+    "savedFileName": "34.png",
+    "attemptedTitles": [
+      "Peter Venkman"
+    ],
+    "updatedAt": "2026-07-14T19:37:07.587Z"
+  },
+  "35": {
+    "itemId": 35,
+    "name": "Slimer",
+    "status": "downloaded",
+    "sourcePageTitle": "Slimer",
+    "sourceFileTitle": "SlimerNewFinal.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c0/SlimerNewFinal.png/revision/latest?cb=20160512160836",
+    "savedFileName": "35.png",
+    "attemptedTitles": [
+      "Slimer"
+    ],
+    "updatedAt": "2026-07-14T19:37:09.809Z"
+  },
+  "36": {
+    "itemId": 36,
+    "name": "Scooby Doo",
+    "status": "downloaded",
+    "sourcePageTitle": "Scooby-Doo!",
+    "sourceFileTitle": "Nav-open-logo-scooby.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/69/Nav-open-logo-scooby.png/revision/latest?cb=20160214002737",
+    "savedFileName": "36.png",
+    "attemptedTitles": [
+      "Scooby Doo",
+      "Scooby_Doo",
+      "search:Scooby-Doo!"
+    ],
+    "updatedAt": "2026-07-14T19:38:43.416Z"
+  },
+  "37": {
+    "itemId": 37,
+    "name": "SenseiWu",
+    "status": "downloaded",
+    "sourcePageTitle": "Sensei Wu",
+    "sourceFileTitle": "SenseiWu1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/94/SenseiWu1.png/revision/latest?cb=20160119134707",
+    "savedFileName": "37.png",
+    "attemptedTitles": [
+      "Sensei Wu"
+    ],
+    "updatedAt": "2026-07-14T19:38:23.849Z"
+  },
+  "38": {
+    "itemId": 38,
+    "name": "Shaggy",
+    "status": "downloaded",
+    "sourcePageTitle": "Shaggy",
+    "sourceFileTitle": "ShaggyNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/f8/ShaggyNew.png/revision/latest?cb=20151007192911",
+    "savedFileName": "38.png",
+    "attemptedTitles": [
+      "Shaggy"
+    ],
+    "updatedAt": "2026-07-14T19:38:45.908Z"
+  },
+  "39": {
+    "itemId": 39,
+    "name": "Stay Puft",
+    "status": "downloaded",
+    "sourcePageTitle": "Stay Puft",
+    "sourceFileTitle": "StayPuft1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/00/StayPuft1.png/revision/latest?cb=20160325032242",
+    "savedFileName": "39.png",
+    "attemptedTitles": [
+      "Stay Puft"
+    ],
+    "updatedAt": "2026-07-14T19:37:12.023Z"
+  },
+  "40": {
+    "itemId": 40,
+    "name": "Superman",
+    "status": "downloaded",
+    "sourcePageTitle": "Superman",
+    "sourceFileTitle": "Superman1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/eb/Superman1.png/revision/latest?cb=20160318174234",
+    "savedFileName": "40.png",
+    "attemptedTitles": [
+      "Superman"
+    ],
+    "updatedAt": "2026-07-14T19:36:49.054Z"
+  },
+  "41": {
+    "itemId": 41,
+    "name": "Unikitty",
+    "status": "downloaded",
+    "sourcePageTitle": "Unikitty",
+    "sourceFileTitle": "Better Unikitty Image.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/93/Better_Unikitty_Image.png/revision/latest?cb=20160515154513",
+    "savedFileName": "41.png",
+    "attemptedTitles": [
+      "Unikitty"
+    ],
+    "updatedAt": "2026-07-14T19:39:14.297Z"
+  },
+  "42": {
+    "itemId": 42,
+    "name": "Wicked Witch",
+    "status": "downloaded",
+    "sourcePageTitle": "Wicked Witch of the West",
+    "sourceFileTitle": "WickedWitchNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/79/WickedWitchNew.png/revision/latest?cb=20151013185448",
+    "savedFileName": "42.png",
+    "attemptedTitles": [
+      "Wicked Witch"
+    ],
+    "updatedAt": "2026-07-14T19:39:37.920Z"
+  },
+  "43": {
+    "itemId": 43,
+    "name": "Superwoman",
+    "status": "downloaded",
+    "sourcePageTitle": "Wonder Woman",
+    "sourceFileTitle": "Wonder WomanNew2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/93/Wonder_WomanNew2.png/revision/latest?cb=20151027151135",
+    "savedFileName": "43.png",
+    "attemptedTitles": [
+      "Wonder Woman"
+    ],
+    "updatedAt": "2026-07-14T19:36:51.358Z"
+  },
+  "44": {
+    "itemId": 44,
+    "name": "Zane",
+    "status": "downloaded",
+    "sourcePageTitle": "Zane",
+    "sourceFileTitle": "ZaneNew2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/e8/ZaneNew2.png/revision/latest?cb=20151021115507",
+    "savedFileName": "44.png",
+    "attemptedTitles": [
+      "Zane"
+    ],
+    "updatedAt": "2026-07-14T19:38:26.315Z"
+  },
+  "45": {
+    "itemId": 45,
+    "name": "Green Arrow",
+    "status": "downloaded",
+    "sourcePageTitle": "Green Arrow",
+    "sourceFileTitle": "Green Arrow.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/d1/Green_Arrow.png/revision/latest?cb=20160626140659",
+    "savedFileName": "45.png",
+    "attemptedTitles": [
+      "Green Arrow"
+    ],
+    "updatedAt": "2026-07-14T19:36:40.062Z"
+  },
+  "46": {
+    "itemId": 46,
+    "name": "Supergirl",
+    "status": "downloaded",
+    "sourcePageTitle": "Supergirl",
+    "sourceFileTitle": "SupergirlGame.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/cb/SupergirlGame.png/revision/latest?cb=20160818105024",
+    "savedFileName": "46.png",
+    "attemptedTitles": [
+      "Supergirl"
+    ],
+    "updatedAt": "2026-07-14T19:36:46.882Z"
+  },
+  "47": {
+    "itemId": 47,
+    "name": "Abby Yates",
+    "status": "downloaded",
+    "sourcePageTitle": "Abby Yates",
+    "sourceFileTitle": "AbbyNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/d4/AbbyNew.png/revision/latest?cb=20160929055748",
+    "savedFileName": "47.png",
+    "attemptedTitles": [
+      "Abby Yates"
+    ],
+    "updatedAt": "2026-07-14T19:37:05.254Z"
+  },
+  "48": {
+    "itemId": 48,
+    "name": "Finn",
+    "status": "downloaded",
+    "sourcePageTitle": "Finn the Human",
+    "sourceFileTitle": "FinnNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/5/52/FinnNew.png/revision/latest?cb=20161001172158",
+    "savedFileName": "48.png",
+    "attemptedTitles": [
+      "Finn"
+    ],
+    "updatedAt": "2026-07-14T19:34:03.159Z"
+  },
+  "49": {
+    "itemId": 49,
+    "name": "Ethan Hunt",
+    "status": "downloaded",
+    "sourcePageTitle": "Ethan Hunt",
+    "sourceFileTitle": "EthanHuntNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/94/EthanHuntNew.png/revision/latest?cb=20160930075209",
+    "savedFileName": "49.png",
+    "attemptedTitles": [
+      "Ethan Hunt"
+    ],
+    "updatedAt": "2026-07-14T19:38:09.798Z"
+  },
+  "50": {
+    "itemId": 50,
+    "name": "Lumpy Space Princess",
+    "status": "downloaded",
+    "sourcePageTitle": "Lumpy Space Princess",
+    "sourceFileTitle": "LSPNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/99/LSPNew.png/revision/latest?cb=20161002162159",
+    "savedFileName": "50.png",
+    "attemptedTitles": [
+      "Lumpy Space Princess"
+    ],
+    "updatedAt": "2026-07-14T19:36:09.370Z"
+  },
+  "51": {
+    "itemId": 51,
+    "name": "Jake",
+    "status": "downloaded",
+    "sourcePageTitle": "Jake the Dog",
+    "sourceFileTitle": "JakeNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/2/2f/JakeNew.png/revision/latest?cb=20161002162019",
+    "savedFileName": "51.png",
+    "attemptedTitles": [
+      "Jake"
+    ],
+    "updatedAt": "2026-07-14T19:36:07.076Z"
+  },
+  "52": {
+    "itemId": 52,
+    "name": "Harry Potter",
+    "status": "downloaded",
+    "sourcePageTitle": "Harry Potter",
+    "sourceFileTitle": "BETTERRESHARRYIMAGE.JPG",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c1/BETTERRESHARRYIMAGE.JPG/revision/latest?cb=20161023095931",
+    "savedFileName": "52.jpg",
+    "attemptedTitles": [
+      "Harry Potter"
+    ],
+    "updatedAt": "2026-07-14T19:37:21.400Z"
+  },
+  "53": {
+    "itemId": 53,
+    "name": "Voldemort",
+    "status": "downloaded",
+    "sourcePageTitle": "Lord Voldemort (disambiguation)",
+    "sourceFileTitle": "Screenshot 2015-09-24 at 3.34.55 PM.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/42/Screenshot_2015-09-24_at_3.34.55_PM.png/revision/latest?cb=20150924193600",
+    "savedFileName": "53.png",
+    "attemptedTitles": [
+      "Voldemort",
+      "search:Lord Voldemort (disambiguation)"
+    ],
+    "updatedAt": "2026-07-14T19:37:30.052Z"
+  },
+  "54": {
+    "itemId": 54,
+    "name": "Michael Knight",
+    "status": "downloaded",
+    "sourcePageTitle": "Michael Knight",
+    "sourceFileTitle": "Michael Knight In-Game.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/68/Michael_Knight_In-Game.png/revision/latest?cb=20170212003948",
+    "savedFileName": "54.png",
+    "attemptedTitles": [
+      "Michael Knight"
+    ],
+    "updatedAt": "2026-07-14T19:37:37.043Z"
+  },
+  "55": {
+    "itemId": 55,
+    "name": "B.A. Baracus",
+    "status": "downloaded",
+    "sourcePageTitle": "B.A. Baracus",
+    "sourceFileTitle": "BANew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/06/BANew.png/revision/latest?cb=20160930090938",
+    "savedFileName": "55.png",
+    "attemptedTitles": [
+      "B.A. Baracus"
+    ],
+    "updatedAt": "2026-07-14T19:34:00.758Z"
+  },
+  "56": {
+    "itemId": 56,
+    "name": "Newt",
+    "status": "downloaded",
+    "sourcePageTitle": "Newt Scamander",
+    "sourceFileTitle": "NewtNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/7f/NewtNew.png/revision/latest?cb=20161119125810",
+    "savedFileName": "56.png",
+    "attemptedTitles": [
+      "Newt Scamander"
+    ],
+    "updatedAt": "2026-07-14T19:37:00.658Z"
+  },
+  "57": {
+    "itemId": 57,
+    "name": "Sonic",
+    "status": "downloaded",
+    "sourcePageTitle": "Sonic the Hedgehog (Franchise)",
+    "sourceFileTitle": "SonicLogo.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/7e/SonicLogo.png/revision/latest?cb=20160609183411",
+    "savedFileName": "57.png",
+    "attemptedTitles": [
+      "Sonic",
+      "search:Sonic the Hedgehog (Franchise)"
+    ],
+    "updatedAt": "2026-07-14T19:38:52.211Z"
+  },
+  "59": {
+    "itemId": 59,
+    "name": "Gizmo",
+    "status": "downloaded",
+    "sourcePageTitle": "Gizmo",
+    "sourceFileTitle": "GizmoNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/e2/GizmoNew.png/revision/latest?cb=20161119131726",
+    "savedFileName": "59.png",
+    "attemptedTitles": [
+      "Gizmo"
+    ],
+    "updatedAt": "2026-07-14T19:37:16.613Z"
+  },
+  "60": {
+    "itemId": 60,
+    "name": "Stripe",
+    "status": "downloaded",
+    "sourcePageTitle": "Stripe",
+    "sourceFileTitle": "Stripe infobox 1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/79/Stripe_infobox_1.png/revision/latest?cb=20250831204330",
+    "savedFileName": "60.png",
+    "attemptedTitles": [
+      "Stripe"
+    ],
+    "updatedAt": "2026-07-14T19:37:19.021Z"
+  },
+  "61": {
+    "itemId": 61,
+    "name": "E.T.",
+    "status": "downloaded",
+    "sourcePageTitle": "E.T.",
+    "sourceFileTitle": "E.T. Disguise Meet That Hero Trailer.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/68/E.T._Disguise_Meet_That_Hero_Trailer.png/revision/latest?cb=20160914135233",
+    "savedFileName": "61.png",
+    "attemptedTitles": [
+      "E.T."
+    ],
+    "updatedAt": "2026-07-14T19:36:58.469Z"
+  },
+  "62": {
+    "itemId": 62,
+    "name": "Tina",
+    "status": "downloaded",
+    "sourcePageTitle": "Tina Goldstein",
+    "sourceFileTitle": "TinaNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/bb/TinaNew.png/revision/latest?cb=20161119193141",
+    "savedFileName": "62.png",
+    "attemptedTitles": [
+      "Tina Goldstein"
+    ],
+    "updatedAt": "2026-07-14T19:37:02.877Z"
+  },
+  "63": {
+    "itemId": 63,
+    "name": "Marceline",
+    "status": "downloaded",
+    "sourcePageTitle": "Marceline the Vampire Queen",
+    "sourceFileTitle": "MB.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/7d/MB.png/revision/latest?cb=20161205032504",
+    "savedFileName": "63.png",
+    "attemptedTitles": [
+      "Marceline"
+    ],
+    "updatedAt": "2026-07-14T19:36:11.788Z"
+  },
+  "64": {
+    "itemId": 64,
+    "name": "Bat Girl",
+    "status": "downloaded",
+    "sourcePageTitle": "Batgirl",
+    "sourceFileTitle": "BatgirlNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/85/BatgirlNew.png/revision/latest?cb=20170211215955",
+    "savedFileName": "64.png",
+    "attemptedTitles": [
+      "Batgirl"
+    ],
+    "updatedAt": "2026-07-14T19:37:48.781Z"
+  },
+  "65": {
+    "itemId": 65,
+    "name": "Robin",
+    "status": "downloaded",
+    "sourcePageTitle": "Robin",
+    "sourceFileTitle": "BetterRobinImage.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/ad/BetterRobinImage.png/revision/latest?cb=20160305024927",
+    "savedFileName": "65.png",
+    "attemptedTitles": [
+      "Robin"
+    ],
+    "updatedAt": "2026-07-14T19:37:51.176Z"
+  },
+  "66": {
+    "itemId": 66,
+    "name": "Sloth",
+    "status": "downloaded",
+    "sourcePageTitle": "Sloth",
+    "sourceFileTitle": "SlothCasual.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/ff/SlothCasual.png/revision/latest?cb=20170426214239",
+    "savedFileName": "66.png",
+    "attemptedTitles": [
+      "Sloth"
+    ],
+    "updatedAt": "2026-07-14T19:37:14.341Z"
+  },
+  "67": {
+    "itemId": 67,
+    "name": "Hermione Granger",
+    "status": "downloaded",
+    "sourcePageTitle": "Hermione Granger",
+    "sourceFileTitle": "HermioneNew.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/41/HermioneNew.png/revision/latest?cb=20170203234030",
+    "savedFileName": "67.png",
+    "attemptedTitles": [
+      "Hermione Granger"
+    ],
+    "updatedAt": "2026-07-14T19:37:23.702Z"
+  },
+  "68": {
+    "itemId": 68,
+    "name": "Chase McCain",
+    "status": "downloaded",
+    "sourcePageTitle": "Chase McCain",
+    "sourceFileTitle": "ChaseAstronaut.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/b1/ChaseAstronaut.png/revision/latest?cb=20170527132547",
+    "savedFileName": "68.png",
+    "attemptedTitles": [
+      "Chase McCain"
+    ],
+    "updatedAt": "2026-07-14T19:37:53.472Z"
+  },
+  "69": {
+    "itemId": 69,
+    "name": "Excalibur Batman",
+    "status": "downloaded",
+    "sourcePageTitle": "Excalibur Batman",
+    "sourceFileTitle": "Excalibat.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/97/Excalibat.png/revision/latest?cb=20170212205948",
+    "savedFileName": "69.png",
+    "attemptedTitles": [
+      "Excalibur Batman"
+    ],
+    "updatedAt": "2026-07-14T19:37:46.554Z"
+  },
+  "70": {
+    "itemId": 70,
+    "name": "Raven",
+    "status": "downloaded",
+    "sourcePageTitle": "Raven",
+    "sourceFileTitle": "Bandicam 2017-05-31 16-33-13-355.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/5/55/Bandicam_2017-05-31_16-33-13-355.png/revision/latest?cb=20170531153336",
+    "savedFileName": "70.png",
+    "attemptedTitles": [
+      "Raven"
+    ],
+    "updatedAt": "2026-07-14T19:38:56.842Z"
+  },
+  "71": {
+    "itemId": 71,
+    "name": "Beast Boy",
+    "status": "downloaded",
+    "sourcePageTitle": "Beast Boy",
+    "sourceFileTitle": "Bandicam 2017-05-31 16-32-45-907.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/be/Bandicam_2017-05-31_16-32-45-907.png/revision/latest?cb=20170531153325",
+    "savedFileName": "71.png",
+    "attemptedTitles": [
+      "Beast Boy"
+    ],
+    "updatedAt": "2026-07-14T19:38:54.507Z"
+  },
+  "72": {
+    "itemId": 72,
+    "name": "Beetle Juice",
+    "status": "downloaded",
+    "sourcePageTitle": "Betelgeuse",
+    "sourceFileTitle": "Bandicam 2017-05-31 16-34-03-327.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/b3/Bandicam_2017-05-31_16-34-03-327.png/revision/latest?cb=20170531153412",
+    "savedFileName": "72.png",
+    "attemptedTitles": [
+      "Betelgeuse"
+    ],
+    "updatedAt": "2026-07-14T19:36:18.974Z"
+  },
+  "73": {
+    "itemId": 73,
+    "name": "Lord Vortech",
+    "status": "downloaded",
+    "sourcePageTitle": "Lord Vortech",
+    "sourceFileTitle": "Cowboyvortech.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/bb/Cowboyvortech.png/revision/latest?cb=20250322071705",
+    "savedFileName": "73.png",
+    "attemptedTitles": [
+      "Lord Vortech"
+    ],
+    "updatedAt": "2026-07-14T19:37:55.837Z"
+  },
+  "74": {
+    "itemId": 74,
+    "name": "Blossom",
+    "status": "downloaded",
+    "sourcePageTitle": "Blossom",
+    "sourceFileTitle": "Bandicam 2017-05-31 16-15-19-417.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/fd/Bandicam_2017-05-31_16-15-19-417.png/revision/latest?cb=20170531153138",
+    "savedFileName": "74.png",
+    "attemptedTitles": [
+      "Blossom"
+    ],
+    "updatedAt": "2026-07-14T19:38:30.942Z"
+  },
+  "75": {
+    "itemId": 75,
+    "name": "Bubbles",
+    "status": "downloaded",
+    "sourcePageTitle": "Bubbles",
+    "sourceFileTitle": "Bandicam 2017-05-31 16-15-51-465.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/99/Bandicam_2017-05-31_16-15-51-465.png/revision/latest?cb=20170531153151",
+    "savedFileName": "75.png",
+    "attemptedTitles": [
+      "Bubbles"
+    ],
+    "updatedAt": "2026-07-14T19:38:33.153Z"
+  },
+  "76": {
+    "itemId": 76,
+    "name": "Buttercup",
+    "status": "downloaded",
+    "sourcePageTitle": "Buttercup",
+    "sourceFileTitle": "Bandicam 2017-05-31 16-15-41-516.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/f1/Bandicam_2017-05-31_16-15-41-516.png/revision/latest?cb=20170531153205",
+    "savedFileName": "76.png",
+    "attemptedTitles": [
+      "Buttercup"
+    ],
+    "updatedAt": "2026-07-14T19:38:35.492Z"
+  },
+  "77": {
+    "itemId": 77,
+    "name": "Star Fire",
+    "status": "downloaded",
+    "sourcePageTitle": "Starfire",
+    "sourceFileTitle": "Starfire.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/9b/Starfire.png/revision/latest?cb=20170531151016",
+    "savedFileName": "77.png",
+    "attemptedTitles": [
+      "Star Fire",
+      "Star_Fire",
+      "search:Starfire"
+    ],
+    "updatedAt": "2026-07-14T19:39:04.665Z"
+  },
+  "769": {
+    "itemId": 769,
+    "name": "Supergirl Red Lantern",
+    "status": "downloaded",
+    "sourcePageTitle": "Hire-a-Hero",
+    "sourceFileTitle": "Supergirl hire a hero now unlocked.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/7e/Supergirl_hire_a_hero_now_unlocked.jpg/revision/latest?cb=20170509113130",
+    "savedFileName": "769.jpg",
+    "attemptedTitles": [
+      "Supergirl Red Lantern",
+      "Supergirl_Red_Lantern",
+      "search:Auton of Trouble",
+      "search:Hire-a-Hero"
+    ],
+    "updatedAt": "2026-07-14T19:36:28.364Z"
+  },
+  "1000": {
+    "itemId": 1000,
+    "name": "Police Car",
+    "status": "downloaded",
+    "sourcePageTitle": "Police Car",
+    "sourceFileTitle": "01 LD Home Hero D.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/4d/01_LD_Home_Hero_D.jpg/revision/latest?cb=20150926174316",
+    "savedFileName": "1000.jpg",
+    "attemptedTitles": [
+      "Police Car"
+    ],
+    "updatedAt": "2026-07-14T19:53:07.554Z"
+  },
+  "1001": {
+    "itemId": 1001,
+    "name": "* Aerial Squad Car",
+    "status": "downloaded",
+    "sourcePageTitle": "Aerial Squad Car",
+    "sourceFileTitle": "Aerial-Squad-Car.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/8f/Aerial-Squad-Car.png/revision/latest?cb=20151023144809",
+    "savedFileName": "1001.png",
+    "attemptedTitles": [
+      "Aerial Squad Car"
+    ],
+    "updatedAt": "2026-07-14T19:42:28.764Z"
+  },
+  "1002": {
+    "itemId": 1002,
+    "name": "* Missile Striker",
+    "status": "downloaded",
+    "sourcePageTitle": "Missile Striker",
+    "sourceFileTitle": "Missile-Striker.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/fd/Missile-Striker.png/revision/latest?cb=20151023151314",
+    "savedFileName": "1002.png",
+    "attemptedTitles": [
+      "Missile Striker"
+    ],
+    "updatedAt": "2026-07-14T19:46:07.924Z"
+  },
+  "1003": {
+    "itemId": 1003,
+    "name": "Gravity Sprinter",
+    "status": "downloaded",
+    "sourcePageTitle": "Gravity Sprinter",
+    "sourceFileTitle": "06 LD CD FunPacks Carousel03 Bart.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/d5/06_LD_CD_FunPacks_Carousel03_Bart.jpg/revision/latest?cb=20151006094408",
+    "savedFileName": "1003.jpg",
+    "attemptedTitles": [
+      "Gravity Sprinter"
+    ],
+    "updatedAt": "2026-07-14T19:51:42.519Z"
+  },
+  "1004": {
+    "itemId": 1004,
+    "name": "* Street Shredder",
+    "status": "downloaded",
+    "sourcePageTitle": "Street Shredder",
+    "sourceFileTitle": "Street-Shredder.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/8b/Street-Shredder.png/revision/latest?cb=20151023131020",
+    "savedFileName": "1004.png",
+    "attemptedTitles": [
+      "Street Shredder"
+    ],
+    "updatedAt": "2026-07-14T19:48:11.677Z"
+  },
+  "1005": {
+    "itemId": 1005,
+    "name": "* Sky Clobberer",
+    "status": "downloaded",
+    "sourcePageTitle": "Sky Clobberer",
+    "sourceFileTitle": "Sky-Clobbered.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/70/Sky-Clobbered.png/revision/latest?cb=20151023131041",
+    "savedFileName": "1005.png",
+    "attemptedTitles": [
+      "Sky Clobberer"
+    ],
+    "updatedAt": "2026-07-14T19:47:18.955Z"
+  },
+  "1006": {
+    "itemId": 1006,
+    "name": "Batmobile",
+    "status": "downloaded",
+    "sourcePageTitle": "Batmobile",
+    "sourceFileTitle": "BATMOBILE1COVER DX11.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/ff/BATMOBILE1COVER_DX11.png/revision/latest?cb=20250809194601",
+    "savedFileName": "1006.png",
+    "attemptedTitles": [
+      "Batmobile"
+    ],
+    "updatedAt": "2026-07-14T19:50:16.401Z"
+  },
+  "1007": {
+    "itemId": 1007,
+    "name": "* Batblaster",
+    "status": "downloaded",
+    "sourcePageTitle": "Batblaster",
+    "sourceFileTitle": "BATBLASTER.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c2/BATBLASTER.png/revision/latest?cb=20150603001325",
+    "savedFileName": "1007.png",
+    "attemptedTitles": [
+      "Batblaster"
+    ],
+    "updatedAt": "2026-07-14T19:42:52.088Z"
+  },
+  "1008": {
+    "itemId": 1008,
+    "name": "* Sonic Batray",
+    "status": "downloaded",
+    "sourcePageTitle": "Sonic Batray",
+    "sourceFileTitle": "BATMOBILE3COVER DX11.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/BATMOBILE3COVER_DX11.png/revision/latest?cb=20250809194602",
+    "savedFileName": "1008.png",
+    "attemptedTitles": [
+      "Sonic Batray"
+    ],
+    "updatedAt": "2026-07-14T19:47:40.463Z"
+  },
+  "1009": {
+    "itemId": 1009,
+    "name": "Benny's Spaceship",
+    "status": "downloaded",
+    "sourcePageTitle": "Benny's Spaceship",
+    "sourceFileTitle": "BennysSpaceship.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/3/32/BennysSpaceship.png/revision/latest?cb=20150810203049",
+    "savedFileName": "1009.png",
+    "attemptedTitles": [
+      "Benny's Spaceship"
+    ],
+    "updatedAt": "2026-07-14T19:50:18.725Z"
+  },
+  "1010": {
+    "itemId": 1010,
+    "name": "* Lasercraft",
+    "status": "downloaded",
+    "sourcePageTitle": "Lasercraft",
+    "sourceFileTitle": "Laser-Craft.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/04/Laser-Craft.png/revision/latest?cb=20151023142412",
+    "savedFileName": "1010.png",
+    "attemptedTitles": [
+      "Lasercraft"
+    ],
+    "updatedAt": "2026-07-14T19:45:45.156Z"
+  },
+  "1011": {
+    "itemId": 1011,
+    "name": "* The Annihilator",
+    "status": "downloaded",
+    "sourcePageTitle": "The Annihilator",
+    "sourceFileTitle": "The-Annihilator.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/04/The-Annihilator.png/revision/latest?cb=20151023142647",
+    "savedFileName": "1011.png",
+    "attemptedTitles": [
+      "The Annihilator"
+    ],
+    "updatedAt": "2026-07-14T19:48:39.152Z"
+  },
+  "1012": {
+    "itemId": 1012,
+    "name": "Delorean",
+    "status": "downloaded",
+    "sourcePageTitle": "DeLorean Time Machine",
+    "sourceFileTitle": "BB1BE4E1-465E-453F-8266-6A2F6F64DAFF.PNG",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/4e/BB1BE4E1-465E-453F-8266-6A2F6F64DAFF.PNG/revision/latest?cb=20150409232437",
+    "savedFileName": "1012.png",
+    "attemptedTitles": [
+      "DeLorean Time Machine"
+    ],
+    "updatedAt": "2026-07-14T19:50:59.099Z"
+  },
+  "1013": {
+    "itemId": 1013,
+    "name": "* Ultra Time Machine",
+    "status": "downloaded",
+    "sourcePageTitle": "Ultra Time Machine",
+    "sourceFileTitle": "October21Promo2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/61/October21Promo2.png/revision/latest?cb=20151022120436",
+    "savedFileName": "1013.png",
+    "attemptedTitles": [
+      "Ultra Time Machine"
+    ],
+    "updatedAt": "2026-07-14T19:49:38.589Z"
+  },
+  "1014": {
+    "itemId": 1014,
+    "name": "* Electric Time Machine",
+    "status": "downloaded",
+    "sourcePageTitle": "Electric Time Machine",
+    "sourceFileTitle": "ELECTRICTIMEMACHINE.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/3/37/ELECTRICTIMEMACHINE.png/revision/latest?cb=20150605214357",
+    "savedFileName": "1014.png",
+    "attemptedTitles": [
+      "Electric Time Machine"
+    ],
+    "updatedAt": "2026-07-14T19:43:51.719Z"
+  },
+  "1015": {
+    "itemId": 1015,
+    "name": "Hoverboard",
+    "status": "downloaded",
+    "sourcePageTitle": "Hoverboard",
+    "sourceFileTitle": "MartyNHoverboard.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/fb/MartyNHoverboard.png/revision/latest?cb=20151025073243",
+    "savedFileName": "1015.png",
+    "attemptedTitles": [
+      "Hoverboard"
+    ],
+    "updatedAt": "2026-07-14T19:51:54.688Z"
+  },
+  "1016": {
+    "itemId": 1016,
+    "name": "* Cyclone Board",
+    "status": "downloaded",
+    "sourcePageTitle": "Cyclone Board",
+    "sourceFileTitle": "Cyclone-Board.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/46/Cyclone-Board.png/revision/latest?cb=20151025140657",
+    "savedFileName": "1016.png",
+    "attemptedTitles": [
+      "Cyclone Board"
+    ],
+    "updatedAt": "2026-07-14T19:43:23.912Z"
+  },
+  "1017": {
+    "itemId": 1017,
+    "name": "* Ultimate Hoverjet",
+    "status": "downloaded",
+    "sourcePageTitle": "Ultimate Hoverjet",
+    "sourceFileTitle": "H-2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/99/H-2.png/revision/latest?cb=20151023113349",
+    "savedFileName": "1017.png",
+    "attemptedTitles": [
+      "Ultimate Hoverjet"
+    ],
+    "updatedAt": "2026-07-14T19:49:28.226Z"
+  },
+  "1018": {
+    "itemId": 1018,
+    "name": "Eagle interceptor",
+    "status": "downloaded",
+    "sourcePageTitle": "Eagle Interceptor",
+    "sourceFileTitle": "06 LD CD FunPacks Carousel03 Eris.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/a9/06_LD_CD_FunPacks_Carousel03_Eris.jpg/revision/latest?cb=20150925220844",
+    "savedFileName": "1018.jpg",
+    "attemptedTitles": [
+      "Eagle interceptor",
+      "Eagle_interceptor",
+      "search:Eagle Interceptor"
+    ],
+    "updatedAt": "2026-07-14T19:51:09.485Z"
+  },
+  "1019": {
+    "itemId": 1019,
+    "name": "* Eagle Skyblazer",
+    "status": "downloaded",
+    "sourcePageTitle": "71232 Fun Pack",
+    "sourceFileTitle": "06 LD CD FunPacks Carousel01 Eris.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/2/2d/06_LD_CD_FunPacks_Carousel01_Eris.jpg/revision/latest?cb=20170411001314",
+    "savedFileName": "1019.jpg",
+    "attemptedTitles": [
+      "Eagle Skyblazer",
+      "Eagle_Skyblazer",
+      "search:71232 Fun Pack"
+    ],
+    "updatedAt": "2026-07-14T19:43:38.987Z"
+  },
+  "1020": {
+    "itemId": 1020,
+    "name": "* Eagle Swoop Diver",
+    "status": "downloaded",
+    "sourcePageTitle": "Eagle Swoop Diver",
+    "sourceFileTitle": "Eagle-Swoop-Diver.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/60/Eagle-Swoop-Diver.png/revision/latest?cb=20151024162316",
+    "savedFileName": "1020.png",
+    "attemptedTitles": [
+      "Eagle Swoop Diver"
+    ],
+    "updatedAt": "2026-07-14T19:43:41.395Z"
+  },
+  "1021": {
+    "itemId": 1021,
+    "name": "Cragger's Fireship",
+    "status": "downloaded",
+    "sourcePageTitle": "Cragger's Fireship",
+    "sourceFileTitle": "21557222172 6375780c0c o.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c9/21557222172_6375780c0c_o.jpg/revision/latest?cb=20150922192538",
+    "savedFileName": "1021.jpg",
+    "attemptedTitles": [
+      "Cragger's Fireship"
+    ],
+    "updatedAt": "2026-07-14T19:50:46.172Z"
+  },
+  "1022": {
+    "itemId": 1022,
+    "name": "* Croc Command Sub",
+    "status": "downloaded",
+    "sourcePageTitle": "Croc Command Sub",
+    "sourceFileTitle": "COMMANDSUB.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/7d/COMMANDSUB.png/revision/latest?cb=20150606205018",
+    "savedFileName": "1022.png",
+    "attemptedTitles": [
+      "Croc Command Sub"
+    ],
+    "updatedAt": "2026-07-14T19:43:19.247Z"
+  },
+  "1023": {
+    "itemId": 1023,
+    "name": "* Swamp Skimmer",
+    "status": "downloaded",
+    "sourcePageTitle": "Swamp Skimmer",
+    "sourceFileTitle": "01 LD Home Hero D.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/4d/01_LD_Home_Hero_D.jpg/revision/latest?cb=20150926174316",
+    "savedFileName": "1023.jpg",
+    "attemptedTitles": [
+      "Swamp Skimmer"
+    ],
+    "updatedAt": "2026-07-14T19:48:23.007Z"
+  },
+  "1024": {
+    "itemId": 1024,
+    "name": "Cyber Guard",
+    "status": "downloaded",
+    "sourcePageTitle": "Cyber-Guard",
+    "sourceFileTitle": "01 LD Home Hero D.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/4d/01_LD_Home_Hero_D.jpg/revision/latest?cb=20150926174316",
+    "savedFileName": "1024.jpg",
+    "attemptedTitles": [
+      "Cyber Guard",
+      "Cyber_Guard",
+      "search:Cyber-Guard"
+    ],
+    "updatedAt": "2026-07-14T19:50:54.177Z"
+  },
+  "1025": {
+    "itemId": 1025,
+    "name": "* Cyber-Wrecker",
+    "status": "downloaded",
+    "sourcePageTitle": "Cyber-Wrecker",
+    "sourceFileTitle": "CYBERWRECKER.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/ab/CYBERWRECKER.png/revision/latest?cb=20150723210834",
+    "savedFileName": "1025.png",
+    "attemptedTitles": [
+      "Cyber-Wrecker"
+    ],
+    "updatedAt": "2026-07-14T19:43:21.645Z"
+  },
+  "1026": {
+    "itemId": 1026,
+    "name": "* Laser Robot Walker",
+    "status": "downloaded",
+    "sourcePageTitle": "Laser Robot Walker",
+    "sourceFileTitle": "LASERBOT.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/b3/LASERBOT.png/revision/latest?cb=20150723211846",
+    "savedFileName": "1026.png",
+    "attemptedTitles": [
+      "Laser Robot Walker"
+    ],
+    "updatedAt": "2026-07-14T19:45:40.134Z"
+  },
+  "1027": {
+    "itemId": 1027,
+    "name": "K9",
+    "status": "downloaded",
+    "sourcePageTitle": "K-9",
+    "sourceFileTitle": "04 LD PD LevelPacks Carousel04 TheDoctor.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/7f/04_LD_PD_LevelPacks_Carousel04_TheDoctor.jpg/revision/latest?cb=20151005135328",
+    "savedFileName": "1027.jpg",
+    "attemptedTitles": [
+      "K-9"
+    ],
+    "updatedAt": "2026-07-14T19:52:19.572Z"
+  },
+  "1028": {
+    "itemId": 1028,
+    "name": "* K9 Ruff Rover",
+    "status": "downloaded",
+    "sourcePageTitle": "K-9 Ruff Rover",
+    "sourceFileTitle": "K-9-Ruff-Rover.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/87/K-9-Ruff-Rover.png/revision/latest?cb=20151024024921",
+    "savedFileName": "1028.png",
+    "attemptedTitles": [
+      "K9 Ruff Rover",
+      "K9_Ruff_Rover",
+      "search:K-9 Ruff Rover"
+    ],
+    "updatedAt": "2026-07-14T19:45:35.337Z"
+  },
+  "1029": {
+    "itemId": 1029,
+    "name": "* K9 Laser Cutter",
+    "status": "missing",
+    "attemptedTitles": [
+      "K9 Laser Cutter",
+      "K9_Laser_Cutter"
+    ],
+    "updatedAt": "2026-07-14T19:45:27.363Z"
+  },
+  "1030": {
+    "itemId": 1030,
+    "name": "TARDIS",
+    "status": "downloaded",
+    "sourcePageTitle": "TARDIS",
+    "sourceFileTitle": "11222955 1606826589602764 4038114249326945794 n.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/96/11222955_1606826589602764_4038114249326945794_n.png/revision/latest?cb=20150921065737",
+    "savedFileName": "1030.png",
+    "attemptedTitles": [
+      "TARDIS"
+    ],
+    "updatedAt": "2026-07-14T19:53:43.012Z"
+  },
+  "1031": {
+    "itemId": 1031,
+    "name": "* Laser-Pulse TARDIS",
+    "status": "downloaded",
+    "sourcePageTitle": "Laser-Pulse TARDIS",
+    "sourceFileTitle": "Laser-pulse tardis.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/96/Laser-pulse_tardis.png/revision/latest?cb=20150727145240",
+    "savedFileName": "1031.png",
+    "attemptedTitles": [
+      "Laser-Pulse TARDIS"
+    ],
+    "updatedAt": "2026-07-14T19:45:42.649Z"
+  },
+  "1032": {
+    "itemId": 1032,
+    "name": "* Energy-Burst TARDIS",
+    "status": "downloaded",
+    "sourcePageTitle": "Energy-Burst TARDIS",
+    "sourceFileTitle": "Energy-burst tardis.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/8c/Energy-burst_tardis.png/revision/latest?cb=20150727144725",
+    "savedFileName": "1032.png",
+    "attemptedTitles": [
+      "Energy-Burst TARDIS"
+    ],
+    "updatedAt": "2026-07-14T19:43:56.676Z"
+  },
+  "1033": {
+    "itemId": 1033,
+    "name": "Emmet's Excavator",
+    "status": "downloaded",
+    "sourcePageTitle": "Emmet's Excavator",
+    "sourceFileTitle": "06 LD CD FunPacks Carousel03 Emmet.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/6e/06_LD_CD_FunPacks_Carousel03_Emmet.jpg/revision/latest?cb=20150925220459",
+    "savedFileName": "1033.jpg",
+    "attemptedTitles": [
+      "Emmet's Excavator"
+    ],
+    "updatedAt": "2026-07-14T19:51:23.188Z"
+  },
+  "1034": {
+    "itemId": 1034,
+    "name": "* The Destroydozer",
+    "status": "downloaded",
+    "sourcePageTitle": "71212 Fun Pack",
+    "sourceFileTitle": "06 LD CD FunPacks Carousel01 Emmet.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/1/1f/06_LD_CD_FunPacks_Carousel01_Emmet.jpg/revision/latest?cb=20170410235629",
+    "savedFileName": "1034.jpg",
+    "attemptedTitles": [
+      "The Destroydozer",
+      "The_Destroydozer",
+      "search:71212 Fun Pack"
+    ],
+    "updatedAt": "2026-07-14T19:48:47.188Z"
+  },
+  "1035": {
+    "itemId": 1035,
+    "name": "* Destruct-o-Mech",
+    "status": "downloaded",
+    "sourcePageTitle": "Destruct-o-Mech",
+    "sourceFileTitle": "ConstructMech.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/5/5e/ConstructMech.png/revision/latest?cb=20150926184716",
+    "savedFileName": "1035.png",
+    "attemptedTitles": [
+      "Destruct-o-Mech"
+    ],
+    "updatedAt": "2026-07-14T19:43:28.587Z"
+  },
+  "1036": {
+    "itemId": 1036,
+    "name": "Winged Monkey",
+    "status": "downloaded",
+    "sourcePageTitle": "Winged Monkey",
+    "sourceFileTitle": "06 LD CD FunPacks Carousel03 Wicked Witch.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/80/06_LD_CD_FunPacks_Carousel03_Wicked_Witch.jpg/revision/latest?cb=20150925230246",
+    "savedFileName": "1036.jpg",
+    "attemptedTitles": [
+      "Winged Monkey"
+    ],
+    "updatedAt": "2026-07-14T19:56:29.078Z"
+  },
+  "1037": {
+    "itemId": 1037,
+    "name": "* Battle Monkey",
+    "status": "downloaded",
+    "sourcePageTitle": "Battle Monkey",
+    "sourceFileTitle": "Battle-Monkey.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/b7/Battle-Monkey.png/revision/latest?cb=20151024081239",
+    "savedFileName": "1037.png",
+    "attemptedTitles": [
+      "Battle Monkey"
+    ],
+    "updatedAt": "2026-07-14T19:42:54.447Z"
+  },
+  "1038": {
+    "itemId": 1038,
+    "name": "* Commander Monkey",
+    "status": "downloaded",
+    "sourcePageTitle": "Commander Monkey",
+    "sourceFileTitle": "Commander-Monkey.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/76/Commander-Monkey.png/revision/latest?cb=20151024080904",
+    "savedFileName": "1038.png",
+    "attemptedTitles": [
+      "Commander Monkey"
+    ],
+    "updatedAt": "2026-07-14T19:43:14.430Z"
+  },
+  "1039": {
+    "itemId": 1039,
+    "name": "Axe Chariot",
+    "status": "downloaded",
+    "sourcePageTitle": "Axe Chariot",
+    "sourceFileTitle": "AxeChariot.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/ed/AxeChariot.png/revision/latest?cb=20150812190049",
+    "savedFileName": "1039.png",
+    "attemptedTitles": [
+      "Axe Chariot"
+    ],
+    "updatedAt": "2026-07-14T19:50:00.617Z"
+  },
+  "1040": {
+    "itemId": 1040,
+    "name": "* Axe Hurler",
+    "status": "downloaded",
+    "sourcePageTitle": "Axe Hurler",
+    "sourceFileTitle": "Axe-Hurler.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/0f/Axe-Hurler.png/revision/latest?cb=20151023141042",
+    "savedFileName": "1040.png",
+    "attemptedTitles": [
+      "Axe Hurler"
+    ],
+    "updatedAt": "2026-07-14T19:42:33.626Z"
+  },
+  "1041": {
+    "itemId": 1041,
+    "name": "* Soaring Chariot",
+    "status": "downloaded",
+    "sourcePageTitle": "Soaring Chariot",
+    "sourceFileTitle": "Soaring-Chariot.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/b9/Soaring-Chariot.png/revision/latest?cb=20151023141225",
+    "savedFileName": "1041.png",
+    "attemptedTitles": [
+      "Soaring Chariot"
+    ],
+    "updatedAt": "2026-07-14T19:47:30.967Z"
+  },
+  "1042": {
+    "itemId": 1042,
+    "name": "Shelob the Great",
+    "status": "downloaded",
+    "sourcePageTitle": "Shelob the Great",
+    "sourceFileTitle": "Shelobthe Grat.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/d7/Shelobthe_Grat.png/revision/latest?cb=20150810225930",
+    "savedFileName": "1042.png",
+    "attemptedTitles": [
+      "Shelob the Great"
+    ],
+    "updatedAt": "2026-07-14T19:53:28.942Z"
+  },
+  "1043": {
+    "itemId": 1043,
+    "name": "* 8-Legged Stalker",
+    "status": "downloaded",
+    "sourcePageTitle": "8-Legged Stalker",
+    "sourceFileTitle": "8-Legged-Stalker.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/a4/8-Legged-Stalker.png/revision/latest?cb=20151024042923",
+    "savedFileName": "1043.png",
+    "attemptedTitles": [
+      "8-Legged Stalker"
+    ],
+    "updatedAt": "2026-07-14T19:42:23.919Z"
+  },
+  "1044": {
+    "itemId": 1044,
+    "name": "* Poison Slinger",
+    "status": "downloaded",
+    "sourcePageTitle": "Poison Slinger",
+    "sourceFileTitle": "Poison-Slinger.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/d1/Poison-Slinger.png/revision/latest?cb=20151024043009",
+    "savedFileName": "1044.png",
+    "attemptedTitles": [
+      "Poison Slinger"
+    ],
+    "updatedAt": "2026-07-14T19:46:50.121Z"
+  },
+  "1045": {
+    "itemId": 1045,
+    "name": "Homer's Car",
+    "status": "downloaded",
+    "sourcePageTitle": "Homer's Car",
+    "sourceFileTitle": "MichaelKnight4.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/1/1b/MichaelKnight4.png/revision/latest?cb=20160919213423",
+    "savedFileName": "1045.png",
+    "attemptedTitles": [
+      "Homer's Car"
+    ],
+    "updatedAt": "2026-07-14T19:51:49.636Z"
+  },
+  "1046": {
+    "itemId": 1046,
+    "name": "* Homercraft",
+    "status": "downloaded",
+    "sourcePageTitle": "The Homercraft",
+    "sourceFileTitle": "The homercraft.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/0c/The_homercraft.png/revision/latest?cb=20150727150317",
+    "savedFileName": "1046.png",
+    "attemptedTitles": [
+      "Homercraft",
+      "search:The Homercraft"
+    ],
+    "updatedAt": "2026-07-14T19:44:45.678Z"
+  },
+  "1047": {
+    "itemId": 1047,
+    "name": "* SubmaHomer",
+    "status": "downloaded",
+    "sourcePageTitle": "The SubmaHomer",
+    "sourceFileTitle": "The submahomer.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c0/The_submahomer.png/revision/latest?cb=20150727145958",
+    "savedFileName": "1047.png",
+    "attemptedTitles": [
+      "SubmaHomer",
+      "search:The SubmaHomer"
+    ],
+    "updatedAt": "2026-07-14T19:48:20.636Z"
+  },
+  "1048": {
+    "itemId": 1048,
+    "name": "Taunt-o-Vision",
+    "status": "downloaded",
+    "sourcePageTitle": "Taunt-o-Vision",
+    "sourceFileTitle": "TauntBuilds.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/aa/TauntBuilds.png/revision/latest?cb=20150903205756",
+    "savedFileName": "1048.png",
+    "attemptedTitles": [
+      "Taunt-o-Vision"
+    ],
+    "updatedAt": "2026-07-14T19:53:45.209Z"
+  },
+  "1049": {
+    "itemId": 1049,
+    "name": "* Blast Cam",
+    "status": "downloaded",
+    "sourcePageTitle": "Blast Cam",
+    "sourceFileTitle": "TauntBuilds.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/aa/TauntBuilds.png/revision/latest?cb=20150903205756",
+    "savedFileName": "1049.png",
+    "attemptedTitles": [
+      "Blast Cam"
+    ],
+    "updatedAt": "2026-07-14T19:43:07.267Z"
+  },
+  "1050": {
+    "itemId": 1050,
+    "name": "* The MechaHomer",
+    "status": "downloaded",
+    "sourcePageTitle": "The MechaHomer",
+    "sourceFileTitle": "TauntBuilds.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/aa/TauntBuilds.png/revision/latest?cb=20150903205756",
+    "savedFileName": "1050.png",
+    "attemptedTitles": [
+      "The MechaHomer"
+    ],
+    "updatedAt": "2026-07-14T19:48:57.807Z"
+  },
+  "1051": {
+    "itemId": 1051,
+    "name": "Velociraptor",
+    "status": "downloaded",
+    "sourcePageTitle": "Velociraptor",
+    "sourceFileTitle": "Velociraptors.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/4f/Velociraptors.jpg/revision/latest?cb=20151009195724",
+    "savedFileName": "1051.jpg",
+    "attemptedTitles": [
+      "Velociraptor"
+    ],
+    "updatedAt": "2026-07-14T19:56:26.713Z"
+  },
+  "1052": {
+    "itemId": 1052,
+    "name": "* Spike Attack Raptor",
+    "status": "downloaded",
+    "sourcePageTitle": "Spike Attack Raptor",
+    "sourceFileTitle": "Spike attack raptor.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/2/26/Spike_attack_raptor.png/revision/latest?cb=20150727151302",
+    "savedFileName": "1052.png",
+    "attemptedTitles": [
+      "Spike Attack Raptor"
+    ],
+    "updatedAt": "2026-07-14T19:47:58.441Z"
+  },
+  "1053": {
+    "itemId": 1053,
+    "name": "* Venom Raptor",
+    "status": "downloaded",
+    "sourcePageTitle": "Venom Raptor",
+    "sourceFileTitle": "Venom raptor.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/d7/Venom_raptor.png/revision/latest?cb=20150727150945",
+    "savedFileName": "1053.png",
+    "attemptedTitles": [
+      "Venom Raptor"
+    ],
+    "updatedAt": "2026-07-14T19:49:40.984Z"
+  },
+  "1054": {
+    "itemId": 1054,
+    "name": "Gyro Sphere",
+    "status": "downloaded",
+    "sourcePageTitle": "Gyrosphere",
+    "sourceFileTitle": "GyrosphereInGame.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/fd/GyrosphereInGame.png/revision/latest?cb=20150928104329",
+    "savedFileName": "1054.png",
+    "attemptedTitles": [
+      "Gyrosphere"
+    ],
+    "updatedAt": "2026-07-14T19:51:44.894Z"
+  },
+  "1055": {
+    "itemId": 1055,
+    "name": "* Sonic Beam Gyrosphere",
+    "status": "downloaded",
+    "sourcePageTitle": "Sonic Beam Gyrosphere",
+    "sourceFileTitle": "G-1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/41/G-1.png/revision/latest?cb=20151022155618",
+    "savedFileName": "1055.png",
+    "attemptedTitles": [
+      "Sonic Beam Gyrosphere"
+    ],
+    "updatedAt": "2026-07-14T19:47:42.885Z"
+  },
+  "1056": {
+    "itemId": 1056,
+    "name": "* Speed Boost Gyrosphere",
+    "status": "downloaded",
+    "sourcePageTitle": "Speed Boost Gyrosphere",
+    "sourceFileTitle": "G-2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/1/18/G-2.png/revision/latest?cb=20151022160125",
+    "savedFileName": "1056.png",
+    "attemptedTitles": [
+      "Speed Boost Gyrosphere"
+    ],
+    "updatedAt": "2026-07-14T19:47:55.938Z"
+  },
+  "1057": {
+    "itemId": 1057,
+    "name": "Clown Bike",
+    "status": "downloaded",
+    "sourcePageTitle": "Clown Bike",
+    "sourceFileTitle": "ClownBike.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/2/2e/ClownBike.jpg/revision/latest?cb=20150813205711",
+    "savedFileName": "1057.jpg",
+    "attemptedTitles": [
+      "Clown Bike"
+    ],
+    "updatedAt": "2026-07-14T19:50:41.442Z"
+  },
+  "1058": {
+    "itemId": 1058,
+    "name": "* Cannon Bike",
+    "status": "downloaded",
+    "sourcePageTitle": "Cannon Bike",
+    "sourceFileTitle": "CannonBike.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/a3/CannonBike.png/revision/latest?cb=20160228123032",
+    "savedFileName": "1058.png",
+    "attemptedTitles": [
+      "Cannon Bike"
+    ],
+    "updatedAt": "2026-07-14T19:43:12.112Z"
+  },
+  "1059": {
+    "itemId": 1059,
+    "name": "* Anti-Gravity Rocket Bike",
+    "status": "downloaded",
+    "sourcePageTitle": "Anti-Gravity Rocket Bike",
+    "sourceFileTitle": "RocketBike.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/7e/RocketBike.png/revision/latest?cb=20160228123205",
+    "savedFileName": "1059.png",
+    "attemptedTitles": [
+      "Anti-Gravity Rocket Bike"
+    ],
+    "updatedAt": "2026-07-14T19:42:31.411Z"
+  },
+  "1060": {
+    "itemId": 1060,
+    "name": "Mighty Lion Rider",
+    "status": "downloaded",
+    "sourcePageTitle": "Mighty Lion Rider",
+    "sourceFileTitle": "06 LD CD FunPacks Carousel03 Laval.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/af/06_LD_CD_FunPacks_Carousel03_Laval.jpg/revision/latest?cb=20150925232950",
+    "savedFileName": "1060.jpg",
+    "attemptedTitles": [
+      "Mighty Lion Rider"
+    ],
+    "updatedAt": "2026-07-14T19:52:38.907Z"
+  },
+  "1061": {
+    "itemId": 1061,
+    "name": "* Lion Blazer",
+    "status": "downloaded",
+    "sourcePageTitle": "Lion Blazer",
+    "sourceFileTitle": "Lion-Blazer.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/9e/Lion-Blazer.png/revision/latest?cb=20151024134341",
+    "savedFileName": "1061.png",
+    "attemptedTitles": [
+      "Lion Blazer"
+    ],
+    "updatedAt": "2026-07-14T19:45:49.911Z"
+  },
+  "1062": {
+    "itemId": 1062,
+    "name": "* Fire Lion",
+    "status": "downloaded",
+    "sourcePageTitle": "Fire Lion",
+    "sourceFileTitle": "Fire-Lion.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/b6/Fire-Lion.png/revision/latest?cb=20151024134322",
+    "savedFileName": "1062.png",
+    "attemptedTitles": [
+      "Fire Lion"
+    ],
+    "updatedAt": "2026-07-14T19:44:03.944Z"
+  },
+  "1063": {
+    "itemId": 1063,
+    "name": "Arrow Launcher",
+    "status": "downloaded",
+    "sourcePageTitle": "Arrow Launcher",
+    "sourceFileTitle": "04 LD PD FunPacks Carousel03 Legolas.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/ac/04_LD_PD_FunPacks_Carousel03_Legolas.jpg/revision/latest?cb=20150925225840",
+    "savedFileName": "1063.jpg",
+    "attemptedTitles": [
+      "Arrow Launcher"
+    ],
+    "updatedAt": "2026-07-14T19:49:58.208Z"
+  },
+  "1064": {
+    "itemId": 1064,
+    "name": "* Seeking Shooter",
+    "status": "downloaded",
+    "sourcePageTitle": "Seeking Shooter",
+    "sourceFileTitle": "AL-1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/74/AL-1.png/revision/latest?cb=20151022143154",
+    "savedFileName": "1064.png",
+    "attemptedTitles": [
+      "Seeking Shooter"
+    ],
+    "updatedAt": "2026-07-14T19:47:09.330Z"
+  },
+  "1065": {
+    "itemId": 1065,
+    "name": "* Triple Ballista",
+    "status": "downloaded",
+    "sourcePageTitle": "Triple Ballista",
+    "sourceFileTitle": "AL-2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/42/AL-2.png/revision/latest?cb=20151022144201",
+    "savedFileName": "1065.png",
+    "attemptedTitles": [
+      "Triple Ballista"
+    ],
+    "updatedAt": "2026-07-14T19:49:23.503Z"
+  },
+  "1066": {
+    "itemId": 1066,
+    "name": "Mystery Machine",
+    "status": "downloaded",
+    "sourcePageTitle": "Mystery Machine",
+    "sourceFileTitle": "Hill valley 2015.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/3/30/Hill_valley_2015.png/revision/latest?cb=20150805224304",
+    "savedFileName": "1066.png",
+    "attemptedTitles": [
+      "Mystery Machine"
+    ],
+    "updatedAt": "2026-07-14T19:52:41.420Z"
+  },
+  "1067": {
+    "itemId": 1067,
+    "name": "* Mystery Tow",
+    "status": "downloaded",
+    "sourcePageTitle": "Mystery Tow & Go",
+    "sourceFileTitle": "Mystery-Tow&Go.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/41/Mystery-Tow%26Go.png/revision/latest?cb=20151024100108",
+    "savedFileName": "1067.png",
+    "attemptedTitles": [
+      "Mystery Tow",
+      "Mystery_Tow",
+      "search:Mystery Tow & Go"
+    ],
+    "updatedAt": "2026-07-14T19:46:20.640Z"
+  },
+  "1068": {
+    "itemId": 1068,
+    "name": "* Mystery Monster",
+    "status": "downloaded",
+    "sourcePageTitle": "Mystery Monster",
+    "sourceFileTitle": "Mystery-Monster.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/b5/Mystery-Monster.png/revision/latest?cb=20151024100211",
+    "savedFileName": "1068.png",
+    "attemptedTitles": [
+      "Mystery Monster"
+    ],
+    "updatedAt": "2026-07-14T19:46:12.661Z"
+  },
+  "1069": {
+    "itemId": 1069,
+    "name": "Boulder Bomber",
+    "status": "downloaded",
+    "sourcePageTitle": "Boulder Bomber",
+    "sourceFileTitle": "BoulderBomber.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/73/BoulderBomber.png/revision/latest?cb=20150810202754",
+    "savedFileName": "1069.png",
+    "attemptedTitles": [
+      "Boulder Bomber"
+    ],
+    "updatedAt": "2026-07-14T19:50:33.848Z"
+  },
+  "1070": {
+    "itemId": 1070,
+    "name": "* Boulder Blaster",
+    "status": "downloaded",
+    "sourcePageTitle": "Boulder Blaster",
+    "sourceFileTitle": "Boulder-Blaster.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/be/Boulder-Blaster.png/revision/latest?cb=20151023161312",
+    "savedFileName": "1070.png",
+    "attemptedTitles": [
+      "Boulder Blaster"
+    ],
+    "updatedAt": "2026-07-14T19:43:09.648Z"
+  },
+  "1071": {
+    "itemId": 1071,
+    "name": "* Cyclone Jet",
+    "status": "downloaded",
+    "sourcePageTitle": "Cyclone Jet",
+    "sourceFileTitle": "Cyclone-Jet.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/fd/Cyclone-Jet.png/revision/latest?cb=20151023161742",
+    "savedFileName": "1071.png",
+    "attemptedTitles": [
+      "Cyclone Jet"
+    ],
+    "updatedAt": "2026-07-14T19:43:26.283Z"
+  },
+  "1072": {
+    "itemId": 1072,
+    "name": "Storm Fighter",
+    "status": "downloaded",
+    "sourcePageTitle": "Storm Fighter",
+    "sourceFileTitle": "CD3CqfFUsAA9Chu.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/84/CD3CqfFUsAA9Chu.png/revision/latest?cb=20150430183852",
+    "savedFileName": "1072.png",
+    "attemptedTitles": [
+      "Storm Fighter"
+    ],
+    "updatedAt": "2026-07-14T19:53:38.207Z"
+  },
+  "1073": {
+    "itemId": 1073,
+    "name": "* Lightning Jet",
+    "status": "downloaded",
+    "sourcePageTitle": "Lightning Jet",
+    "sourceFileTitle": "StormFighterSecondBuild.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/d3/StormFighterSecondBuild.png/revision/latest?cb=20160229105412",
+    "savedFileName": "1073.png",
+    "attemptedTitles": [
+      "Lightning Jet"
+    ],
+    "updatedAt": "2026-07-14T19:45:47.503Z"
+  },
+  "1074": {
+    "itemId": 1074,
+    "name": "* Electro-Shooter",
+    "status": "downloaded",
+    "sourcePageTitle": "Electro-Shooter",
+    "sourceFileTitle": "StormFighterThirdBuild.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/8c/StormFighterThirdBuild.png/revision/latest?cb=20160229105443",
+    "savedFileName": "1074.png",
+    "attemptedTitles": [
+      "Electro-Shooter"
+    ],
+    "updatedAt": "2026-07-14T19:43:54.333Z"
+  },
+  "1075": {
+    "itemId": 1075,
+    "name": "Blade Bike",
+    "status": "downloaded",
+    "sourcePageTitle": "Blade Bike",
+    "sourceFileTitle": "Blade Bike.PNG",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/06/Blade_Bike.PNG/revision/latest?cb=20150409223650",
+    "savedFileName": "1075.png",
+    "attemptedTitles": [
+      "Blade Bike"
+    ],
+    "updatedAt": "2026-07-14T19:50:29.241Z"
+  },
+  "1076": {
+    "itemId": 1076,
+    "name": "* Flying Fire Bike",
+    "status": "downloaded",
+    "sourcePageTitle": "Flying Fire Bike",
+    "sourceFileTitle": "Flying-Fire-Bike.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/e6/Flying-Fire-Bike.png/revision/latest?cb=20151024031201",
+    "savedFileName": "1076.png",
+    "attemptedTitles": [
+      "Flying Fire Bike"
+    ],
+    "updatedAt": "2026-07-14T19:44:06.258Z"
+  },
+  "1077": {
+    "itemId": 1077,
+    "name": "* Blades of Fire",
+    "status": "downloaded",
+    "sourcePageTitle": "Blades of Fire",
+    "sourceFileTitle": "Blades-of-Fire.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/64/Blades-of-Fire.png/revision/latest?cb=20151024031104",
+    "savedFileName": "1077.png",
+    "attemptedTitles": [
+      "Blades of Fire"
+    ],
+    "updatedAt": "2026-07-14T19:43:04.816Z"
+  },
+  "1078": {
+    "itemId": 1078,
+    "name": "Samurai Mech",
+    "status": "downloaded",
+    "sourcePageTitle": "Samurai Mech",
+    "sourceFileTitle": "06 LD CD FunPacks Carousel03 Nya.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/af/06_LD_CD_FunPacks_Carousel03_Nya.jpg/revision/latest?cb=20150925233449",
+    "savedFileName": "1078.jpg",
+    "attemptedTitles": [
+      "Samurai Mech"
+    ],
+    "updatedAt": "2026-07-14T19:53:20.531Z"
+  },
+  "1079": {
+    "itemId": 1079,
+    "name": "* Samurai Shooter",
+    "status": "downloaded",
+    "sourcePageTitle": "Samurai Shooter",
+    "sourceFileTitle": "Samurai-Shooter.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/5/59/Samurai-Shooter.png/revision/latest?cb=20151024074103",
+    "savedFileName": "1079.png",
+    "attemptedTitles": [
+      "Samurai Shooter"
+    ],
+    "updatedAt": "2026-07-14T19:46:59.737Z"
+  },
+  "1080": {
+    "itemId": 1080,
+    "name": "* Soaring Samurai Mech",
+    "status": "downloaded",
+    "sourcePageTitle": "Soaring Samurai Mech",
+    "sourceFileTitle": "Soaring-Samurai-Mech.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/5/5b/Soaring-Samurai-Mech.png/revision/latest?cb=20151024072031",
+    "savedFileName": "1080.png",
+    "attemptedTitles": [
+      "Soaring Samurai Mech"
+    ],
+    "updatedAt": "2026-07-14T19:47:33.286Z"
+  },
+  "1081": {
+    "itemId": 1081,
+    "name": "Companion Cube",
+    "status": "downloaded",
+    "sourcePageTitle": "Companion Cube",
+    "sourceFileTitle": "CompanionCube.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/3/3c/CompanionCube.png/revision/latest?cb=20150810170025",
+    "savedFileName": "1081.png",
+    "attemptedTitles": [
+      "Companion Cube"
+    ],
+    "updatedAt": "2026-07-14T19:50:43.753Z"
+  },
+  "1082": {
+    "itemId": 1082,
+    "name": "* Laser Deflector",
+    "status": "downloaded",
+    "sourcePageTitle": "Laser Deflector",
+    "sourceFileTitle": "CC-1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/2/29/CC-1.png/revision/latest?cb=20151022160954",
+    "savedFileName": "1082.png",
+    "attemptedTitles": [
+      "Laser Deflector"
+    ],
+    "updatedAt": "2026-07-14T19:45:37.651Z"
+  },
+  "1083": {
+    "itemId": 1083,
+    "name": "* Gold Heart Emitter",
+    "status": "downloaded",
+    "sourcePageTitle": "Gold Heart Emitter",
+    "sourceFileTitle": "CC-2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/81/CC-2.png/revision/latest?cb=20151022161308",
+    "savedFileName": "1083.png",
+    "attemptedTitles": [
+      "Gold Heart Emitter"
+    ],
+    "updatedAt": "2026-07-14T19:44:28.767Z"
+  },
+  "1084": {
+    "itemId": 1084,
+    "name": "Sentry Turret",
+    "status": "downloaded",
+    "sourcePageTitle": "Sentry Turret",
+    "sourceFileTitle": "GLaDTOSEEYOU.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/83/GLaDTOSEEYOU.png/revision/latest?cb=20150723010551",
+    "savedFileName": "1084.png",
+    "attemptedTitles": [
+      "Sentry Turret"
+    ],
+    "updatedAt": "2026-07-14T19:53:25.485Z"
+  },
+  "1085": {
+    "itemId": 1085,
+    "name": "* Turret Striker",
+    "status": "downloaded",
+    "sourcePageTitle": "Turret Striker",
+    "sourceFileTitle": "ST-1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/00/ST-1.png/revision/latest?cb=20151022161956",
+    "savedFileName": "1085.png",
+    "attemptedTitles": [
+      "Turret Striker"
+    ],
+    "updatedAt": "2026-07-14T19:49:25.905Z"
+  },
+  "1086": {
+    "itemId": 1086,
+    "name": "* Flying Turret Carrier",
+    "status": "downloaded",
+    "sourcePageTitle": "Flying Turret Carrier",
+    "sourceFileTitle": "Flying-Turret-Carrier.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/3/3d/Flying-Turret-Carrier.png/revision/latest?cb=20151024043619",
+    "savedFileName": "1086.png",
+    "attemptedTitles": [
+      "Flying Turret Carrier"
+    ],
+    "updatedAt": "2026-07-14T19:44:08.604Z"
+  },
+  "1087": {
+    "itemId": 1087,
+    "name": "Scooby Snack",
+    "status": "downloaded",
+    "sourcePageTitle": "Scooby Snack",
+    "sourceFileTitle": "ScoobySnack.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/e0/ScoobySnack.png/revision/latest?cb=20150810170140",
+    "savedFileName": "1087.png",
+    "attemptedTitles": [
+      "Scooby Snack"
+    ],
+    "updatedAt": "2026-07-14T19:53:22.927Z"
+  },
+  "1088": {
+    "itemId": 1088,
+    "name": "* Scooby Fire Snack",
+    "status": "downloaded",
+    "sourcePageTitle": "Scooby Fire Snack",
+    "sourceFileTitle": "Scooby-Fire-Snack.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/0d/Scooby-Fire-Snack.png/revision/latest?cb=20151024101551",
+    "savedFileName": "1088.png",
+    "attemptedTitles": [
+      "Scooby Fire Snack"
+    ],
+    "updatedAt": "2026-07-14T19:47:04.551Z"
+  },
+  "1089": {
+    "itemId": 1089,
+    "name": "* Scooby Ghost Snack",
+    "status": "downloaded",
+    "sourcePageTitle": "Scooby Ghost Snack",
+    "sourceFileTitle": "Scooby-Ghost-Snack.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/a4/Scooby-Ghost-Snack.png/revision/latest?cb=20151024101640",
+    "savedFileName": "1089.png",
+    "attemptedTitles": [
+      "Scooby Ghost Snack"
+    ],
+    "updatedAt": "2026-07-14T19:47:06.914Z"
+  },
+  "1090": {
+    "itemId": 1090,
+    "name": "Cloud Cukko Car",
+    "status": "downloaded",
+    "sourcePageTitle": "Cloud Cuckoo Car",
+    "sourceFileTitle": "Screenshot 2015-09-23 at 3.50.15 PM.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/ea/Screenshot_2015-09-23_at_3.50.15_PM.png/revision/latest?cb=20150923195110",
+    "savedFileName": "1090.png",
+    "attemptedTitles": [
+      "Cloud Cuckoo Car"
+    ],
+    "updatedAt": "2026-07-14T19:50:39.185Z"
+  },
+  "1091": {
+    "itemId": 1091,
+    "name": "* X-Stream Soaker",
+    "status": "downloaded",
+    "sourcePageTitle": "X-Stream Soaker",
+    "sourceFileTitle": "XSOAKER.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/de/XSOAKER.png/revision/latest?cb=20150723183544",
+    "savedFileName": "1091.png",
+    "attemptedTitles": [
+      "X-Stream Soaker"
+    ],
+    "updatedAt": "2026-07-14T19:49:43.324Z"
+  },
+  "1092": {
+    "itemId": 1092,
+    "name": "* Rainbow Cannon",
+    "status": "downloaded",
+    "sourcePageTitle": "Rainbow Cannon",
+    "sourceFileTitle": "RAINBOWCANNON.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/f5/RAINBOWCANNON.png/revision/latest?cb=20150723184953",
+    "savedFileName": "1092.png",
+    "attemptedTitles": [
+      "Rainbow Cannon"
+    ],
+    "updatedAt": "2026-07-14T19:46:54.845Z"
+  },
+  "1093": {
+    "itemId": 1093,
+    "name": "Invisible Jet",
+    "status": "downloaded",
+    "sourcePageTitle": "Invisible Jet",
+    "sourceFileTitle": "CGHMVKpVIAAtzyC.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/1/19/CGHMVKpVIAAtzyC.png/revision/latest?cb=20150528183156",
+    "savedFileName": "1093.png",
+    "attemptedTitles": [
+      "Invisible Jet"
+    ],
+    "updatedAt": "2026-07-14T19:52:07.216Z"
+  },
+  "1094": {
+    "itemId": 1094,
+    "name": "* Stealth Laser Shooter",
+    "status": "downloaded",
+    "sourcePageTitle": "Laser Shooter",
+    "sourceFileTitle": "Laser-Shooter.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/4a/Laser-Shooter.png/revision/latest?cb=20151024074847",
+    "savedFileName": "1094.png",
+    "attemptedTitles": [
+      "Stealth Laser Shooter",
+      "Stealth_Laser_Shooter",
+      "search:Laser Shooter"
+    ],
+    "updatedAt": "2026-07-14T19:48:06.169Z"
+  },
+  "1095": {
+    "itemId": 1095,
+    "name": "* Torpedo Bomber",
+    "status": "downloaded",
+    "sourcePageTitle": "Torpedo Bomber",
+    "sourceFileTitle": "Torpedo-Bomber.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/2/27/Torpedo-Bomber.png/revision/latest?cb=20151024075050",
+    "savedFileName": "1095.png",
+    "attemptedTitles": [
+      "Torpedo Bomber"
+    ],
+    "updatedAt": "2026-07-14T19:49:20.903Z"
+  },
+  "1096": {
+    "itemId": 1096,
+    "name": "Ninja Copter",
+    "status": "downloaded",
+    "sourcePageTitle": "NinjaCopter",
+    "sourceFileTitle": "NinjaCopter.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/5/5b/NinjaCopter.jpg/revision/latest?cb=20150813211103",
+    "savedFileName": "1096.jpg",
+    "attemptedTitles": [
+      "NinjaCopter"
+    ],
+    "updatedAt": "2026-07-14T19:52:48.475Z"
+  },
+  "1097": {
+    "itemId": 1097,
+    "name": "* Glaciator",
+    "status": "downloaded",
+    "sourcePageTitle": "Glaciator",
+    "sourceFileTitle": "GLACIATOR.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/9b/GLACIATOR.png/revision/latest?cb=20150723214401",
+    "savedFileName": "1097.png",
+    "attemptedTitles": [
+      "Glaciator"
+    ],
+    "updatedAt": "2026-07-14T19:44:26.361Z"
+  },
+  "1098": {
+    "itemId": 1098,
+    "name": "* Freeze Fighter",
+    "status": "downloaded",
+    "sourcePageTitle": "Freeze Fighter",
+    "sourceFileTitle": "FREEZEFIGHTER.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/d5/FREEZEFIGHTER.png/revision/latest?cb=20150723215556",
+    "savedFileName": "1098.png",
+    "attemptedTitles": [
+      "Freeze Fighter"
+    ],
+    "updatedAt": "2026-07-14T19:44:13.339Z"
+  },
+  "1099": {
+    "itemId": 1099,
+    "name": "Traveling Time Train",
+    "status": "downloaded",
+    "sourcePageTitle": "71230 Fun Pack",
+    "sourceFileTitle": "06 LD CD FunPacks Carousel01 Unikitty.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/8e/06_LD_CD_FunPacks_Carousel01_Unikitty.jpg/revision/latest?cb=20170410214909",
+    "savedFileName": "1099.jpg",
+    "attemptedTitles": [
+      "Traveling Time Train",
+      "Traveling_Time_Train",
+      "search:71230 Fun Pack"
+    ],
+    "updatedAt": "2026-07-14T19:54:03.395Z"
+  },
+  "1100": {
+    "itemId": 1100,
+    "name": "* (Traveling Time Train - rebuilt 1)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Traveling Time Train - rebuilt 1)",
+      "(Traveling Time Train   rebuilt 1)",
+      "(Traveling_Time_Train_-_rebuilt_1)"
+    ],
+    "updatedAt": "2026-07-14T19:42:04.691Z"
+  },
+  "1101": {
+    "itemId": 1101,
+    "name": "* (Traveling Time Train - rebuilt 2)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Traveling Time Train - rebuilt 2)",
+      "(Traveling Time Train   rebuilt 2)",
+      "(Traveling_Time_Train_-_rebuilt_2)"
+    ],
+    "updatedAt": "2026-07-14T19:42:11.588Z"
+  },
+  "1102": {
+    "itemId": 1102,
+    "name": "Aqua Watercraft",
+    "status": "downloaded",
+    "sourcePageTitle": "Aqua Watercraft",
+    "sourceFileTitle": "04 LD PD FunPacks Carousel03 Aquaman.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/1/1d/04_LD_PD_FunPacks_Carousel03_Aquaman.jpg/revision/latest?cb=20151005140816",
+    "savedFileName": "1102.jpg",
+    "attemptedTitles": [
+      "Aqua Watercraft"
+    ],
+    "updatedAt": "2026-07-14T19:49:53.604Z"
+  },
+  "1103": {
+    "itemId": 1103,
+    "name": "* (Aqua Watercraft - rebuilt 1)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Aqua Watercraft - rebuilt 1)",
+      "(Aqua Watercraft   rebuilt 1)",
+      "(Aqua_Watercraft_-_rebuilt_1)"
+    ],
+    "updatedAt": "2026-07-14T19:39:45.048Z"
+  },
+  "1104": {
+    "itemId": 1104,
+    "name": "* (Aqua Watercraft - rebuilt 2)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Aqua Watercraft - rebuilt 2)",
+      "(Aqua Watercraft   rebuilt 2)",
+      "(Aqua_Watercraft_-_rebuilt_2)"
+    ],
+    "updatedAt": "2026-07-14T19:39:51.975Z"
+  },
+  "1105": {
+    "itemId": 1105,
+    "name": "Drill Driver",
+    "status": "downloaded",
+    "sourcePageTitle": "Drill Driver",
+    "sourceFileTitle": "DrillDriver.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/f0/DrillDriver.jpg/revision/latest?cb=20150812190604",
+    "savedFileName": "1105.jpg",
+    "attemptedTitles": [
+      "Drill Driver"
+    ],
+    "updatedAt": "2026-07-14T19:51:01.414Z"
+  },
+  "1106": {
+    "itemId": 1106,
+    "name": "* (Drill Driver - rebuilt 1)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Drill Driver - rebuilt 1)",
+      "(Drill Driver   rebuilt 1)",
+      "(Drill_Driver_-_rebuilt_1)"
+    ],
+    "updatedAt": "2026-07-14T19:40:12.791Z"
+  },
+  "1107": {
+    "itemId": 1107,
+    "name": "* (Drill Driver - rebuilt 2)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Drill Driver - rebuilt 2)",
+      "(Drill Driver   rebuilt 2)",
+      "(Drill_Driver_-_rebuilt_2)"
+    ],
+    "updatedAt": "2026-07-14T19:40:19.799Z"
+  },
+  "1108": {
+    "itemId": 1108,
+    "name": "Quinn-mobile",
+    "status": "downloaded",
+    "sourcePageTitle": "Quinn Mobile",
+    "sourceFileTitle": "04 LD PD TeamPacks Carousel03 Joker Harley.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/42/04_LD_PD_TeamPacks_Carousel03_Joker_Harley.jpg/revision/latest?cb=20151022175652",
+    "savedFileName": "1108.jpg",
+    "attemptedTitles": [
+      "Quinn-mobile",
+      "Quinn mobile",
+      "search:Quinn Mobile"
+    ],
+    "updatedAt": "2026-07-14T19:53:15.616Z"
+  },
+  "1109": {
+    "itemId": 1109,
+    "name": "* (Quinn-mobile - rebuilt 1)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Quinn-mobile - rebuilt 1)",
+      "(Quinn mobile   rebuilt 1)",
+      "(Quinn-mobile_-_rebuilt_1)"
+    ],
+    "updatedAt": "2026-07-14T19:41:37.079Z"
+  },
+  "1110": {
+    "itemId": 1110,
+    "name": "* (Quinn-mobile - rebuilt 2)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Quinn-mobile - rebuilt 2)",
+      "(Quinn mobile   rebuilt 2)",
+      "(Quinn-mobile_-_rebuilt_2)"
+    ],
+    "updatedAt": "2026-07-14T19:41:44.053Z"
+  },
+  "1111": {
+    "itemId": 1111,
+    "name": "The Jokers Chopper",
+    "status": "missing",
+    "attemptedTitles": [
+      "The Jokers Chopper",
+      "The_Jokers_Chopper"
+    ],
+    "updatedAt": "2026-07-14T19:53:52.657Z"
+  },
+  "1112": {
+    "itemId": 1112,
+    "name": "* (The Jokers Chopper - rebuilt 1)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(The Jokers Chopper - rebuilt 1)",
+      "(The Jokers Chopper   rebuilt 1)",
+      "(The_Jokers_Chopper_-_rebuilt_1)"
+    ],
+    "updatedAt": "2026-07-14T19:41:50.890Z"
+  },
+  "1113": {
+    "itemId": 1113,
+    "name": "* (The Jokers Chopper - rebuilt 2)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(The Jokers Chopper - rebuilt 2)",
+      "(The Jokers Chopper   rebuilt 2)",
+      "(The_Jokers_Chopper_-_rebuilt_2)"
+    ],
+    "updatedAt": "2026-07-14T19:41:57.814Z"
+  },
+  "1114": {
+    "itemId": 1114,
+    "name": "Hover Pod",
+    "status": "downloaded",
+    "sourcePageTitle": "Hover Pod",
+    "sourceFileTitle": "HoverPod.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/02/HoverPod.png/revision/latest?cb=20150812190324",
+    "savedFileName": "1114.png",
+    "attemptedTitles": [
+      "Hover Pod"
+    ],
+    "updatedAt": "2026-07-14T19:51:52.026Z"
+  },
+  "1115": {
+    "itemId": 1115,
+    "name": "* (Hover Pod - rebuilt 1)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Hover Pod - rebuilt 1)",
+      "(Hover Pod   rebuilt 1)",
+      "(Hover_Pod_-_rebuilt_1)"
+    ],
+    "updatedAt": "2026-07-14T19:41:09.224Z"
+  },
+  "1116": {
+    "itemId": 1116,
+    "name": "* (Hover Pod - rebuilt 2)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Hover Pod - rebuilt 2)",
+      "(Hover Pod   rebuilt 2)",
+      "(Hover_Pod_-_rebuilt_2)"
+    ],
+    "updatedAt": "2026-07-14T19:41:16.335Z"
+  },
+  "1117": {
+    "itemId": 1117,
+    "name": "Dalek",
+    "status": "downloaded",
+    "sourcePageTitle": "Dalek",
+    "sourceFileTitle": "Dalek.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/1/18/Dalek.png/revision/latest?cb=20150709110314",
+    "savedFileName": "1117.png",
+    "attemptedTitles": [
+      "Dalek"
+    ],
+    "updatedAt": "2026-07-14T19:50:56.628Z"
+  },
+  "1118": {
+    "itemId": 1118,
+    "name": "* (Dalek - rebuilt 1)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Dalek - rebuilt 1)",
+      "(Dalek   rebuilt 1)",
+      "(Dalek_-_rebuilt_1)"
+    ],
+    "updatedAt": "2026-07-14T19:39:58.882Z"
+  },
+  "1119": {
+    "itemId": 1119,
+    "name": "* (Dalek - rebuilt 2)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Dalek - rebuilt 2)",
+      "(Dalek   rebuilt 2)",
+      "(Dalek_-_rebuilt_2)"
+    ],
+    "updatedAt": "2026-07-14T19:40:05.772Z"
+  },
+  "1120": {
+    "itemId": 1120,
+    "name": "Ecto-1",
+    "status": "downloaded",
+    "sourcePageTitle": "Ecto-1",
+    "sourceFileTitle": "GhostbustersTeaser1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/a9/GhostbustersTeaser1.png/revision/latest?cb=20150805113932",
+    "savedFileName": "1120.png",
+    "attemptedTitles": [
+      "Ecto-1"
+    ],
+    "updatedAt": "2026-07-14T19:51:20.860Z"
+  },
+  "1121": {
+    "itemId": 1121,
+    "name": "* (Ecto-1 - rebuilt 1)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Ecto-1 - rebuilt 1)",
+      "(Ecto 1   rebuilt 1)",
+      "(Ecto-1_-_rebuilt_1)"
+    ],
+    "updatedAt": "2026-07-14T19:40:26.747Z"
+  },
+  "1122": {
+    "itemId": 1122,
+    "name": "* (Ecto-1 - rebuilt 2)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Ecto-1 - rebuilt 2)",
+      "(Ecto 1   rebuilt 2)",
+      "(Ecto-1_-_rebuilt_2)"
+    ],
+    "updatedAt": "2026-07-14T19:40:33.788Z"
+  },
+  "1123": {
+    "itemId": 1123,
+    "name": "Ghost Trap",
+    "status": "downloaded",
+    "sourcePageTitle": "Ghost Trap",
+    "sourceFileTitle": "04 LD PD LevelPacks Carousel04 PeterVenkman.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/94/04_LD_PD_LevelPacks_Carousel04_PeterVenkman.jpg/revision/latest?cb=20151005142700",
+    "savedFileName": "1123.jpg",
+    "attemptedTitles": [
+      "Ghost Trap"
+    ],
+    "updatedAt": "2026-07-14T19:51:40.199Z"
+  },
+  "1124": {
+    "itemId": 1124,
+    "name": "* (Ghost Trap - rebuilt 1)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Ghost Trap - rebuilt 1)",
+      "(Ghost Trap   rebuilt 1)",
+      "(Ghost_Trap_-_rebuilt_1)"
+    ],
+    "updatedAt": "2026-07-14T19:40:41.011Z"
+  },
+  "1125": {
+    "itemId": 1125,
+    "name": "* (Ghost Trap - rebuilt 2)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Ghost Trap - rebuilt 2)",
+      "(Ghost Trap   rebuilt 2)",
+      "(Ghost_Trap_-_rebuilt_2)"
+    ],
+    "updatedAt": "2026-07-14T19:40:48.061Z"
+  },
+  "1126": {
+    "itemId": 1126,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1126.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:54:09.731Z"
+  },
+  "1127": {
+    "itemId": 1127,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1127.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:54:16.069Z"
+  },
+  "1128": {
+    "itemId": 1128,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1128.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:54:22.414Z"
+  },
+  "1129": {
+    "itemId": 1129,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1129.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:54:28.884Z"
+  },
+  "1130": {
+    "itemId": 1130,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1130.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:54:34.953Z"
+  },
+  "1131": {
+    "itemId": 1131,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1131.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:54:40.989Z"
+  },
+  "1132": {
+    "itemId": 1132,
+    "name": "Llyod's Golden Dragon",
+    "status": "downloaded",
+    "sourcePageTitle": "Lloyd's Golden Dragon",
+    "sourceFileTitle": "Golden Dragon.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/45/Golden_Dragon.png/revision/latest?cb=20150521130251",
+    "savedFileName": "1132.png",
+    "attemptedTitles": [
+      "Llyod's Golden Dragon",
+      "Llyods Golden Dragon",
+      "Llyod's_Golden_Dragon",
+      "search:Lloyd's Golden Dragon"
+    ],
+    "updatedAt": "2026-07-14T19:52:29.287Z"
+  },
+  "1133": {
+    "itemId": 1133,
+    "name": "* (Golden Dragon - rebuilt 1)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Golden Dragon - rebuilt 1)",
+      "(Golden Dragon   rebuilt 1)",
+      "(Golden_Dragon_-_rebuilt_1)"
+    ],
+    "updatedAt": "2026-07-14T19:40:55.057Z"
+  },
+  "1134": {
+    "itemId": 1134,
+    "name": "* (Golden Dragon - rebuilt 2)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Golden Dragon - rebuilt 2)",
+      "(Golden Dragon   rebuilt 2)",
+      "(Golden_Dragon_-_rebuilt_2)"
+    ],
+    "updatedAt": "2026-07-14T19:41:02.093Z"
+  },
+  "1135": {
+    "itemId": 1135,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1135.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:54:47.244Z"
+  },
+  "1136": {
+    "itemId": 1136,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1136.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:54:53.484Z"
+  },
+  "1137": {
+    "itemId": 1137,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1137.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:54:59.431Z"
+  },
+  "1138": {
+    "itemId": 1138,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1138.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:55:05.442Z"
+  },
+  "1139": {
+    "itemId": 1139,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1139.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:55:11.571Z"
+  },
+  "1140": {
+    "itemId": 1140,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1140.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:55:17.736Z"
+  },
+  "1141": {
+    "itemId": 1141,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1141.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:55:23.726Z"
+  },
+  "1142": {
+    "itemId": 1142,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1142.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:55:29.537Z"
+  },
+  "1143": {
+    "itemId": 1143,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1143.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:55:35.665Z"
+  },
+  "1144": {
+    "itemId": 1144,
+    "name": "Mega Flight Dragon",
+    "status": "downloaded",
+    "sourcePageTitle": "Mega Flight Dragon",
+    "sourceFileTitle": "MegaFlightDragon.jpeg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/47/MegaFlightDragon.jpeg/revision/latest?cb=20160628103331",
+    "savedFileName": "1144.jpeg",
+    "attemptedTitles": [
+      "Mega Flight Dragon"
+    ],
+    "updatedAt": "2026-07-14T19:52:36.465Z"
+  },
+  "1145": {
+    "itemId": 1145,
+    "name": "* (Mega Flight Dragon - rebuilt 1)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Mega Flight Dragon - rebuilt 1)",
+      "(Mega Flight Dragon   rebuilt 1)",
+      "(Mega_Flight_Dragon_-_rebuilt_1)"
+    ],
+    "updatedAt": "2026-07-14T19:41:23.295Z"
+  },
+  "1146": {
+    "itemId": 1146,
+    "name": "* (Mega Flight Dragon - rebuilt 2)",
+    "status": "missing",
+    "attemptedTitles": [
+      "(Mega Flight Dragon - rebuilt 2)",
+      "(Mega Flight Dragon   rebuilt 2)",
+      "(Mega_Flight_Dragon_-_rebuilt_2)"
+    ],
+    "updatedAt": "2026-07-14T19:41:30.153Z"
+  },
+  "1147": {
+    "itemId": 1147,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1147.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:55:41.497Z"
+  },
+  "1148": {
+    "itemId": 1148,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1148.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:55:47.543Z"
+  },
+  "1149": {
+    "itemId": 1149,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1149.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:55:53.665Z"
+  },
+  "1150": {
+    "itemId": 1150,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1150.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:55:59.588Z"
+  },
+  "1151": {
+    "itemId": 1151,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1151.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:56:05.544Z"
+  },
+  "1152": {
+    "itemId": 1152,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1152.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:56:11.983Z"
+  },
+  "1153": {
+    "itemId": 1153,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1153.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:56:18.289Z"
+  },
+  "1154": {
+    "itemId": 1154,
+    "name": "unknown",
+    "status": "downloaded",
+    "sourcePageTitle": "Two-Face (The LEGO Batman Movie)",
+    "sourceFileTitle": "C3mZMMaUoAEkomm.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/db/C3mZMMaUoAEkomm.png/revision/latest?cb=20170201193242",
+    "savedFileName": "1154.png",
+    "attemptedTitles": [
+      "unknown",
+      "search:Two-Face (The LEGO Batman Movie)"
+    ],
+    "updatedAt": "2026-07-14T19:56:24.388Z"
+  },
+  "1155": {
+    "itemId": 1155,
+    "name": "Flying White Dragon",
+    "status": "downloaded",
+    "sourcePageTitle": "Flying White Dragon",
+    "sourceFileTitle": "04 LD PD FunPacks Carousel03 Sensei Wu.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/83/04_LD_PD_FunPacks_Carousel03_Sensei_Wu.jpg/revision/latest?cb=20151005143109",
+    "savedFileName": "1155.jpg",
+    "attemptedTitles": [
+      "Flying White Dragon"
+    ],
+    "updatedAt": "2026-07-14T19:51:30.466Z"
+  },
+  "1156": {
+    "itemId": 1156,
+    "name": "* Golden Fire Dragon",
+    "status": "downloaded",
+    "sourcePageTitle": "Golden Fire Dragon",
+    "sourceFileTitle": "Golden Fire Dragon.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/f8/Golden_Fire_Dragon.png/revision/latest?cb=20160116075720",
+    "savedFileName": "1156.png",
+    "attemptedTitles": [
+      "Golden Fire Dragon"
+    ],
+    "updatedAt": "2026-07-14T19:44:31.396Z"
+  },
+  "1157": {
+    "itemId": 1157,
+    "name": "* Ultra Destruction Dragon",
+    "status": "downloaded",
+    "sourcePageTitle": "Ultra Destruction Dragon",
+    "sourceFileTitle": "Ultra Destruction Dragon.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/03/Ultra_Destruction_Dragon.png/revision/latest?cb=20160116075640",
+    "savedFileName": "1157.png",
+    "attemptedTitles": [
+      "Ultra Destruction Dragon"
+    ],
+    "updatedAt": "2026-07-14T19:49:36.023Z"
+  },
+  "1158": {
+    "itemId": 1158,
+    "name": "Arcade Machine",
+    "status": "downloaded",
+    "sourcePageTitle": "Arcade Machine",
+    "sourceFileTitle": "04 LD PD LevelPacks Carousel03 GamerKid.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/1/13/04_LD_PD_LevelPacks_Carousel03_GamerKid.jpg/revision/latest?cb=20151005140624",
+    "savedFileName": "1158.jpg",
+    "attemptedTitles": [
+      "Arcade Machine"
+    ],
+    "updatedAt": "2026-07-14T19:49:55.806Z"
+  },
+  "1159": {
+    "itemId": 1159,
+    "name": "* 8-bit Shooter",
+    "status": "downloaded",
+    "sourcePageTitle": "8-Bit Shooter",
+    "sourceFileTitle": "8-Bit Shooter.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/df/8-Bit_Shooter.png/revision/latest?cb=20160116075251",
+    "savedFileName": "1159.png",
+    "attemptedTitles": [
+      "8-bit Shooter",
+      "8 bit Shooter",
+      "8-bit_Shooter",
+      "search:8-Bit Shooter"
+    ],
+    "updatedAt": "2026-07-14T19:42:21.332Z"
+  },
+  "1160": {
+    "itemId": 1160,
+    "name": "* The Pixelator",
+    "status": "downloaded",
+    "sourcePageTitle": "The Pixelator",
+    "sourceFileTitle": "Pixalator Pod.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/65/Pixalator_Pod.png/revision/latest?cb=20160116080514",
+    "savedFileName": "1160.png",
+    "attemptedTitles": [
+      "The Pixelator"
+    ],
+    "updatedAt": "2026-07-14T19:49:02.700Z"
+  },
+  "1161": {
+    "itemId": 1161,
+    "name": "G-61555 Spy Hunter",
+    "status": "missing",
+    "attemptedTitles": [
+      "G-61555 Spy Hunter",
+      "G 61555 Spy Hunter",
+      "G-61555_Spy_Hunter"
+    ],
+    "updatedAt": "2026-07-14T19:51:37.400Z"
+  },
+  "1162": {
+    "itemId": 1162,
+    "name": "* The Interdiver",
+    "status": "downloaded",
+    "sourcePageTitle": "Interdiver",
+    "sourceFileTitle": "Interdiver.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/6e/Interdiver.png/revision/latest?cb=20160116075907",
+    "savedFileName": "1162.png",
+    "attemptedTitles": [
+      "The Interdiver",
+      "The_Interdiver",
+      "search:Interdiver"
+    ],
+    "updatedAt": "2026-07-14T19:48:55.239Z"
+  },
+  "1163": {
+    "itemId": 1163,
+    "name": "* Aerial Spyhunter",
+    "status": "downloaded",
+    "sourcePageTitle": "Aerial Spyhunter",
+    "sourceFileTitle": "Aerial Spyhunter.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/96/Aerial_Spyhunter.png/revision/latest?cb=20160116075317",
+    "savedFileName": "1163.png",
+    "attemptedTitles": [
+      "Aerial Spyhunter"
+    ],
+    "updatedAt": "2026-07-14T19:42:26.478Z"
+  },
+  "1164": {
+    "itemId": 1164,
+    "name": "Slime Shooter",
+    "status": "downloaded",
+    "sourcePageTitle": "Slime Shooter",
+    "sourceFileTitle": "SlimeShooter.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/cb/SlimeShooter.jpg/revision/latest?cb=20150812193050",
+    "savedFileName": "1164.jpg",
+    "attemptedTitles": [
+      "Slime Shooter"
+    ],
+    "updatedAt": "2026-07-14T19:53:33.547Z"
+  },
+  "1165": {
+    "itemId": 1165,
+    "name": "* Slime Exploder",
+    "status": "downloaded",
+    "sourcePageTitle": "Slime Exploder",
+    "sourceFileTitle": "SlimeExploder.jpeg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c6/SlimeExploder.jpeg/revision/latest?cb=20160615035933",
+    "savedFileName": "1165.jpeg",
+    "attemptedTitles": [
+      "Slime Exploder"
+    ],
+    "updatedAt": "2026-07-14T19:47:21.452Z"
+  },
+  "1166": {
+    "itemId": 1166,
+    "name": "* Slime Streamer",
+    "status": "downloaded",
+    "sourcePageTitle": "Slime Streamer",
+    "sourceFileTitle": "Slime streamer.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c4/Slime_streamer.jpg/revision/latest?cb=20240527205321",
+    "savedFileName": "1166.jpg",
+    "attemptedTitles": [
+      "Slime Streamer"
+    ],
+    "updatedAt": "2026-07-14T19:47:23.823Z"
+  },
+  "1167": {
+    "itemId": 1167,
+    "name": "Terror Dog",
+    "status": "downloaded",
+    "sourcePageTitle": "Terror Dog",
+    "sourceFileTitle": "04 LD PD FunPacks Carousel03 StayPuft.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/2/27/04_LD_PD_FunPacks_Carousel03_StayPuft.jpg/revision/latest?cb=20151005140149",
+    "savedFileName": "1167.jpg",
+    "attemptedTitles": [
+      "Terror Dog"
+    ],
+    "updatedAt": "2026-07-14T19:53:47.569Z"
+  },
+  "1168": {
+    "itemId": 1168,
+    "name": "* Terror Dog Destroyer",
+    "status": "downloaded",
+    "sourcePageTitle": "Terror Dog Destroyer",
+    "sourceFileTitle": "Terror Dog Destroyer.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/44/Terror_Dog_Destroyer.png/revision/latest?cb=20160116081612",
+    "savedFileName": "1168.png",
+    "attemptedTitles": [
+      "Terror Dog Destroyer"
+    ],
+    "updatedAt": "2026-07-14T19:48:36.152Z"
+  },
+  "1169": {
+    "itemId": 1169,
+    "name": "* Soaring Terror Dog",
+    "status": "downloaded",
+    "sourcePageTitle": "Soaring Terror Dog",
+    "sourceFileTitle": "Soaring Terror Dog.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/a5/Soaring_Terror_Dog.png/revision/latest?cb=20160116081525",
+    "savedFileName": "1169.png",
+    "attemptedTitles": [
+      "Soaring Terror Dog"
+    ],
+    "updatedAt": "2026-07-14T19:47:37.892Z"
+  },
+  "1170": {
+    "itemId": 1170,
+    "name": "Ancient War Elephant",
+    "status": "downloaded",
+    "sourcePageTitle": "Ancient Psychic Tandem War Elephant",
+    "sourceFileTitle": "207.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/94/207.jpg/revision/latest?cb=20160827225840",
+    "savedFileName": "1170.jpg",
+    "attemptedTitles": [
+      "Ancient War Elephant",
+      "Ancient_War_Elephant",
+      "search:Ancient Psychic Tandem War Elephant"
+    ],
+    "updatedAt": "2026-07-14T19:49:51.271Z"
+  },
+  "1171": {
+    "itemId": 1171,
+    "name": "* Cosmic Squid",
+    "status": "downloaded",
+    "sourcePageTitle": "Cosmic Squid",
+    "sourceFileTitle": "CosmicSquid.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/f1/CosmicSquid.png/revision/latest?cb=20161003130818",
+    "savedFileName": "1171.png",
+    "attemptedTitles": [
+      "Cosmic Squid"
+    ],
+    "updatedAt": "2026-07-14T19:43:16.758Z"
+  },
+  "1172": {
+    "itemId": 1172,
+    "name": "* Psychic Submarine",
+    "status": "downloaded",
+    "sourcePageTitle": "Psychic Submarine",
+    "sourceFileTitle": "PsychicSub.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/01/PsychicSub.png/revision/latest?cb=20161003130858",
+    "savedFileName": "1172.png",
+    "attemptedTitles": [
+      "Psychic Submarine"
+    ],
+    "updatedAt": "2026-07-14T19:46:52.512Z"
+  },
+  "1173": {
+    "itemId": 1173,
+    "name": "BMO",
+    "status": "downloaded",
+    "sourcePageTitle": "BMO",
+    "sourceFileTitle": "20170907 125100.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/4e/20170907_125100.png/revision/latest?cb=20170916203709",
+    "savedFileName": "1173.png",
+    "attemptedTitles": [
+      "BMO"
+    ],
+    "updatedAt": "2026-07-14T19:50:31.498Z"
+  },
+  "1174": {
+    "itemId": 1174,
+    "name": "* DOGMO",
+    "status": "downloaded",
+    "sourcePageTitle": "DOGMO",
+    "sourceFileTitle": "Dogmo.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/3/3f/Dogmo.png/revision/latest?cb=20161003121139",
+    "savedFileName": "1174.png",
+    "attemptedTitles": [
+      "DOGMO"
+    ],
+    "updatedAt": "2026-07-14T19:43:31.080Z"
+  },
+  "1175": {
+    "itemId": 1175,
+    "name": "* SNAKEMO",
+    "status": "downloaded",
+    "sourcePageTitle": "SNAKEMO",
+    "sourceFileTitle": "Snakemo.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/ca/Snakemo.png/revision/latest?cb=20161003121256",
+    "savedFileName": "1175.png",
+    "attemptedTitles": [
+      "SNAKEMO"
+    ],
+    "updatedAt": "2026-07-14T19:47:28.582Z"
+  },
+  "1176": {
+    "itemId": 1176,
+    "name": "Jakemoblie",
+    "status": "missing",
+    "attemptedTitles": [
+      "Jakemoblie"
+    ],
+    "updatedAt": "2026-07-14T19:52:10.751Z"
+  },
+  "1177": {
+    "itemId": 1177,
+    "name": "* Snail Dude Jake",
+    "status": "downloaded",
+    "sourcePageTitle": "Snail Dude Jake",
+    "sourceFileTitle": "SnailDudeJake.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/a1/SnailDudeJake.png/revision/latest?cb=20161003010314",
+    "savedFileName": "1177.png",
+    "attemptedTitles": [
+      "Snail Dude Jake"
+    ],
+    "updatedAt": "2026-07-14T19:47:26.240Z"
+  },
+  "1178": {
+    "itemId": 1178,
+    "name": "* Hover Jake",
+    "status": "downloaded",
+    "sourcePageTitle": "Hover Jake",
+    "sourceFileTitle": "HoverJake.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/da/HoverJake.png/revision/latest?cb=20161003010412",
+    "savedFileName": "1178.png",
+    "attemptedTitles": [
+      "Hover Jake"
+    ],
+    "updatedAt": "2026-07-14T19:44:48.286Z"
+  },
+  "1179": {
+    "itemId": 1179,
+    "name": "Lumpy Car",
+    "status": "downloaded",
+    "sourcePageTitle": "Lumpy Car",
+    "sourceFileTitle": "EarlofLemongrabCar.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/6f/EarlofLemongrabCar.png/revision/latest?cb=20170916220626",
+    "savedFileName": "1179.png",
+    "attemptedTitles": [
+      "Lumpy Car"
+    ],
+    "updatedAt": "2026-07-14T19:52:31.696Z"
+  },
+  "1180": {
+    "itemId": 1180,
+    "name": "* Lumpy Truck",
+    "status": "downloaded",
+    "sourcePageTitle": "Lumpy Truck",
+    "sourceFileTitle": "LumpyTruck.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/fd/LumpyTruck.png/revision/latest?cb=20161002220319",
+    "savedFileName": "1180.png",
+    "attemptedTitles": [
+      "Lumpy Truck"
+    ],
+    "updatedAt": "2026-07-14T19:45:54.431Z"
+  },
+  "1181": {
+    "itemId": 1181,
+    "name": "* Lumpy Land Whale",
+    "status": "downloaded",
+    "sourcePageTitle": "Lumpy Land Whale",
+    "sourceFileTitle": "LumpyLandWhale.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/45/LumpyLandWhale.png/revision/latest?cb=20161002221016",
+    "savedFileName": "1181.png",
+    "attemptedTitles": [
+      "Lumpy Land Whale"
+    ],
+    "updatedAt": "2026-07-14T19:45:52.140Z"
+  },
+  "1182": {
+    "itemId": 1182,
+    "name": "Lunatic Amp",
+    "status": "downloaded",
+    "sourcePageTitle": "Lunatic Amp",
+    "sourceFileTitle": "Lunatic Amp.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/f2/Lunatic_Amp.png/revision/latest?cb=20161124141234",
+    "savedFileName": "1182.png",
+    "attemptedTitles": [
+      "Lunatic Amp"
+    ],
+    "updatedAt": "2026-07-14T19:52:34.106Z"
+  },
+  "1183": {
+    "itemId": 1183,
+    "name": "* Lunatic Amp 2",
+    "status": "missing",
+    "attemptedTitles": [
+      "Lunatic Amp 2",
+      "Lunatic_Amp_2"
+    ],
+    "updatedAt": "2026-07-14T19:45:59.729Z"
+  },
+  "1184": {
+    "itemId": 1184,
+    "name": "* Lunatic Amp 3",
+    "status": "missing",
+    "attemptedTitles": [
+      "Lunatic Amp 3",
+      "Lunatic_Amp_3"
+    ],
+    "updatedAt": "2026-07-14T19:46:04.911Z"
+  },
+  "1185": {
+    "itemId": 1185,
+    "name": "B.A.s Van",
+    "status": "downloaded",
+    "sourcePageTitle": "B.A.'s Van",
+    "sourceFileTitle": "B.A'sVanLifesize.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/2/2e/B.A%27sVanLifesize.png/revision/latest?cb=20170619232636",
+    "savedFileName": "1185.png",
+    "attemptedTitles": [
+      "B.A.s Van",
+      "B.A.s_Van",
+      "search:B.A.'s Van"
+    ],
+    "updatedAt": "2026-07-14T19:50:08.363Z"
+  },
+  "1186": {
+    "itemId": 1186,
+    "name": "* Fool Smasher",
+    "status": "downloaded",
+    "sourcePageTitle": "Fool Smasher",
+    "sourceFileTitle": "FoolSmasher.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/3/37/FoolSmasher.png/revision/latest?cb=20161003132007",
+    "savedFileName": "1186.png",
+    "attemptedTitles": [
+      "Fool Smasher"
+    ],
+    "updatedAt": "2026-07-14T19:44:10.926Z"
+  },
+  "1187": {
+    "itemId": 1187,
+    "name": "* The Pain Plane",
+    "status": "downloaded",
+    "sourcePageTitle": "The Pain Plane",
+    "sourceFileTitle": "PainPlane.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/3/39/PainPlane.png/revision/latest?cb=20161003132035",
+    "savedFileName": "1187.png",
+    "attemptedTitles": [
+      "The Pain Plane"
+    ],
+    "updatedAt": "2026-07-14T19:49:00.301Z"
+  },
+  "1188": {
+    "itemId": 1188,
+    "name": "Phone Home",
+    "status": "downloaded",
+    "sourcePageTitle": "Phone Home",
+    "sourceFileTitle": "Phone Home.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/03/Phone_Home.png/revision/latest?cb=20161124142159",
+    "savedFileName": "1188.png",
+    "attemptedTitles": [
+      "Phone Home"
+    ],
+    "updatedAt": "2026-07-14T19:52:50.706Z"
+  },
+  "1189": {
+    "itemId": 1189,
+    "name": "* Phone Home 2",
+    "status": "missing",
+    "attemptedTitles": [
+      "Phone Home 2",
+      "Phone_Home_2"
+    ],
+    "updatedAt": "2026-07-14T19:46:36.309Z"
+  },
+  "1190": {
+    "itemId": 1190,
+    "name": "* Phone Home 3",
+    "status": "missing",
+    "attemptedTitles": [
+      "Phone Home 3",
+      "Phone_Home_3"
+    ],
+    "updatedAt": "2026-07-14T19:46:41.478Z"
+  },
+  "1191": {
+    "itemId": 1191,
+    "name": "Niffler",
+    "status": "downloaded",
+    "sourcePageTitle": "Niffler",
+    "sourceFileTitle": "NifflerBetter.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/be/NifflerBetter.png/revision/latest?cb=20161220025127",
+    "savedFileName": "1191.png",
+    "attemptedTitles": [
+      "Niffler"
+    ],
+    "updatedAt": "2026-07-14T19:52:46.251Z"
+  },
+  "1192": {
+    "itemId": 1192,
+    "name": "* Niffler 2",
+    "status": "missing",
+    "attemptedTitles": [
+      "Niffler 2",
+      "Niffler_2"
+    ],
+    "updatedAt": "2026-07-14T19:46:25.915Z"
+  },
+  "1193": {
+    "itemId": 1193,
+    "name": "* Niffler 3",
+    "status": "missing",
+    "attemptedTitles": [
+      "Niffler 3",
+      "Niffler_3"
+    ],
+    "updatedAt": "2026-07-14T19:46:31.143Z"
+  },
+  "1194": {
+    "itemId": 1194,
+    "name": "Swooping Evil",
+    "status": "downloaded",
+    "sourcePageTitle": "Swooping Evil",
+    "sourceFileTitle": "Fbawtft sevil (character).png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/e7/Fbawtft_sevil_%28character%29.png/revision/latest?cb=20171010205628",
+    "savedFileName": "1194.png",
+    "attemptedTitles": [
+      "Swooping Evil"
+    ],
+    "updatedAt": "2026-07-14T19:53:40.535Z"
+  },
+  "1195": {
+    "itemId": 1195,
+    "name": "* Swooping Evil 2",
+    "status": "missing",
+    "attemptedTitles": [
+      "Swooping Evil 2",
+      "Swooping_Evil_2"
+    ],
+    "updatedAt": "2026-07-14T19:48:28.314Z"
+  },
+  "1196": {
+    "itemId": 1196,
+    "name": "* Swooping Evil 3",
+    "status": "missing",
+    "attemptedTitles": [
+      "Swooping Evil 3",
+      "Swooping_Evil_3"
+    ],
+    "updatedAt": "2026-07-14T19:48:33.546Z"
+  },
+  "1197": {
+    "itemId": 1197,
+    "name": "Ecto 1",
+    "status": "downloaded",
+    "sourcePageTitle": "Ecto-1 (2016)",
+    "sourceFileTitle": "Screenshot 20170911-224528.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c1/Screenshot_20170911-224528.png/revision/latest?cb=20170914234129",
+    "savedFileName": "1197.png",
+    "attemptedTitles": [
+      "Ecto 1",
+      "Ecto_1",
+      "search:Ecto-1 (2016)"
+    ],
+    "updatedAt": "2026-07-14T19:51:17.585Z"
+  },
+  "1198": {
+    "itemId": 1198,
+    "name": "* Ectozer",
+    "status": "downloaded",
+    "sourcePageTitle": "Ectozer",
+    "sourceFileTitle": "Ectozer.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/4d/Ectozer.png/revision/latest?cb=20161002155457",
+    "savedFileName": "1198.png",
+    "attemptedTitles": [
+      "Ectozer"
+    ],
+    "updatedAt": "2026-07-14T19:43:49.252Z"
+  },
+  "1199": {
+    "itemId": 1199,
+    "name": "* Ecto1 Rebuild 2",
+    "status": "missing",
+    "attemptedTitles": [
+      "Ecto1 Rebuild 2",
+      "Ecto1_Rebuild_2"
+    ],
+    "updatedAt": "2026-07-14T19:43:46.733Z"
+  },
+  "1200": {
+    "itemId": 1200,
+    "name": "Flash 'n' Finish",
+    "status": "downloaded",
+    "sourcePageTitle": "Flash 'n' Finish",
+    "sourceFileTitle": "Flash N Finish.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/43/Flash_N_Finish.png/revision/latest?cb=20161124035425",
+    "savedFileName": "1200.png",
+    "attemptedTitles": [
+      "Flash 'n' Finish"
+    ],
+    "updatedAt": "2026-07-14T19:51:28.090Z"
+  },
+  "1201": {
+    "itemId": 1201,
+    "name": "* Rampage Record Player",
+    "status": "downloaded",
+    "sourcePageTitle": "Rampage Record Player",
+    "sourceFileTitle": "Rampage Record Player.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/5/52/Rampage_Record_Player.jpg/revision/latest?cb=20161001073007",
+    "savedFileName": "1201.jpg",
+    "attemptedTitles": [
+      "Rampage Record Player"
+    ],
+    "updatedAt": "2026-07-14T19:46:57.298Z"
+  },
+  "1202": {
+    "itemId": 1202,
+    "name": "* Stripe's Throne",
+    "status": "downloaded",
+    "sourcePageTitle": "Stripe's Throne",
+    "sourceFileTitle": "Stripes Throne.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/6a/Stripes_Throne.jpg/revision/latest?cb=20161001073139",
+    "savedFileName": "1202.jpg",
+    "attemptedTitles": [
+      "Stripe's Throne"
+    ],
+    "updatedAt": "2026-07-14T19:48:14.400Z"
+  },
+  "1203": {
+    "itemId": 1203,
+    "name": "R.C. Racer",
+    "status": "downloaded",
+    "sourcePageTitle": "R.C. Racer",
+    "sourceFileTitle": "R.C. Racer.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/48/R.C._Racer.png/revision/latest?cb=20161124035151",
+    "savedFileName": "1203.png",
+    "attemptedTitles": [
+      "R.C. Racer"
+    ],
+    "updatedAt": "2026-07-14T19:53:18.070Z"
+  },
+  "1204": {
+    "itemId": 1204,
+    "name": "* Gadet-o-matic",
+    "status": "downloaded",
+    "sourcePageTitle": "Gadget-O-Matic",
+    "sourceFileTitle": "Gadget-o-matic.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/5/5f/Gadget-o-matic.jpg/revision/latest?cb=20161001072538",
+    "savedFileName": "1204.jpg",
+    "attemptedTitles": [
+      "Gadet-o-matic",
+      "Gadet o matic",
+      "search:Gadget-O-Matic"
+    ],
+    "updatedAt": "2026-07-14T19:44:21.604Z"
+  },
+  "1205": {
+    "itemId": 1205,
+    "name": "* Scarlet Scorpion",
+    "status": "downloaded",
+    "sourcePageTitle": "Scarlet Scorpion",
+    "sourceFileTitle": "Scarlet Scorpion.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/6d/Scarlet_Scorpion.jpg/revision/latest?cb=20161001072754",
+    "savedFileName": "1205.jpg",
+    "attemptedTitles": [
+      "Scarlet Scorpion"
+    ],
+    "updatedAt": "2026-07-14T19:47:02.213Z"
+  },
+  "1206": {
+    "itemId": 1206,
+    "name": "Hogwarts Express",
+    "status": "downloaded",
+    "sourcePageTitle": "Hogwarts Express",
+    "sourceFileTitle": "Screenshot 20170911-224611.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/06/Screenshot_20170911-224611.png/revision/latest?cb=20170917035445",
+    "savedFileName": "1206.png",
+    "attemptedTitles": [
+      "Hogwarts Express"
+    ],
+    "updatedAt": "2026-07-14T19:51:47.272Z"
+  },
+  "1207": {
+    "itemId": 1207,
+    "name": "* Soaring Steam Plane",
+    "status": "downloaded",
+    "sourcePageTitle": "Soaring Steam Plane",
+    "sourceFileTitle": "SoaringSteamPlane.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/85/SoaringSteamPlane.png/revision/latest?cb=20161003130318",
+    "savedFileName": "1207.png",
+    "attemptedTitles": [
+      "Soaring Steam Plane"
+    ],
+    "updatedAt": "2026-07-14T19:47:35.580Z"
+  },
+  "1208": {
+    "itemId": 1208,
+    "name": "* Steam Warrior",
+    "status": "downloaded",
+    "sourcePageTitle": "Steam Warrior",
+    "sourceFileTitle": "SteamWarrior.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/66/SteamWarrior.png/revision/latest?cb=20161003125823",
+    "savedFileName": "1208.png",
+    "attemptedTitles": [
+      "Steam Warrior"
+    ],
+    "updatedAt": "2026-07-14T19:48:08.732Z"
+  },
+  "1209": {
+    "itemId": 1209,
+    "name": "Enchanted Car",
+    "status": "downloaded",
+    "sourcePageTitle": "Enchanted Car",
+    "sourceFileTitle": "Enchanted Car HD.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/f5/Enchanted_Car_HD.jpg/revision/latest?cb=20160827235845",
+    "savedFileName": "1209.jpg",
+    "attemptedTitles": [
+      "Enchanted Car"
+    ],
+    "updatedAt": "2026-07-14T19:51:25.635Z"
+  },
+  "1210": {
+    "itemId": 1210,
+    "name": "* Shark Sub",
+    "status": "downloaded",
+    "sourcePageTitle": "Shark Sub",
+    "sourceFileTitle": "SharkSub.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/b9/SharkSub.png/revision/latest?cb=20161002225647",
+    "savedFileName": "1210.png",
+    "attemptedTitles": [
+      "Shark Sub"
+    ],
+    "updatedAt": "2026-07-14T19:47:11.773Z"
+  },
+  "1211": {
+    "itemId": 1211,
+    "name": "* Monstrous Mouth",
+    "status": "downloaded",
+    "sourcePageTitle": "Monstrous Mouth",
+    "sourceFileTitle": "MonstrousMouth.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/47/MonstrousMouth.png/revision/latest?cb=20161002225622",
+    "savedFileName": "1211.png",
+    "attemptedTitles": [
+      "Monstrous Mouth"
+    ],
+    "updatedAt": "2026-07-14T19:46:10.330Z"
+  },
+  "1212": {
+    "itemId": 1212,
+    "name": "IMF Scrambler",
+    "status": "downloaded",
+    "sourcePageTitle": "IMF Scrambler",
+    "sourceFileTitle": "EthanHunt8.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/b1/EthanHunt8.png/revision/latest?cb=20160828145957",
+    "savedFileName": "1212.png",
+    "attemptedTitles": [
+      "IMF Scrambler"
+    ],
+    "updatedAt": "2026-07-14T19:51:57.114Z"
+  },
+  "1213": {
+    "itemId": 1213,
+    "name": "* Shock Cycle",
+    "status": "downloaded",
+    "sourcePageTitle": "Shock Cycle",
+    "sourceFileTitle": "ShockCycle.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/d/df/ShockCycle.png/revision/latest?cb=20161003123729",
+    "savedFileName": "1213.png",
+    "attemptedTitles": [
+      "Shock Cycle"
+    ],
+    "updatedAt": "2026-07-14T19:47:14.168Z"
+  },
+  "1214": {
+    "itemId": 1214,
+    "name": "* IMF Covert Jet",
+    "status": "downloaded",
+    "sourcePageTitle": "IMF Covert Jet",
+    "sourceFileTitle": "IMFCovertJet.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/e6/IMFCovertJet.png/revision/latest?cb=20161003124224",
+    "savedFileName": "1214.png",
+    "attemptedTitles": [
+      "IMF Covert Jet"
+    ],
+    "updatedAt": "2026-07-14T19:44:56.960Z"
+  },
+  "1215": {
+    "itemId": 1215,
+    "name": "IMF Sport Car",
+    "status": "downloaded",
+    "sourcePageTitle": "71248 Level Pack",
+    "sourceFileTitle": "71248-LevelPack.jpg",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/fe/71248-LevelPack.jpg/revision/latest?cb=20160609133920",
+    "savedFileName": "1215.jpg",
+    "attemptedTitles": [
+      "IMF Sport Car",
+      "IMF_Sport_Car",
+      "search:71248 Level Pack"
+    ],
+    "updatedAt": "2026-07-14T19:52:04.940Z"
+  },
+  "1216": {
+    "itemId": 1216,
+    "name": "* IMF Tank",
+    "status": "downloaded",
+    "sourcePageTitle": "IMF Tank",
+    "sourceFileTitle": "IMFTank.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/95/IMFTank.png/revision/latest?cb=20161003011449",
+    "savedFileName": "1216.png",
+    "attemptedTitles": [
+      "IMF Tank"
+    ],
+    "updatedAt": "2026-07-14T19:44:59.479Z"
+  },
+  "1217": {
+    "itemId": 1217,
+    "name": "* IMF-Splorer",
+    "status": "downloaded",
+    "sourcePageTitle": "IMF Splorer",
+    "sourceFileTitle": "IMFSplorer.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/ec/IMFSplorer.png/revision/latest?cb=20161003011551",
+    "savedFileName": "1217.png",
+    "attemptedTitles": [
+      "IMF-Splorer",
+      "IMF Splorer"
+    ],
+    "updatedAt": "2026-07-14T19:45:03.744Z"
+  },
+  "1218": {
+    "itemId": 1218,
+    "name": "Sonic Speedster",
+    "status": "downloaded",
+    "sourcePageTitle": "Sonic Speedster",
+    "sourceFileTitle": "Screenshot 20170911-225213.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/79/Screenshot_20170911-225213.png/revision/latest?cb=20170917040546",
+    "savedFileName": "1218.png",
+    "attemptedTitles": [
+      "Sonic Speedster"
+    ],
+    "updatedAt": "2026-07-14T19:53:35.943Z"
+  },
+  "1219": {
+    "itemId": 1219,
+    "name": "* Sonic Speedster 2",
+    "status": "missing",
+    "attemptedTitles": [
+      "Sonic Speedster 2",
+      "Sonic_Speedster_2"
+    ],
+    "updatedAt": "2026-07-14T19:47:48.030Z"
+  },
+  "1220": {
+    "itemId": 1220,
+    "name": "* Sonic Speedster 3",
+    "status": "missing",
+    "attemptedTitles": [
+      "Sonic Speedster 3",
+      "Sonic_Speedster_3"
+    ],
+    "updatedAt": "2026-07-14T19:47:53.319Z"
+  },
+  "1221": {
+    "itemId": 1221,
+    "name": "The Tornado",
+    "status": "downloaded",
+    "sourcePageTitle": "The Tornado",
+    "sourceFileTitle": "LEGO Dimensions Image 3.PNG",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/ae/LEGO_Dimensions_Image_3.PNG/revision/latest?cb=20161114115743",
+    "savedFileName": "1221.png",
+    "attemptedTitles": [
+      "The Tornado"
+    ],
+    "updatedAt": "2026-07-14T19:53:55.358Z"
+  },
+  "1222": {
+    "itemId": 1222,
+    "name": "* The Tornado 1",
+    "status": "downloaded",
+    "sourcePageTitle": "The Tornado",
+    "sourceFileTitle": "LEGO Dimensions Image 3.PNG",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/ae/LEGO_Dimensions_Image_3.PNG/revision/latest?cb=20161114115743",
+    "savedFileName": "1222.png",
+    "attemptedTitles": [
+      "The Tornado 1",
+      "The_Tornado_1",
+      "search:The Tornado"
+    ],
+    "updatedAt": "2026-07-14T19:49:10.589Z"
+  },
+  "1223": {
+    "itemId": 1223,
+    "name": "* The Tornado 2",
+    "status": "downloaded",
+    "sourcePageTitle": "The Tornado",
+    "sourceFileTitle": "LEGO Dimensions Image 3.PNG",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/a/ae/LEGO_Dimensions_Image_3.PNG/revision/latest?cb=20161114115743",
+    "savedFileName": "1223.png",
+    "attemptedTitles": [
+      "The Tornado 2",
+      "The_Tornado_2",
+      "search:The Tornado"
+    ],
+    "updatedAt": "2026-07-14T19:49:18.444Z"
+  },
+  "1224": {
+    "itemId": 1224,
+    "name": "K.I.T.T",
+    "status": "downloaded",
+    "sourcePageTitle": "K.I.T.T.",
+    "sourceFileTitle": "KITTHD.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/c/c7/KITTHD.png/revision/latest?cb=20160920225702",
+    "savedFileName": "1224.png",
+    "attemptedTitles": [
+      "K.I.T.T",
+      "search:K.I.T.T."
+    ],
+    "updatedAt": "2026-07-14T19:52:17.152Z"
+  },
+  "1225": {
+    "itemId": 1225,
+    "name": "* K.I.T.T. JET",
+    "status": "downloaded",
+    "sourcePageTitle": "K.I.T.T. Jet",
+    "sourceFileTitle": "KJ.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/83/KJ.png/revision/latest?cb=20161211154956",
+    "savedFileName": "1225.png",
+    "attemptedTitles": [
+      "K.I.T.T. JET",
+      "K.I.T.T._JET",
+      "search:K.I.T.T. Jet"
+    ],
+    "updatedAt": "2026-07-14T19:45:22.162Z"
+  },
+  "1226": {
+    "itemId": 1226,
+    "name": "* GOLIATH ARMORED SEMI",
+    "status": "downloaded",
+    "sourcePageTitle": "Goliath Armored Semi",
+    "sourceFileTitle": "GAS.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/71/GAS.png/revision/latest?cb=20161211154933",
+    "savedFileName": "1226.png",
+    "attemptedTitles": [
+      "GOLIATH ARMORED SEMI",
+      "GOLIATH_ARMORED_SEMI",
+      "search:Goliath Armored Semi"
+    ],
+    "updatedAt": "2026-07-14T19:44:39.236Z"
+  },
+  "1227": {
+    "itemId": 1227,
+    "name": "Police",
+    "status": "downloaded",
+    "sourcePageTitle": "Police Captain",
+    "sourceFileTitle": "PoliceCaptain.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/3/3c/PoliceCaptain.png/revision/latest?cb=20171028132814",
+    "savedFileName": "1227.png",
+    "attemptedTitles": [
+      "Police",
+      "search:Police Captain"
+    ],
+    "updatedAt": "2026-07-14T19:53:04.771Z"
+  },
+  "1228": {
+    "itemId": 1228,
+    "name": "* Hovercraft",
+    "status": "downloaded",
+    "sourcePageTitle": "Police Hovercraft",
+    "sourceFileTitle": "Police Hovercraft.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/91/Police_Hovercraft.png/revision/latest?cb=20170308014346",
+    "savedFileName": "1228.png",
+    "attemptedTitles": [
+      "Hovercraft",
+      "search:Police Hovercraft"
+    ],
+    "updatedAt": "2026-07-14T19:44:54.476Z"
+  },
+  "1229": {
+    "itemId": 1229,
+    "name": "* Plane",
+    "status": "downloaded",
+    "sourcePageTitle": "The Pain Plane",
+    "sourceFileTitle": "PainPlane.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/3/39/PainPlane.png/revision/latest?cb=20161003132035",
+    "savedFileName": "1229.png",
+    "attemptedTitles": [
+      "Plane",
+      "search:The Pain Plane"
+    ],
+    "updatedAt": "2026-07-14T19:46:47.677Z"
+  },
+  "1230": {
+    "itemId": 1230,
+    "name": "BIONIC STEED",
+    "status": "downloaded",
+    "sourcePageTitle": "Bionic Steed",
+    "sourceFileTitle": "BionicSteedHD.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/7/74/BionicSteedHD.png/revision/latest?cb=20160919190917",
+    "savedFileName": "1230.png",
+    "attemptedTitles": [
+      "BIONIC STEED",
+      "BIONIC_STEED",
+      "search:Bionic Steed"
+    ],
+    "updatedAt": "2026-07-14T19:50:26.565Z"
+  },
+  "1231": {
+    "itemId": 1231,
+    "name": "* BAT RAPTOR",
+    "status": "downloaded",
+    "sourcePageTitle": "Bat-Raptor",
+    "sourceFileTitle": "BatRaptor.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/60/BatRaptor.png/revision/latest?cb=20170112191432",
+    "savedFileName": "1231.png",
+    "attemptedTitles": [
+      "BAT RAPTOR",
+      "BAT_RAPTOR",
+      "search:Bat-Raptor"
+    ],
+    "updatedAt": "2026-07-14T19:42:41.596Z"
+  },
+  "1232": {
+    "itemId": 1232,
+    "name": "* ULTRA BAT",
+    "status": "missing",
+    "attemptedTitles": [
+      "ULTRA BAT",
+      "ULTRA_BAT"
+    ],
+    "updatedAt": "2026-07-14T19:49:33.403Z"
+  },
+  "1233": {
+    "itemId": 1233,
+    "name": "BAT WING",
+    "status": "missing",
+    "attemptedTitles": [
+      "BAT WING",
+      "BAT_WING"
+    ],
+    "updatedAt": "2026-07-14T19:50:13.654Z"
+  },
+  "1234": {
+    "itemId": 1234,
+    "name": "* BLACK THUNDER",
+    "status": "downloaded",
+    "sourcePageTitle": "The Black Thunder",
+    "sourceFileTitle": "LBM Rebuild 1.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/3/30/LBM_Rebuild_1.png/revision/latest?cb=20170206213224",
+    "savedFileName": "1234.png",
+    "attemptedTitles": [
+      "BLACK THUNDER",
+      "BLACK_THUNDER",
+      "search:The Black Thunder"
+    ],
+    "updatedAt": "2026-07-14T19:43:02.355Z"
+  },
+  "1235": {
+    "itemId": 1235,
+    "name": "* BAT TANK",
+    "status": "downloaded",
+    "sourcePageTitle": "Bat-Tank",
+    "sourceFileTitle": "LBM Rebuild 2.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/9/95/LBM_Rebuild_2.png/revision/latest?cb=20170206213239",
+    "savedFileName": "1235.png",
+    "attemptedTitles": [
+      "BAT TANK",
+      "BAT_TANK",
+      "search:Bat-Tank"
+    ],
+    "updatedAt": "2026-07-14T19:42:49.667Z"
+  },
+  "1236": {
+    "itemId": 1236,
+    "name": "Skeleton Organ",
+    "status": "downloaded",
+    "sourcePageTitle": "Skeleton Organ",
+    "sourceFileTitle": "Skeleton Organ.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/8/89/Skeleton_Organ.png/revision/latest?cb=20170203232052",
+    "savedFileName": "1236.png",
+    "attemptedTitles": [
+      "Skeleton Organ"
+    ],
+    "updatedAt": "2026-07-14T19:53:31.274Z"
+  },
+  "1237": {
+    "itemId": 1237,
+    "name": "* Jukebox",
+    "status": "downloaded",
+    "sourcePageTitle": "Jukebox",
+    "sourceFileTitle": "Stub.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/fe/Stub.png/revision/latest?cb=20161119121108",
+    "savedFileName": "1237.png",
+    "attemptedTitles": [
+      "Jukebox"
+    ],
+    "updatedAt": "2026-07-14T19:45:14.215Z"
+  },
+  "1238": {
+    "itemId": 1238,
+    "name": "* Skele-Turkey",
+    "status": "downloaded",
+    "sourcePageTitle": "Skele-Turkey",
+    "sourceFileTitle": "Skele-Turkey.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/f/ff/Skele-Turkey.png/revision/latest?cb=20170308020910",
+    "savedFileName": "1238.png",
+    "attemptedTitles": [
+      "Skele-Turkey"
+    ],
+    "updatedAt": "2026-07-14T19:47:16.477Z"
+  },
+  "1239": {
+    "itemId": 1239,
+    "name": "Pirate Ship",
+    "status": "downloaded",
+    "sourcePageTitle": "One-Eyed Willy's Pirate Ship",
+    "sourceFileTitle": "One-Eyed Willy's Pirate Ship.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/0/0f/One-Eyed_Willy%27s_Pirate_Ship.png/revision/latest?cb=20170203231733",
+    "savedFileName": "1239.png",
+    "attemptedTitles": [
+      "Pirate Ship",
+      "Pirate_Ship",
+      "search:One-Eyed Willy's Pirate Ship"
+    ],
+    "updatedAt": "2026-07-14T19:52:58.630Z"
+  },
+  "1240": {
+    "itemId": 1240,
+    "name": "* Fanged Fortune",
+    "status": "downloaded",
+    "sourcePageTitle": "Fanged Fortune",
+    "sourceFileTitle": "Fanged Fortune.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/1/19/Fanged_Fortune.png/revision/latest?cb=20170308022427",
+    "savedFileName": "1240.png",
+    "attemptedTitles": [
+      "Fanged Fortune"
+    ],
+    "updatedAt": "2026-07-14T19:43:59.219Z"
+  },
+  "1241": {
+    "itemId": 1241,
+    "name": "* Inferno",
+    "status": "downloaded",
+    "sourcePageTitle": "Inferno Cannon",
+    "sourceFileTitle": "Inferno Cannon.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/6/69/Inferno_Cannon.png/revision/latest?cb=20170308022806",
+    "savedFileName": "1241.png",
+    "attemptedTitles": [
+      "Inferno",
+      "search:The Inferno",
+      "search:Inferno Cannon"
+    ],
+    "updatedAt": "2026-07-14T19:45:11.784Z"
+  },
+  "1242": {
+    "itemId": 1242,
+    "name": "Buckbeak",
+    "status": "downloaded",
+    "sourcePageTitle": "Buckbeak",
+    "sourceFileTitle": "Buckbeak.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/4/4c/Buckbeak.png/revision/latest?cb=20170203234515",
+    "savedFileName": "1242.png",
+    "attemptedTitles": [
+      "Buckbeak"
+    ],
+    "updatedAt": "2026-07-14T19:50:36.225Z"
+  },
+  "1243": {
+    "itemId": 1243,
+    "name": "* Giant Owl",
+    "status": "downloaded",
+    "sourcePageTitle": "Giant Owl",
+    "sourceFileTitle": "Giant Owl.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/b/b7/Giant_Owl.png/revision/latest?cb=20170308013406",
+    "savedFileName": "1243.png",
+    "attemptedTitles": [
+      "Giant Owl"
+    ],
+    "updatedAt": "2026-07-14T19:44:23.962Z"
+  },
+  "1244": {
+    "itemId": 1244,
+    "name": "* Fierce Falcon",
+    "status": "downloaded",
+    "sourcePageTitle": "Fierce Falcon",
+    "sourceFileTitle": "Fierce Falcon.png",
+    "sourceUrl": "https://static.wikia.nocookie.net/lego-dimensions/images/e/e3/Fierce_Falcon.png/revision/latest?cb=20170308013850",
+    "savedFileName": "1244.png",
+    "attemptedTitles": [
+      "Fierce Falcon"
+    ],
+    "updatedAt": "2026-07-14T19:44:01.415Z"
+  }
+}
