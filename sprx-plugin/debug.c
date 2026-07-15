@@ -216,7 +216,7 @@ static void debug_ring_write(const char* text, int len)
 
     /* INJECTED: Physical File I/O Restoration */
     if (sysFsOpen("/dev_hdd0/plugins/ldtoypad_debug.log",
-                  SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND | 0666,
+                  SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
                   &fd, NULL, 0) == 0) {
         sysFsWrite(fd, text, (uint64_t)len, &written);
         sysFsClose(fd);

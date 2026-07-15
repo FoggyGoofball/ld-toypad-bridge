@@ -52,13 +52,12 @@ try {
     }
 
     if ($needsLine) {
-        # Write strict LF-only content — CRLF can confuse Cobra's parser
-        $newContent = "/dev_hdd0/plugins/webftp_server.sprx`n" + $REMOTE_PLUGIN_PATH + "`n"
-        # Strip any stray carriage returns that could corrupt Cobra's parser
+        # Safely append to existing plugins — never overwrite boot chain
+        $newContent = ($content.TrimEnd("`r`n") + "`n" + $REMOTE_PLUGIN_PATH + "`n")
         $newContent = $newContent -replace "`r", ""
         [System.IO.File]::WriteAllText($localTemp, $newContent, [System.Text.Encoding]::ASCII)
         $wc.UploadFile($bootPluginsUri, $localTemp)
-        Write-Host "  boot_plugins.txt rewritten with LF-only lines"
+        Write-Host "  ldtoypad.sprx appended to boot_plugins.txt (LF-only)"
     } else {
         # Even if the line exists, CRLF may have snuck in — rewrite with LF-only
         Write-Host "  Re-writing boot_plugins.txt with LF-only line endings..."

@@ -3,7 +3,7 @@
  * LD-ToyPad Bridge SPRX plugin -- CellOS background thread entry point.
  *
  * Architecture (refactored):
- *   _start() is minimal -- spawns a background thread and returns
+ *   ldtoypad_start() is minimal -- spawns a background thread and returns
  *   SYS_PRX_START_OK immediately. This guarantees the bootloader is
  *   never blocked by network I/O or USB setup.
  *
@@ -12,7 +12,7 @@
  *
  * Diagnostics:
  *   A boot log is written to /dev_hdd0/ldtoypad_boot.log via raw
- *   sysFs calls.  This works at the very first line of _start(),
+ *   sysFs calls.  This works at the very first line of ldtoypad_start(),
  *   before any subsystem init, and survives crashes.  Retrieve it
  *   after boot via FTP.
  */
@@ -30,7 +30,7 @@
 #include "toypad_state.h"
 #include "debug.h"
 
-/* _start/_stop are tagged with __attribute__((visibility("default")))
+/* ldoypad_start/ldtoypad_stop are tagged with __attribute__((visibility("default")))
  * to override -fvisibility=hidden in the Makefile. */
 
 #define CONFIG_UDP_PORT          28472
@@ -41,15 +41,11 @@
 #define LDTP_ENABLE_FLAG_PATH "/dev_hdd0/plugins/ldtoypad.enable"
 #define LDTP_BOOT_LOG_PATH    "/dev_hdd0/plugins/ldtoypad_boot.log"
 
-/* --------------------------------------------------------------------
- * PRX MODULE HEADER & EXPORT TABLE (Raw Assembly Implementation)
- * This block replaces proprietary macros and manually constructs the
- * module footprint and entry/exit hooks required by the Cobra payload.
- *
- * NOTE: SYS_PROCESS_PARAM_FIXED is intentionally omitted -- it marks
- * the binary as an isolated EBOOT process, causing the kernel to reject
- * injection into the VSH container.
- * -------------------------------------------------------------------- */
+/* ------------------------------------------------------------------------
+ * PRX MODULE HEADER & EXPORT TABLE (Relocation-Free Assembly)
+ * Forges the 32-bit PRX headers directly into the ELF to bypass
+ * GCC R_PPC64_ADDR32 dynamic relocation errors.
+ * ------------------------------------------------------------------------ */
 __asm__(
     /* --- 1. Module Parameter Information --- */
     ".section .sys_proc_prx_param,\"a\"\n"
@@ -66,27 +62,40 @@ __asm__(
     ".long 0x00000000\n"
     ".previous\n"
 
-    /* --- 2. Module Entry Hook (_start) --- */
-    /* Registers the _start function to the kernel PRX loader */
+    /* --- 2. Module Metadata (CRITICAL FOR COBRA VALIDATION) --- */
+    ".section .rodata.sceModuleInfo,\"a\"\n"
+    ".align 2\n"
+    ".short 0x0000\n"           /* Attributes */
+    ".byte 1\n"                 /* Minor Version */
+    ".byte 1\n"                 /* Major Version */
+    ".ascii \"ldtoypad\"\n"     /* Module Name (8 bytes) */
+    ".space 20\n"               /* Null padding to enforce 28-byte name limit */
+    ".long 0x00000000\n"        /* TOC pointer (Resolved at kernel load time) */
+    ".long __libentstart\n"
+    ".long __libentend\n"
+    ".long __libstubstart\n"
+    ".long __libstubend\n"
+    ".previous\n"
+
+    /* --- 3. Module Entry Hook --- */
     ".section .lib.ent,\"a\"\n"
     ".align 2\n"
-    ".long 0x01300000\n"     /* sys_prx_ent_info struct identifier (start) */
+    ".long 0x01300000\n"        /* sys_prx_ent_info struct identifier (start) */
     ".long 0x00000000\n"
     ".long 0x00000000\n"
     ".long 0x00000000\n"
-    ".long _start\n"         /* Explicit function pointer */
+    ".long ldtoypad_start\n"    /* Exact match to C function signature */
     ".long 0x00000000\n"
     ".previous\n"
 
-    /* --- 3. Module Exit Hook (_stop) --- */
-    /* Registers the _stop function to the kernel PRX loader */
+    /* --- 4. Module Exit Hook --- */
     ".section .lib.ent,\"a\"\n"
     ".align 2\n"
-    ".long 0x01400000\n"     /* sys_prx_ent_info struct identifier (stop) */
+    ".long 0x01400000\n"        /* sys_prx_ent_info struct identifier (stop) */
     ".long 0x00000000\n"
     ".long 0x00000000\n"
     ".long 0x00000000\n"
-    ".long _stop\n"          /* Explicit function pointer */
+    ".long ldtoypad_stop\n"     /* Exact match to C function signature */
     ".long 0x00000000\n"
     ".previous\n"
 );
@@ -104,8 +113,12 @@ static sys_ppu_thread_t g_thread_id = 0;
 /* ---------------------------------------------------------------
  * Boot log -- write diagnostic trace to HDD via raw sysFs calls.
  *
- * Works at any point in _start(), before any subsystem init.
+ * Works at any point in ldtoypad_start(), before any subsystem init.
  * Survives crashes. Retrieve via FTP after boot.
+ *
+ * NOTE: sysFsOpen does NOT take a mode/permission argument.
+ * Passing | 0666 corrupts the oflags (sets accmode=3, which is
+ * invalid).  We use clean flags only.
  * --------------------------------------------------------------- */
 static void boot_log_write(const char *msg)
 {
@@ -113,7 +126,7 @@ static void boot_log_write(const char *msg)
     u64 written;
 
     if (sysFsOpen(LDTP_BOOT_LOG_PATH,
-                  SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND | 0666,
+                  SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
                   &fd, NULL, 0) == 0) {
         sysFsWrite(fd, msg, strlen(msg), &written);
         sysFsWrite(fd, "\n", 1, &written);
@@ -159,7 +172,7 @@ static void boot_log_write_fmt(const char *fmt, s64 v)
         int fd;
         u64 written;
         if (sysFsOpen(LDTP_BOOT_LOG_PATH,
-                      SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND | 0666,
+                      SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
                       &fd, NULL, 0) == 0) {
             buf[i] = '\n';
             i++;
@@ -293,18 +306,18 @@ static void toypad_background_thread(void *arg)
 }
 
 /* ---------------------------------------------------------------
- * _start -- called by the kernel when loading the PRX
+ * ldtoypad_start -- called by the kernel when loading the PRX
  *
  * MUST return quickly!  We spawn a background thread so the
  * bootloader is never blocked.
  * --------------------------------------------------------------- */
-__attribute__((visibility("default"))) int _start(u64 args)
+__attribute__((visibility("default"))) int ldtoypad_start(u64 args)
 {
     int ret;
 
     (void)args;
 
-    boot_log_write("[BOOT] _start() called");
+    boot_log_write("[BOOT] ldtoypad_start() called");
 
     /* Gate: only activate when the enable flag is present */
     if (!check_enable_flag()) {
@@ -342,11 +355,11 @@ __attribute__((visibility("default"))) int _start(u64 args)
 }
 
 /* ---------------------------------------------------------------
- * _stop -- called by the kernel when unloading the PRX
+ * ldtoypad_stop -- called by the kernel when unloading the PRX
  *
  * Signals the background thread to exit and waits for it to join.
  * --------------------------------------------------------------- */
-__attribute__((visibility("default"))) int _stop(void)
+__attribute__((visibility("default"))) int ldtoypad_stop(void)
 {
     u64 retval = 0;
 
@@ -354,7 +367,7 @@ __attribute__((visibility("default"))) int _stop(void)
         return SYS_PRX_STOP_OK;
     }
 
-    boot_log_write("[BOOT] _stop() called -- shutting down");
+    boot_log_write("[BOOT] ldtoypad_stop() called -- shutting down");
     DEBUG_PRINT("[LDTP] stopping...\n");
     g_running = 0;
 
@@ -363,7 +376,7 @@ __attribute__((visibility("default"))) int _stop(void)
         g_thread_id = 0;
     }
 
-    boot_log_write("[BOOT] _stop() complete");
+    boot_log_write("[BOOT] ldtoypad_stop() complete");
     DEBUG_PRINT("[LDTP] stopped\n");
     return SYS_PRX_STOP_OK;
 }
