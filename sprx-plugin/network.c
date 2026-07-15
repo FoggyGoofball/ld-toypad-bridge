@@ -91,16 +91,25 @@ int network_init(uint16_t port)
 
     DEBUG_PRINT("[NET] UDP ready on port %u\n", (unsigned)port);
 
-    /* Send immediate startup beacon so the server can detect us */
+    /* Send rapid startup beacon salvo so the server can detect us.
+     * We send 10 beacons with a 100ms pause between each.  This
+     * dramatically improves the chance the PC server catches the
+     * initial announcement when boot timing is tight. */
     {
+        int i;
         uint8_t beacon[NET_PACKET_HEADER_SIZE];
         memset(beacon, 0, sizeof(beacon));
         beacon[0] = NET_PACKET_TYPE_POLL;
         beacon[1] = 1;  /* center zone */
         beacon[2] = 0;
-        (void)sysNetSendto(g_net.socket_fd, beacon, (size_t)sizeof(beacon), 0,
-                           (const struct sockaddr*)&g_net.discovery_target,
-                           (socklen_t)sizeof(g_net.discovery_target));
+
+        for (i = 0; i < 10; i++) {
+            beacon[2] = (uint8_t)i;
+            (void)sysNetSendto(g_net.socket_fd, beacon, (size_t)sizeof(beacon), 0,
+                               (const struct sockaddr*)&g_net.discovery_target,
+                               (socklen_t)sizeof(g_net.discovery_target));
+            sysUsleep(100000); /* 100 ms */
+        }
     }
 
     /* NOTE: The old startup recv spin (busy-wait loop) has been REMOVED.

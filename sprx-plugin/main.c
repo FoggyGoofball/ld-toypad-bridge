@@ -1,14 +1,20 @@
 /**
  * main.c
- * LD-ToyPad Bridge SPRX plugin — CellOS background thread entry point.
+ * LD-ToyPad Bridge SPRX plugin -- CellOS background thread entry point.
  *
  * Architecture (refactored):
- *   _start() is minimal — spawns a background thread and returns
+ *   _start() is minimal -- spawns a background thread and returns
  *   SYS_PRX_START_OK immediately. This guarantees the bootloader is
  *   never blocked by network I/O or USB setup.
  *
  *   toypad_background_thread() owns all initialization and runs a
  *   continuous loop: poll USB endpoints, pump UDP traffic, sleep.
+ *
+ * Diagnostics:
+ *   A boot log is written to /dev_hdd0/ldtoypad_boot.log via raw
+ *   sysFs calls.  This works at the very first line of _start(),
+ *   before any subsystem init, and survives crashes.  Retrieve it
+ *   after boot via FTP.
  */
 
 #include <ppu-types.h>
@@ -30,6 +36,7 @@
 #define CONFIG_LOOP_SLEEP_USEC   10000  /* 10 ms between iterations    */
 
 #define LDTP_ENABLE_FLAG_PATH "/dev_hdd0/plugins/ldtoypad.enable"
+#define LDTP_BOOT_LOG_PATH    "/dev_hdd0/ldtoypad_boot.log"
 
 SYS_PROCESS_PARAM_FIXED(1001, 0x4000)
 
@@ -49,7 +56,7 @@ __asm__(
     ".previous\n");
 
 /* ---------------------------------------------------------------
- * Global run flag — set to 0 to signal background thread exit
+ * Global run flag -- set to 0 to signal background thread exit
  * --------------------------------------------------------------- */
 static volatile int g_running = 0;
 
@@ -59,25 +66,95 @@ static volatile int g_running = 0;
 static sys_ppu_thread_t g_thread_id = 0;
 
 /* ---------------------------------------------------------------
- * Enable gate — one-shot consumable token
+ * Boot log -- write diagnostic trace to HDD via raw sysFs calls.
+ *
+ * Works at any point in _start(), before any subsystem init.
+ * Survives crashes. Retrieve via FTP after boot.
+ * --------------------------------------------------------------- */
+static void boot_log_write(const char *msg)
+{
+    int fd;
+    u64 written;
+
+    if (sysFsOpen(LDTP_BOOT_LOG_PATH,
+                  SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
+                  &fd, NULL, 0) == 0) {
+        sysFsWrite(fd, msg, strlen(msg), &written);
+        sysFsWrite(fd, "\n", 1, &written);
+        sysFsClose(fd);
+    }
+}
+
+static void boot_log_write_fmt(const char *fmt, s64 v)
+{
+    char buf[128];
+    char num[32];
+    int i = 0, j = 0;
+    s64 n = v;
+
+    /* Copy format string until %d */
+    while (*fmt && *fmt != '%') {
+        if (i < (int)sizeof(buf) - 2)
+            buf[i++] = *fmt;
+        fmt++;
+    }
+
+    /* Format the integer */
+    if (n < 0) {
+        if (i < (int)sizeof(buf) - 2) buf[i++] = '-';
+        n = -n;
+    }
+    if (n == 0) {
+        if (i < (int)sizeof(buf) - 2) buf[i++] = '0';
+    } else {
+        while (n > 0 && j < (int)sizeof(num) - 1) {
+            num[j++] = '0' + (n % 10);
+            n /= 10;
+        }
+        while (j > 0 && i < (int)sizeof(buf) - 2) {
+            j--;
+            buf[i++] = num[j];
+        }
+    }
+
+    buf[i] = '\0';
+
+    if (i > 0) {
+        int fd;
+        u64 written;
+        if (sysFsOpen(LDTP_BOOT_LOG_PATH,
+                      SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
+                      &fd, NULL, 0) == 0) {
+            buf[i] = '\n';
+            i++;
+            sysFsWrite(fd, buf, i, &written);
+            sysFsClose(fd);
+        }
+    }
+}
+
+/* ---------------------------------------------------------------
+ * Enable gate -- one-shot consumable token
  *
  * If /dev_hdd0/plugins/ldtoypad.enable exists, we delete it and
  * return 1 (arm the plugin).  On the next boot the token is gone,
  * so the plugin stays dormant.  This makes the "failsafe" safe:
  * any crash or hang during development is fixed by a simple power
- * cycle — no token, no thread.
+ * cycle -- no token, no thread.
  * --------------------------------------------------------------- */
 static int check_enable_flag(void)
 {
     sysFSStat stat;
 
     if (sysFsStat(LDTP_ENABLE_FLAG_PATH, &stat) != 0) {
-        return 0;  /* no token — stay dormant, boot is safe */
+        boot_log_write("[BOOT] ENABLE FLAG NOT FOUND -- dormant");
+        return 0;  /* no token -- stay dormant, boot is safe */
     }
 
-    /* Consume the token — delete it NOW so next boot is clean */
+    /* Consume the token -- delete it NOW so next boot is clean */
     sysFsUnlink(LDTP_ENABLE_FLAG_PATH);
-    DEBUG_PRINT("[LDTP] enable token consumed — plugin armed for this boot\n");
+    boot_log_write("[BOOT] enable token consumed -- plugin armed");
+    DEBUG_PRINT("[LDTP] enable token consumed -- plugin armed for this boot\n");
 
     return 1;
 }
@@ -92,6 +169,7 @@ static void toypad_background_thread(void *arg)
 
     (void)arg;
 
+    boot_log_write("[BOOT] background thread started");
     DEBUG_PRINT("[LDTP] background thread started (prio=%d)\n",
                 CONFIG_MAIN_THREAD_PRIO);
 
@@ -100,22 +178,29 @@ static void toypad_background_thread(void *arg)
     debug_init();
 
     if (network_init(CONFIG_UDP_PORT) < 0) {
-        DEBUG_ERROR("[LDTP] network_init failed — thread exiting\n");
+        DEBUG_ERROR("[LDTP] network_init failed -- thread exiting\n");
+        boot_log_write("[BOOT] network_init FAILED -- thread exiting");
         g_running = 0;
         return;
     }
+    boot_log_write("[BOOT] network_init OK");
 
     toypad_state_init();
 
-    /* Extra LDD registration — may fail if CFW doesn't support it.
+    /* Extra LDD registration -- may fail if CFW doesn't support it.
      * That's OK: the plugin still works in network-only mode for
      * discovery beacons. */
     if (ldd_driver_init() < 0) {
-        DEBUG_PRINT("[LDTP] LDD not available — operating in network-only mode\n");
+        DEBUG_PRINT("[LDTP] LDD not available -- operating in network-only mode\n");
+        boot_log_write("[BOOT] LDD init failed -- network-only mode");
+    } else {
+        boot_log_write("[BOOT] LDD init OK");
     }
 
     DEBUG_PRINT("[LDTP] Toy Pad bridge background service running on UDP %d\n",
                 CONFIG_UDP_PORT);
+
+    boot_log_write("[BOOT] main loop entering");
 
     /* ---- Main loop ---- */
 
@@ -151,7 +236,7 @@ static void toypad_background_thread(void *arg)
         /* 4. Bump sequence and sleep */
         seq++;
 
-        /* Yield CPU — use sysUsleep (LV2 syscall 141) */
+        /* Yield CPU -- use sysUsleep (LV2 syscall 141) */
         sysUsleep(CONFIG_LOOP_SLEEP_USEC);
     }
 
@@ -162,11 +247,12 @@ static void toypad_background_thread(void *arg)
     network_shutdown();
     debug_shutdown();
 
+    boot_log_write("[BOOT] background thread exiting");
     DEBUG_PRINT("[LDTP] background thread exiting\n");
 }
 
 /* ---------------------------------------------------------------
- * _start — called by the kernel when loading the PRX
+ * _start -- called by the kernel when loading the PRX
  *
  * MUST return quickly!  We spawn a background thread so the
  * bootloader is never blocked.
@@ -177,14 +263,18 @@ int _start(u64 args)
 
     (void)args;
 
+    boot_log_write("[BOOT] _start() called");
+
     /* Gate: only activate when the enable flag is present */
     if (!check_enable_flag()) {
-        /* Plugin remains dormant — no threads, no memory */
+        /* Plugin remains dormant -- no threads, no memory */
+        boot_log_write("[BOOT] dormant exit");
         return SYS_PRX_START_OK;
     }
 
     /* Prevent double-start */
     if (g_running) {
+        boot_log_write("[BOOT] already running -- skipping");
         return SYS_PRX_START_OK;
     }
 
@@ -198,17 +288,20 @@ int _start(u64 args)
                           THREAD_JOINABLE,
                           "ldtoypad_bridge");
     if (ret < 0) {
+        boot_log_write_fmt("[BOOT] sysThreadCreate FAILED ret=%d", ret);
         DEBUG_ERROR("[LDTP] sysThreadCreate failed: %d\n", ret);
         g_running = 0;
-        return SYS_PRX_START_OK; /* still return OK — don't hang boot */
+        return SYS_PRX_START_OK; /* still return OK -- don't hang boot */
     }
 
-    /* Return immediately — bootloader continues */
+    boot_log_write("[BOOT] sysThreadCreate OK -- thread spawned");
+
+    /* Return immediately -- bootloader continues */
     return SYS_PRX_START_OK;
 }
 
 /* ---------------------------------------------------------------
- * _stop — called by the kernel when unloading the PRX
+ * _stop -- called by the kernel when unloading the PRX
  *
  * Signals the background thread to exit and waits for it to join.
  * --------------------------------------------------------------- */
@@ -220,6 +313,7 @@ int _stop(void)
         return SYS_PRX_STOP_OK;
     }
 
+    boot_log_write("[BOOT] _stop() called -- shutting down");
     DEBUG_PRINT("[LDTP] stopping...\n");
     g_running = 0;
 
@@ -228,6 +322,7 @@ int _stop(void)
         g_thread_id = 0;
     }
 
+    boot_log_write("[BOOT] _stop() complete");
     DEBUG_PRINT("[LDTP] stopped\n");
     return SYS_PRX_STOP_OK;
 }
