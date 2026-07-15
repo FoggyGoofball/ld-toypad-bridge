@@ -1,4 +1,4 @@
-# deploy-enable.ps1 — Create one-shot enable flag on PS3
+# deploy-enable.ps1 -- Create one-shot enable flag on PS3
 #
 # Reads PS3 IP from ps3-ip.txt in the script directory.
 # Override: .\deploy-enable.ps1 -PS3IP 192.168.0.47
@@ -33,7 +33,7 @@ try {
     $uri = "ftp://${PS3IP}${REMOTE_DIR}/ldtoypad.enable"
     Write-Host "Uploading enable token to ${uri}..."
     $wc.UploadFile($uri, $tempFile)
-    Write-Host "✅ Enable token uploaded (one-shot — consumed on next boot)"
+    Write-Host "OK - Enable token uploaded (one-shot, consumed on next boot)"
 
     Remove-Item $tempFile -Force
 } catch {
