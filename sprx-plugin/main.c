@@ -43,6 +43,21 @@
 
 SYS_PROCESS_PARAM_FIXED(1001, 0x4000)
 
+__asm__(
+    ".section .sys_proc_prx_param,\"a\"\n"
+    ".align 3\n"
+    ".long 0x00000028\n"
+    ".long 0x1B434CEC\n"
+    ".long 0x00000002\n"
+    ".long 0x00000000\n"
+    ".long __libentstart\n"
+    ".long __libentend\n"
+    ".long __libstubstart\n"
+    ".long __libstubend\n"
+    ".long 0x01010000\n"
+    ".long 0x00000000\n"
+    ".previous\n");
+
 /* ---------------------------------------------------------------
  * Global run flag -- set to 0 to signal background thread exit
  * --------------------------------------------------------------- */
