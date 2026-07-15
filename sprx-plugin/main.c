@@ -41,9 +41,17 @@
 #define LDTP_ENABLE_FLAG_PATH "/dev_hdd0/plugins/ldtoypad.enable"
 #define LDTP_BOOT_LOG_PATH    "/dev_hdd0/plugins/ldtoypad_boot.log"
 
-SYS_PROCESS_PARAM_FIXED(1001, 0x4000)
-
+/* --------------------------------------------------------------------
+ * PRX MODULE HEADER & EXPORT TABLE (Raw Assembly Implementation)
+ * This block replaces proprietary macros and manually constructs the
+ * module footprint and entry/exit hooks required by the Cobra payload.
+ *
+ * NOTE: SYS_PROCESS_PARAM_FIXED is intentionally omitted -- it marks
+ * the binary as an isolated EBOOT process, causing the kernel to reject
+ * injection into the VSH container.
+ * -------------------------------------------------------------------- */
 __asm__(
+    /* --- 1. Module Parameter Information --- */
     ".section .sys_proc_prx_param,\"a\"\n"
     ".align 3\n"
     ".long 0x00000028\n"
@@ -56,7 +64,32 @@ __asm__(
     ".long __libstubend\n"
     ".long 0x01010000\n"
     ".long 0x00000000\n"
-    ".previous\n");
+    ".previous\n"
+
+    /* --- 2. Module Entry Hook (_start) --- */
+    /* Registers the _start function to the kernel PRX loader */
+    ".section .lib.ent,\"a\"\n"
+    ".align 2\n"
+    ".long 0x01300000\n"     /* sys_prx_ent_info struct identifier (start) */
+    ".long 0x00000000\n"
+    ".long 0x00000000\n"
+    ".long 0x00000000\n"
+    ".long _start\n"         /* Explicit function pointer */
+    ".long 0x00000000\n"
+    ".previous\n"
+
+    /* --- 3. Module Exit Hook (_stop) --- */
+    /* Registers the _stop function to the kernel PRX loader */
+    ".section .lib.ent,\"a\"\n"
+    ".align 2\n"
+    ".long 0x01400000\n"     /* sys_prx_ent_info struct identifier (stop) */
+    ".long 0x00000000\n"
+    ".long 0x00000000\n"
+    ".long 0x00000000\n"
+    ".long _stop\n"          /* Explicit function pointer */
+    ".long 0x00000000\n"
+    ".previous\n"
+);
 
 /* ---------------------------------------------------------------
  * Global run flag -- set to 0 to signal background thread exit
@@ -80,7 +113,7 @@ static void boot_log_write(const char *msg)
     u64 written;
 
     if (sysFsOpen(LDTP_BOOT_LOG_PATH,
-                  SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
+                  SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND | 0666,
                   &fd, NULL, 0) == 0) {
         sysFsWrite(fd, msg, strlen(msg), &written);
         sysFsWrite(fd, "\n", 1, &written);
@@ -126,7 +159,7 @@ static void boot_log_write_fmt(const char *fmt, s64 v)
         int fd;
         u64 written;
         if (sysFsOpen(LDTP_BOOT_LOG_PATH,
-                      SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
+                      SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND | 0666,
                       &fd, NULL, 0) == 0) {
             buf[i] = '\n';
             i++;
@@ -137,25 +170,30 @@ static void boot_log_write_fmt(const char *fmt, s64 v)
 }
 
 /* ---------------------------------------------------------------
- * Enable gate -- one-shot consumable token
- *
- * If /dev_hdd0/plugins/ldtoypad.enable exists, we delete it and
- * return 1 (arm the plugin).  On the next boot the token is gone,
- * so the plugin stays dormant.  This makes the "failsafe" safe:
- * any crash or hang during development is fixed by a simple power
- * cycle -- no token, no thread.
+ * Enable gate -- strictly validated one-shot consumable token
  * --------------------------------------------------------------- */
 static int check_enable_flag(void)
 {
     sysFSStat stat;
+    int unlink_res;
 
     if (sysFsStat(LDTP_ENABLE_FLAG_PATH, &stat) != 0) {
         boot_log_write("[BOOT] ENABLE FLAG NOT FOUND -- dormant");
         return 0;  /* no token -- stay dormant, boot is safe */
     }
 
-    /* Consume the token -- delete it NOW so next boot is clean */
-    sysFsUnlink(LDTP_ENABLE_FLAG_PATH);
+    /* Strip restrictive attributes potentially set by FTP clients */
+    sysFsChmod(LDTP_ENABLE_FLAG_PATH, 0666);
+
+    /* Consume the token and capture the result */
+    unlink_res = sysFsUnlink(LDTP_ENABLE_FLAG_PATH);
+    
+    /* ENFORCEMENT: Never arm if the token survives */
+    if (unlink_res != 0) {
+        boot_log_write_fmt("[BOOT] FATAL: sysFsUnlink failed (error %d) -- aborting arm sequence", unlink_res);
+        return 0; /* FAILSAFE: Remain dormant to prevent infinite boot loops */
+    }
+
     boot_log_write("[BOOT] enable token consumed -- plugin armed");
     DEBUG_PRINT("[LDTP] enable token consumed -- plugin armed for this boot\n");
 

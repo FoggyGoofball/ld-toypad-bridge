@@ -4,6 +4,7 @@
 #include <net/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <lv2/sysfs.h>
 
 #include "debug.h"
 
@@ -202,6 +203,8 @@ static int debug_vformat(char* out, int cap, const char* fmt, va_list ap)
 static void debug_ring_write(const char* text, int len)
 {
     int i;
+    int fd;
+    uint64_t written;
 
     if (text == NULL || len <= 0) {
         return;
@@ -209,6 +212,14 @@ static void debug_ring_write(const char* text, int len)
 
     for (i = 0; i < len; i++) {
         g_debug.ring_buffer[g_debug.write_pos++ % DEBUG_RING_BUFFER_SIZE] = text[i];
+    }
+
+    /* INJECTED: Physical File I/O Restoration */
+    if (sysFsOpen("/dev_hdd0/plugins/ldtoypad_debug.log",
+                  SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND | 0666,
+                  &fd, NULL, 0) == 0) {
+        sysFsWrite(fd, text, (uint64_t)len, &written);
+        sysFsClose(fd);
     }
 }
 
