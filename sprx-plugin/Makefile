@@ -1,6 +1,8 @@
 # Makefile for LD-ToyPad Bridge .sprx plugin
 # Uses PSL1GHT SDK toolchain
-# Evilnat 4.93 CEX target (USB_HOOK_ENABLE_PATCH=1 for live patching)
+#
+# Architecture: CellOS background thread + Extra LDD registration.
+# No LV2 kernel patching required.
 
 .RECIPEPREFIX := >
 
@@ -22,36 +24,19 @@ BUILDDIR := $(CURDIR)/build
 OBJDIR   := $(CURDIR)/obj
 
 # ---------------------------------------------------------------
-# Live patch configuration — Evilnat 4.93 CEX
+# Source files — NOTE: usb_hooks.c removed (LV2 patching retired).
+# ldd_driver.c added (native Extra LDD registration).
 # ---------------------------------------------------------------
-USB_HOOK_ENABLE_PATCH      ?= 1      # 1 = LV2 syscall-table patching active
-USB_HOOK_STRICT_PATCH      ?= 1      # Fail if any patch step fails
-USB_HOOK_SYSCALL_TABLE_BASE ?= 0x800000000000F300  # Evilnat 4.93 CEX syscall table
-USB_HOOK_LV2_READ_SC       ?= 8      # lv1_read_kernel
-USB_HOOK_LV2_WRITE_SC      ?= 9      # lv2_write_kernel
-
-# USB syscall IDs (stable across CEX firmwares)
-#   sys_usbd_open:               845
-#   sys_usbd_close:              846
-#   sys_usbd_get_descriptor:     847
-#   sys_usbd_control_transfer:   848
-#   sys_usbd_interrupt_transfer: 849
-# ---------------------------------------------------------------
-
-C_SRCS := main.c usb_hooks.c network.c toypad_state.c debug.c compat.c
+C_SRCS := main.c ldd_driver.c network.c toypad_state.c debug.c compat.c
 C_OBJS := $(C_SRCS:%.c=$(OBJDIR)/%.o)
 
-# Reduced section-splitting avoids ELF PHDR overflow in this environment.
+# Reduced section-splitting avoids ELF PHDR overflow
 MACHDEP  := -mhard-float -fmodulo-sched
 
 INCLUDES := -I$(PSL1GHT)/ppu/include -I$(PSL1GHT)/ppu/include/simdmath
 
+# No LV2 patch flags — clean build with network-only + Extra LDD support
 CFLAGS := $(MACHDEP) -O2 -g -fno-pic -fno-stack-protector -fvisibility=hidden -D__SPRX__ \
-          -DUSB_HOOK_ENABLE_PATCH=$(USB_HOOK_ENABLE_PATCH) \
-          -DUSB_HOOK_STRICT_PATCH=$(USB_HOOK_STRICT_PATCH) \
-          -DUSB_HOOK_LV2_READ_SC=$(USB_HOOK_LV2_READ_SC) \
-          -DUSB_HOOK_LV2_WRITE_SC=$(USB_HOOK_LV2_WRITE_SC) \
-          -DUSB_HOOK_SYSCALL_TABLE_BASE=$(USB_HOOK_SYSCALL_TABLE_BASE) \
           $(INCLUDES)
 
 LDFLAGS := $(MACHDEP) -nostartfiles -nostdlib -nodefaultlibs \

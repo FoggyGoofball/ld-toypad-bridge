@@ -1,6 +1,10 @@
 /**
  * network.c
  * UDP transport for Toy Pad bridge traffic.
+ *
+ * Refactored: the startup recv spin (busy-wait loop) has been removed.
+ * Discovery now happens naturally via the background thread's
+ * periodic polling loop.
  */
 
 #include <string.h>
@@ -66,8 +70,7 @@ int network_init(uint16_t port)
         return -1;
     }
 
-    // Keep broadcast probing path enabled. Some toolchain variants do not
-    // export setsockopt wrappers, so avoid hard dependency here.
+    /* Keep broadcast probing path enabled */
     g_net.broadcast_enabled = 1;
 
     memset(&g_net.server, 0, sizeof(g_net.server));
@@ -88,55 +91,21 @@ int network_init(uint16_t port)
 
     DEBUG_PRINT("[NET] UDP ready on port %u\n", (unsigned)port);
 
-    // Send immediate startup beacon so the server can detect us
-    // without waiting for USB interrupt polling.
-    // Note: broadcast send may be silently dropped if the toolchain
-    // does not support SO_BROADCAST — that's OK, the server's periodic
-    // broadcast will reach us instead.
+    /* Send immediate startup beacon so the server can detect us */
     {
         uint8_t beacon[NET_PACKET_HEADER_SIZE];
         memset(beacon, 0, sizeof(beacon));
         beacon[0] = NET_PACKET_TYPE_POLL;
-        beacon[1] = 1;  // center zone
+        beacon[1] = 1;  /* center zone */
         beacon[2] = 0;
         (void)sysNetSendto(g_net.socket_fd, beacon, (size_t)sizeof(beacon), 0,
                            (const struct sockaddr*)&g_net.discovery_target,
                            (socklen_t)sizeof(g_net.discovery_target));
     }
 
-    // --- Startup recv spin: try to catch the server's broadcast beacon ---
-    // Without this, the PS3 won't discover the server until the game polls
-    // USB interrupts.  We spin for ~3 seconds checking if the server's
-    // periodic broadcast has already arrived on our receive buffer.
-    {
-        const int MAX_SPIN_ITERATIONS = 30;
-        int iter;
-
-        for (iter = 0; iter < MAX_SPIN_ITERATIONS && !g_net.server_known; iter++) {
-            // Busy-wait ~100ms approximated by a simple counter loop
-            // (sysTimerUsleep is not available without libc linkage).
-            {
-                volatile int delay;
-                for (delay = 0; delay < 2000000; delay++) {
-                    /* spin */
-                }
-            }
-
-            // network_recv() uses MSG_DONTWAIT, returns immediately
-            // if no data.  If data IS available, it captures the server
-            // address and sets g_net.server_known = 1 automatically.
-            {
-                uint8_t buf[NET_PACKET_MAX_SIZE];
-                (void)network_recv(buf, (int)sizeof(buf));
-            }
-        }
-
-        if (g_net.server_known) {
-            DEBUG_PRINT("[NET] Server discovered during startup poll\n");
-        } else {
-            DEBUG_PRINT("[NET] Startup poll completed without server\n");
-        }
-    }
+    /* NOTE: The old startup recv spin (busy-wait loop) has been REMOVED.
+     * Server discovery now happens naturally via the background thread's
+     * periodic network_recv() calls in the main loop. */
 
     return 0;
 }
@@ -235,7 +204,7 @@ void network_maybe_probe_server(uint8_t sequence)
 
     memset(packet, 0, sizeof(packet));
     packet[0] = NET_PACKET_TYPE_POLL;
-    packet[1] = 1;
+    packet[1] = 1;  /* center zone */
     packet[2] = sequence;
 
     if (sysNetSendto(g_net.socket_fd, packet, (size_t)sizeof(packet), 0,
