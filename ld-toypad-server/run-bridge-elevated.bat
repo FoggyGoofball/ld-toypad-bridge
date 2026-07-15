@@ -49,8 +49,24 @@ if exist "%PS3_CACHE_FILE%" (
   set /p CACHED_IP=<"%PS3_CACHE_FILE%"
 )
 
-:: [4/7] Start server in background
-echo [4/7] Starting bridge server in background...
+:: [4/7] Upload one-shot enable token to PS3
+echo [4/7] Uploading one-shot enable token to PS3...
+if not defined CACHED_IP (
+  echo  No cached PS3 IP. Skipping token upload.
+  echo  To arm the plugin later, run: .\deploy-enable.ps1 -PS3IP 192.168.0.xx
+) else (
+  powershell -NoProfile -Command ^
+    "$f=[System.IO.Path]::GetTempFileName();" ^
+    "[System.IO.File]::WriteAllText($f,'enabled');" ^
+    "$wc=New-Object System.Net.WebClient;" ^
+    "$wc.Credentials=New-Object System.Net.NetworkCredential('mike','mike');" ^
+    "try{$wc.UploadFile('ftp://!CACHED_IP!/dev_hdd0/plugins/ldtoypad.enable',$f);" ^
+    "Write-Host '  Token uploaded successfully'}catch{Write-Host '  FAILED to upload token. PS3 FTP may be down.'};" ^
+    "Remove-Item $f -Force"
+)
+
+:: [5/7] Start server in background
+echo [5/7] Starting bridge server in background...
 set "LOG_FILE=%TEMP%\ldtoypad-server.log"
 if exist "%LOG_FILE%" del /q "%LOG_FILE%" >nul 2>nul
 if defined CACHED_IP (
@@ -62,8 +78,8 @@ if defined CACHED_IP (
 echo Waiting for server to start...
 %TIMEOUT% /t 2 /nobreak >nul
 
-:: [5/7] Wait for PS3 client (up to 10s with cached IP, 60s without)
-echo [5/7] Waiting for PS3 to connect...
+:: [6/7] Wait for PS3 client (up to 10s with cached IP, 60s without)
+echo [6/7] Waiting for PS3 to connect...
 if defined CACHED_IP (
   set /a "TIMEOUT_SEC=10"
 ) else (
@@ -76,13 +92,11 @@ set /a "ATTEMPT=0"
 :wait_loop
 if !ATTEMPT! geq !MAX_ATTEMPTS! (
   echo  ^|  Timeout. PS3 not detected within !ELAPSED!s.
-  echo  ^|  Check: PS3 on? Firewall open? Enable flag /dev_hdd0/plugins/ldtoypad.enable present?
   goto :after_wait
 )
 set /a "ATTEMPT=ATTEMPT+1"
 set /a "ELAPSED=ATTEMPT*POLL_INTERVAL"
 
-:: Query API for client.address. Use [Console]::Write so no output = empty for /f captures nothing.
 for /f "usebackq delims=" %%J in (`powershell -NoProfile -Command "try{$r=Invoke-WebRequest -Uri '%API_URL%' -UseBasicParsing -TimeoutSec 3 -ErrorAction Stop;$j=$r.Content|ConvertFrom-Json;if($j.client.address){[Console]::Write($j.client.address.Trim())}}catch{}"`) do (
   set "PS3_IP=%%J"
 )
@@ -100,8 +114,8 @@ goto :wait_loop
 :after_wait
 echo.
 
-:: [6/7] Move server to foreground
-echo [6/7] Moving server to foreground...
+:: [7/7] Move server to foreground
+echo [7/7] Moving server to foreground...
 for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "$ports=%UDP_PORT%,%DEBUG_PORT%;$ids=Get-NetUDPEndpoint|Where-Object{$ports-contains$_.LocalPort}|Select-Object -ExpandProperty OwningProcess -Unique;$ids|ForEach-Object{$_}"`) do (
   taskkill /PID %%P /F >nul 2>&1
 )
@@ -112,7 +126,12 @@ start "LD-ToyPad Bridge" cmd /k "cd /d ""%~dp0"" && echo *** LD-ToyPad Bridge **
 echo.
 echo  Browser UI: %SERVER_URL%
 echo  PS3 cache:  %PS3_CACHE_FILE%
-echo  Enable token is permanent — no reboot needed to re-arm.
+echo.
+echo  The one-shot enable token was uploaded to PS3.
+if not defined PS3_IP (
+  echo  NEXT STEP: **Restart (reboot) your PS3 now.**
+  echo  The plugin will fire once, consume the token, and appear here.
+)
 echo.
 endlocal
 exit /b 0

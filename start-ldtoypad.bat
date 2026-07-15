@@ -23,7 +23,7 @@ if not exist "%SERVER_DIR%\node_modules" (
   exit /b 1
 )
 
-:: Read cached PS3 IP (if any) for directed probes
+:: Read cached PS3 IP (if any)
 set "CACHED_IP="
 if exist "%PS3_CACHE_FILE%" (
   set /p CACHED_IP=<"%PS3_CACHE_FILE%"
@@ -32,14 +32,31 @@ if exist "%PS3_CACHE_FILE%" (
 echo ============================================================
 echo  LD-ToyPad Bridge Launcher (Quick Start)
 echo ============================================================
+echo.
 
-:: [1/3] Kill any old bridge processes (match by console title)
-echo [1/3] Stopping old bridge processes...
+:: [1/4] Kill any old bridge processes
+echo [1/4] Stopping old bridge processes...
 taskkill /F /FI "WindowTitle eq ldtoypad-bridge*" /T >nul 2>&1
 ping -n 2 127.0.0.1 >nul
 
-:: [2/3] Start bridge server in background with timestamped log
-echo [2/3] Starting bridge server in background...
+:: [2/4] Upload one-shot enable token to PS3
+echo [2/4] Uploading enable token to PS3...
+if not defined CACHED_IP (
+  echo  No cached PS3 IP. Skipping token upload.
+  echo  To arm the plugin, run: deploy-enable.ps1 -PS3IP 192.168.0.xx
+) else (
+  powershell -NoProfile -Command ^
+    "$f=[System.IO.Path]::GetTempFileName();" ^
+    "[System.IO.File]::WriteAllText($f,'enabled');" ^
+    "$wc=New-Object System.Net.WebClient;" ^
+    "$wc.Credentials=New-Object System.Net.NetworkCredential('mike','mike');" ^
+    "try{$wc.UploadFile('ftp://!CACHED_IP!/dev_hdd0/plugins/ldtoypad.enable',$f);" ^
+    "Write-Host '  Token uploaded — one-shot, consumed on reboot'}catch{Write-Host '  FAILED to upload token. PS3 FTP may be down.'};" ^
+    "Remove-Item $f -Force"
+)
+
+:: [3/4] Start bridge server in background with timestamped log
+echo [3/4] Starting bridge server in background...
 cd /d "%SERVER_DIR%"
 
 set "NOW=%DATE:/=-%_%TIME::=-%"
@@ -56,8 +73,8 @@ if defined CACHED_IP (
 echo Waiting for server to start...
 ping -n 3 127.0.0.1 >nul
 
-:: [3/3] Wait for PS3 client
-echo [3/3] Waiting for PS3 to connect...
+:: [4/4] Wait for PS3 client
+echo [4/4] Waiting for PS3 to connect...
 if defined CACHED_IP (
   set /a "MAX_SEC=10"
 ) else (
@@ -97,15 +114,21 @@ if defined PS3_IP (
   echo PS3 IP cached to %PS3_CACHE_FILE%
 ) else if defined CACHED_IP (
   echo PS3 not responding at !CACHED_IP!.
-  echo  Check:
+  echo  The enable token has been uploaded.
+  echo.
+  echo  NEXT STEP: **Restart (reboot) your PS3 now.**
+  echo  The plugin will fire once, consume the token, and connect.
+  echo.
+  echo  If it still doesn't appear after reboot, check:
   echo   1. PS3 is turned ON
   echo   2. Firewall allows UDP !UDP_PORT! and !DEBUG_PORT!
-  echo   3. Enable flag exists: /dev_hdd0/plugins/ldtoypad.enable
-  echo   4. LDToyPad plugin is loaded (shown in Rebug Toolbox ^> Plugins)
-  echo  NOTE: Game does NOT need to be running. Plugin sends beacon at startup.
+  echo   3. Plugin is registered in boot_plugins.txt
 ) else (
   echo PS3 not detected yet.
-  echo If the PS3 is on with plugin loaded, it will appear here.
+  echo.
+  echo  NEXT STEP: Upload enable token and restart PS3:
+  echo   .\deploy-enable.ps1 -PS3IP 192.168.0.xx
+  echo   (then restart PS3)
 )
 
 :: Open browser UI
