@@ -1,6 +1,42 @@
-# LD-ToyPad Bridge Handoff Changelog (2026-07-15, Session 6-9)
+# LD-ToyPad Bridge Handoff Changelog (2026-07-15, Sessions 6-10)
 
-## Resume Marker: PRX Header Assembly & Kernel Load Remediation
+## Resume Marker: Regressions Fixed & Relocation-Free PRX Header
+
+## Session 10: Structural Audit (The Regression Sweep)
+
+### Three bugs confirmed and fixed:
+
+**Bug 1: `| 0666` flag corruption (the log killer)**
+- `sysFsOpen` does NOT take a permission argument — `0666` bitwise-ORed into `oflags` set `accmode=3` (invalid), causing `CELL_FS_EINVAL`. No files were ever created.
+- **Fix**: Removed `| 0666` from all 3 `sysFsOpen` calls in `main.c` ×2 and `debug.c` ×1.
+
+**Bug 2: `ftp-deploy.ps1` chain killer**
+- When plugin wasn't registered, script overwrote `boot_plugins.txt` with ONLY `webftp_server.sprx` + `ldtoypad.sprx`, silently deleting all other user plugins.
+- **Fix**: Changed to `TrimEnd` + append to preserve existing content.
+
+**Bug 3: C struct initializers produced R_PPC64_ADDR32 relocations (link failure)**
+- C struct initializers using `(uint32_t)(uintptr_t)&__libentstart` require dynamic relocations that GCC can't resolve at compile time for PRX sections.
+- **Fix**: Replaced with relocation-free `.section` assembly block that injects `__libentstart` as a raw symbol reference. Added `.rodata.sceModuleInfo` metadata block (52 bytes) for Cobra validation — previously missing entirely.
+- **Entry points renamed** `_start`/`_stop` → `ldtoypad_start`/`ldtoypad_stop` to avoid any conflict with `lv2-sprx.o`.
+
+### Build: 0 errors, 12,784 bytes
+| Session | Change | Size |
+|---------|--------|------|
+| 9 | asm `.lib.ent` stubs | 12,752 B |
+| 10 | Fix 3 regressions + `sceModuleInfo` + renamed entry | **12,784 B** |
+
+### Verification
+| Check | Result |
+|-------|--------|
+| `| 0666` removed from all `sysFsOpen` | ✅ |
+| `ftp-deploy.ps1` appends not overwrites | ✅ |
+| `.rodata.sceModuleInfo` present in ELF | ✅ |
+| `.lib.ent` references `ldtoypad_start`/`ldtoypad_stop` | ✅ |
+| `__attribute__((visibility("default")))` on entry/exit | ✅ |
+| Build (0 errors) | ✅ 12,784 bytes |
+| Deployed + Pushed (`main@09985f4`) | ✅ |
+| **Hard-reboot test** | ⏳ Pending |
+
 
 ### Diagnostic Summary
 The persistent symptom triad — **no boot log, no debug log, untouched failsafe token** — proved that `_start()` was never called. The PS3 kernel was rejecting the plugin during initial parsing, long before any C code executed.
