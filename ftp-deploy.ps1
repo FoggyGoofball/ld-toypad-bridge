@@ -52,10 +52,23 @@ try {
     }
 
     if ($needsLine) {
-        $newContent = ($content + "`n" + $REMOTE_PLUGIN_PATH).TrimStart() + "`n"
+        # Write strict LF-only content — CRLF can confuse Cobra's parser
+        $newContent = "/dev_hdd0/plugins/webftp_server.sprx`n" + $REMOTE_PLUGIN_PATH + "`n"
+        # Strip any stray carriage returns that could corrupt Cobra's parser
+        $newContent = $newContent -replace "`r", ""
         [System.IO.File]::WriteAllText($localTemp, $newContent, [System.Text.Encoding]::ASCII)
         $wc.UploadFile($bootPluginsUri, $localTemp)
-        Write-Host "  boot_plugins.txt updated with ${REMOTE_PLUGIN_PATH}"
+        Write-Host "  boot_plugins.txt rewritten with LF-only lines"
+    } else {
+        # Even if the line exists, CRLF may have snuck in — rewrite with LF-only
+        Write-Host "  Re-writing boot_plugins.txt with LF-only line endings..."
+        $lines = $content -split '\r?\n' | Where-Object { $_.Trim() -ne '' }
+        $newContent = ($lines -join "`n") + "`n"
+        # Strip any stray carriage returns that could corrupt Cobra's parser
+        $newContent = $newContent -replace "`r", ""
+        [System.IO.File]::WriteAllText($localTemp, $newContent, [System.Text.Encoding]::ASCII)
+        $wc.UploadFile($bootPluginsUri, $localTemp)
+        Write-Host "  boot_plugins.txt normalized to LF-only"
     }
 
     Remove-Item $localTemp -Force

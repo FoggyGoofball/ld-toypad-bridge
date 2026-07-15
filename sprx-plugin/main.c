@@ -30,30 +30,18 @@
 #include "toypad_state.h"
 #include "debug.h"
 
+/* _start/_stop are tagged with __attribute__((visibility("default")))
+ * to override -fvisibility=hidden in the Makefile. */
+
 #define CONFIG_UDP_PORT          28472
 #define CONFIG_MAIN_THREAD_PRIO  3072  /* ~= -0x400 in signed, low prio */
 #define CONFIG_MAIN_THREAD_STACK 0x2000 /* 8 KB stack                  */
 #define CONFIG_LOOP_SLEEP_USEC   10000  /* 10 ms between iterations    */
 
 #define LDTP_ENABLE_FLAG_PATH "/dev_hdd0/plugins/ldtoypad.enable"
-#define LDTP_BOOT_LOG_PATH    "/dev_hdd0/ldtoypad_boot.log"
+#define LDTP_BOOT_LOG_PATH    "/dev_hdd0/plugins/ldtoypad_boot.log"
 
 SYS_PROCESS_PARAM_FIXED(1001, 0x4000)
-
-__asm__(
-    ".section .sys_proc_prx_param,\"a\"\n"
-    ".align 3\n"
-    ".long 0x00000028\n"
-    ".long 0x1B434CEC\n"
-    ".long 0x00000002\n"
-    ".long 0x00000000\n"
-    ".long __libentstart\n"
-    ".long __libentend\n"
-    ".long __libstubstart\n"
-    ".long __libstubend\n"
-    ".long 0x01010000\n"
-    ".long 0x00000000\n"
-    ".previous\n");
 
 /* ---------------------------------------------------------------
  * Global run flag -- set to 0 to signal background thread exit
@@ -257,7 +245,7 @@ static void toypad_background_thread(void *arg)
  * MUST return quickly!  We spawn a background thread so the
  * bootloader is never blocked.
  * --------------------------------------------------------------- */
-int _start(u64 args)
+__attribute__((visibility("default"))) int _start(u64 args)
 {
     int ret;
 
@@ -305,7 +293,7 @@ int _start(u64 args)
  *
  * Signals the background thread to exit and waits for it to join.
  * --------------------------------------------------------------- */
-int _stop(void)
+__attribute__((visibility("default"))) int _stop(void)
 {
     u64 retval = 0;
 
