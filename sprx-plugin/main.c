@@ -3,7 +3,7 @@
  * LD-ToyPad Bridge SPRX plugin -- CellOS background thread entry point.
  *
  * Architecture (refactored):
- *   _start() is minimal -- spawns a background thread and returns
+ *   ldtoypad_start() is minimal -- spawns a background thread and returns
  *   SYS_PRX_START_OK immediately. This guarantees the bootloader is
  *   never blocked by network I/O or USB setup.
  *
@@ -12,7 +12,7 @@
  *
  * Diagnostics:
  *   A boot log is written to /dev_hdd0/plugins/ldtoypad_boot.log via raw
- *   sysFs calls.  This works at the very first line of _start(),
+ *   sysFs calls.  This works at the very first line of ldtoypad_start(),
  *   before any subsystem init, and survives crashes.  Retrieve it
  *   after boot via FTP.
  */
@@ -31,23 +31,75 @@
 #include "debug.h"
 
 /* ------------------------------------------------------------------------
- * PRX MODULE INITIALIZATION
+ * PRX MODULE HEADER & EXPORT TABLE (ABI-CORRECTED 64-bit Assembly)
  *
- * SYS_PROCESS_PARAM_FIXED generates the .sys_proc_param and
- * .sys_proc_prx_param sections that Cobra's VSH loader requires.
- * This macro integrates with lv2-sprx.o (linked via the Makefile)
- * to produce valid .lib.ent / .lib.stub tables WITHOUT manual
- * assembly, avoiding the 64-bit PowerPC function descriptor
- * truncation bug that plagued the hand-rolled approach.
+ * We cannot use SYS_PROCESS_PARAM_FIXED() because that macro injects
+ * the .sys_proc_param section which marks the binary as a standalone
+ * GameOS executable (EBOOT).  Cobra detects this marker and rejects
+ * the file as a container mismatch, preventing VSH injection.
  *
- * 1001 = SYS_PRX_TYPE (SPRX module)
- * 0x4000 = default stack size (16 KB)
+ * Instead, we manually supply .sys_proc_prx_param and
+ * .rodata.sceModuleInfo.  CRITICAL: we use .quad (8 bytes) instead of
+ * .long (4 bytes) for function descriptor references to preserve the
+ * full 64-bit PowerPC function descriptor triplets
+ * {code pointer, TOC pointer, environment pointer}.
+ *
+ * The lv2-sprx.o CRT object (linked via Makefile) provides the
+ * global _start and _stop routines that set up the TOC register (r2).
+ * Our C entry points are named ldtoypad_start / ldtoypad_stop to
+ * avoid colliding with the CRT's symbol table.
  * ------------------------------------------------------------------------ */
-SYS_PROCESS_PARAM_FIXED(1001, 0x4000)
+__asm__(
+    /* --- 1. Module Parameter Information --- */
+    ".section .sys_proc_prx_param,\"a\"\n"
+    ".align 3\n"
+    ".long 0x00000028\n"
+    ".long 0x1B434CEC\n"
+    ".long 0x00000002\n"
+    ".long 0x00000000\n"
+    ".long __libentstart\n"
+    ".long __libentend\n"
+    ".long __libstubstart\n"
+    ".long __libstubend\n"
+    ".long 0x01010000\n"
+    ".long 0x00000000\n"
+    ".previous\n"
 
-/* _start/_stop are tagged with __attribute__((visibility("default")))
- * to override -fvisibility=hidden in the Makefile.
- * These are the module entry/exit points called by the PRX loader. */
+    /* --- 2. Module Metadata (CRITICAL FOR COBRA VALIDATION) --- */
+    ".section .rodata.sceModuleInfo,\"a\"\n"
+    ".align 2\n"
+    ".short 0x0000\n"           /* Attributes */
+    ".byte 1\n"                 /* Minor Version */
+    ".byte 1\n"                 /* Major Version */
+    ".ascii \"ldtoypad\"\n"     /* Module Name (8 bytes) */
+    ".space 20\n"               /* Null padding to enforce 28-byte limit */
+    ".long 0x00000000\n"        /* TOC pointer */
+    ".long __libentstart\n"
+    ".long __libentend\n"
+    ".long __libstubstart\n"
+    ".long __libstubend\n"
+    ".previous\n"
+
+    /* --- 3. Module Entry Hook (ABI Corrected to .quad) --- */
+    ".section .lib.ent,\"a\"\n"
+    ".align 2\n"
+    ".long 0x01300000\n"        /* sys_prx_ent_info struct identifier (start) */
+    ".long 0x00000000\n"
+    ".long 0x00000000\n"
+    ".long 0x00000000\n"
+    ".quad ldtoypad_start\n"    /* 64-bit PowerPC Function Descriptor */
+    ".previous\n"
+
+    /* --- 4. Module Exit Hook (ABI Corrected to .quad) --- */
+    ".section .lib.ent,\"a\"\n"
+    ".align 2\n"
+    ".long 0x01400000\n"        /* sys_prx_ent_info struct identifier (stop) */
+    ".long 0x00000000\n"
+    ".long 0x00000000\n"
+    ".long 0x00000000\n"
+    ".quad ldtoypad_stop\n"     /* 64-bit PowerPC Function Descriptor */
+    ".previous\n"
+);
 
 #define CONFIG_UDP_PORT          28472
 #define CONFIG_MAIN_THREAD_PRIO  3072  /* ~= -0x400 in signed, low prio */
@@ -263,18 +315,22 @@ static void toypad_background_thread(void *arg)
 }
 
 /* ---------------------------------------------------------------
- * _start -- called by the kernel when loading the PRX
+ * ldtoypad_start -- called by the kernel when loading the PRX
+ *
+ * The authoritative lv2-sprx.o CRT provides _start which sets up
+ * the TOC pointer (r2).  Our C entry point is renamed to avoid
+ * colliding with the CRT's symbol table.
  *
  * MUST return quickly!  We spawn a background thread so the
  * bootloader is never blocked.
  * --------------------------------------------------------------- */
-__attribute__((visibility("default"))) int _start(u64 args)
+__attribute__((visibility("default"))) int ldtoypad_start(u64 args)
 {
     int ret;
 
     (void)args;
 
-    boot_log_write("[BOOT] _start() called");
+    boot_log_write("[BOOT] ldtoypad_start() called");
 
     /* Gate: only activate when the enable flag is present */
     if (!check_enable_flag()) {
@@ -312,11 +368,15 @@ __attribute__((visibility("default"))) int _start(u64 args)
 }
 
 /* ---------------------------------------------------------------
- * _stop -- called by the kernel when unloading the PRX
+ * ldtoypad_stop -- called by the kernel when unloading the PRX
+ *
+ * The authoritative lv2-sprx.o CRT provides _stop.  Our C exit
+ * function is renamed to avoid colliding with the CRT's symbol
+ * table.
  *
  * Signals the background thread to exit and waits for it to join.
  * --------------------------------------------------------------- */
-__attribute__((visibility("default"))) int _stop(void)
+__attribute__((visibility("default"))) int ldtoypad_stop(void)
 {
     u64 retval = 0;
 
@@ -324,7 +384,7 @@ __attribute__((visibility("default"))) int _stop(void)
         return SYS_PRX_STOP_OK;
     }
 
-    boot_log_write("[BOOT] _stop() called -- shutting down");
+    boot_log_write("[BOOT] ldtoypad_stop() called -- shutting down");
     DEBUG_PRINT("[LDTP] stopping...\n");
     g_running = 0;
 
@@ -333,7 +393,7 @@ __attribute__((visibility("default"))) int _stop(void)
         g_thread_id = 0;
     }
 
-    boot_log_write("[BOOT] _stop() complete");
+    boot_log_write("[BOOT] ldtoypad_stop() complete");
     DEBUG_PRINT("[LDTP] stopped\n");
     return SYS_PRX_STOP_OK;
 }
