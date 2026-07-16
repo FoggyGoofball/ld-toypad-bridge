@@ -21,3 +21,9 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Orphaned backup
+/c
+
+# Temporary build scripts
+sprx-plugin/write_crt0.py
