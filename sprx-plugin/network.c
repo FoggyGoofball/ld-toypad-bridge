@@ -26,7 +26,7 @@
 #define LDTP_DISCOVERY_INTERVAL_USEC 250000ULL
 #endif
 
-static struct {
+struct net_state {
     int socket_fd;
     int initialized;
     int server_known;
@@ -35,14 +35,8 @@ static struct {
     u64 last_probe_usec;
     struct sockaddr_in server;
     struct sockaddr_in discovery_target;
-} g_net = {
-    .socket_fd = -1,
-    .initialized = 0,
-    .server_known = 0,
-    .broadcast_enabled = 0,
-    .port = 0,
-    .last_probe_usec = 0,
 };
+struct net_state g_net;
 
 int network_init(uint16_t port)
 {

@@ -41,6 +41,14 @@ typedef struct {
     int         raw_in_len;      /**< Length of last IN data                    */
 } ldd_device_t;
 
+/* LDD global state -- CRT bypass accessible from main.c */
+struct ldd_global_state {
+    int            registered;
+    int            registration_handle;
+    ldd_device_t   device;
+};
+extern struct ldd_global_state g_ldd;
+
 /**
  * Initialize the Extra LDD subsystem.
  *

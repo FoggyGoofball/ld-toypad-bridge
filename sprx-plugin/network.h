@@ -14,6 +14,19 @@
 
 #include <ppu-types.h>
 
+/* Network global state -- CRT bypass accessible from main.c */
+struct net_state {
+    int socket_fd;
+    int initialized;
+    int server_known;
+    int broadcast_enabled;
+    uint16_t port;
+    u64 last_probe_usec;
+    struct sockaddr_in server;
+    struct sockaddr_in discovery_target;
+};
+extern struct net_state g_net;
+
 // Packet types sent from PS3 -> PC
 #define NET_PACKET_TYPE_POLL       0x01  // USB interrupt poll request
 #define NET_PACKET_TYPE_READ_TAG   0x02  // Read tag data from a zone

@@ -20,6 +20,17 @@
 
 #include <ppu-types.h>
 
+/* Debug global state -- CRT bypass accessible from main.c */
+struct debug_state {
+    char ring_buffer[65536];
+    uint32_t write_pos;
+    int socket_fd;
+    int remote_enabled;
+    struct sockaddr_in remote_addr;
+    int initialized;
+};
+extern struct debug_state g_debug;
+
 // =========================================
 // Debug level configuration
 // =========================================

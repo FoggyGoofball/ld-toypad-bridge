@@ -32,6 +32,16 @@
 #define TOYPAD_ZONE_RIGHT   2
 #define TOYPAD_NUM_ZONES    3
 
+// Toy Pad state structure
+typedef struct {
+    uint32_t device_id;
+    int active;
+    int zones[TOYPAD_NUM_ZONES];
+    uint32_t network_seq;
+} toypad_state_t;
+
+extern toypad_state_t g_toypad;
+
 // Tag states
 #define TAG_STATE_EMPTY     0x00
 #define TAG_STATE_PLACED    0x01

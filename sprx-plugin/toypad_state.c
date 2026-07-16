@@ -151,14 +151,7 @@ static const uint8_t g_string_descriptor_2[] = {
 // Toy Pad State
 // =========================================
 
-typedef struct {
-    uint32_t device_id;
-    int active;
-    int zones[TOYPAD_NUM_ZONES];  // Current tag state per zone
-    uint32_t network_seq;         // Sequence counter for network packets
-} toypad_state_t;
-
-static toypad_state_t g_toypad = {0};
+toypad_state_t g_toypad;
 
 // =========================================
 // Implementation

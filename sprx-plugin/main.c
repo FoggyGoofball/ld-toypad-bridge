@@ -28,6 +28,7 @@
 #include <sys/prx.h>
 #include <sys/systime.h>
 #include <sys/thread.h>
+#include <sys/sysmodule.h>
 #include <lv2/sysfs.h>
 #include <string.h>
 
@@ -77,19 +78,16 @@ static sys_ppu_thread_t g_thread_id = 0;
  *
  * Works at any point in module_start(), before any subsystem init.
  * Survives crashes. Retrieve via FTP after boot.
- *
- * NOTE: sysFsOpen does NOT take a mode/permission argument.
- * Passing | 0666 corrupts the oflags (sets accmode=3, which is
- * invalid).  We use clean flags only.
  * --------------------------------------------------------------- */
 static void boot_log_write(const char *msg)
 {
     int fd;
     u64 written;
+    CellFsMode log_mode = 0666;
 
     if (sysFsOpen(LDTP_BOOT_LOG_PATH,
                   SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
-                  &fd, NULL, 0) == 0) {
+                  &fd, &log_mode, sizeof(CellFsMode)) == 0) {
         sysFsWrite(fd, msg, strlen(msg), &written);
         sysFsWrite(fd, "\n", 1, &written);
         sysFsClose(fd);
@@ -133,9 +131,10 @@ static void boot_log_write_fmt(const char *fmt, s64 v)
     if (i > 0) {
         int fd;
         u64 written;
+        CellFsMode log_mode = 0666;
         if (sysFsOpen(LDTP_BOOT_LOG_PATH,
                       SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
-                      &fd, NULL, 0) == 0) {
+                      &fd, &log_mode, sizeof(CellFsMode)) == 0) {
             buf[i] = '\n';
             i++;
             sysFsWrite(fd, buf, i, &written);
@@ -144,35 +143,77 @@ static void boot_log_write_fmt(const char *fmt, s64 v)
     }
 }
 
+/* Deferred unlink error buffer -- flushed to log after file descriptor
+ * is successfully opened (Phase 1.1). */
+static char g_unlink_error_buf[128] = "";
+
 /* ---------------------------------------------------------------
  * Enable gate -- strictly validated one-shot consumable token
  * --------------------------------------------------------------- */
 static int check_enable_flag(void)
 {
     sysFSStat stat;
+    int should_run = 0;
     int unlink_res;
 
-    if (sysFsStat(LDTP_ENABLE_FLAG_PATH, &stat) != 0) {
+    /* Isolate token presence evaluation */
+    if (sysFsStat(LDTP_ENABLE_FLAG_PATH, &stat) == 0) {
+        should_run = 1;
+    } else {
         boot_log_write("[BOOT] ENABLE FLAG NOT FOUND -- dormant");
-        return 0;  /* no token -- stay dormant, boot is safe */
+        return 0;
     }
 
     /* Strip restrictive attributes potentially set by FTP clients */
     sysFsChmod(LDTP_ENABLE_FLAG_PATH, 0666);
 
-    /* Consume the token and capture the result */
+    /* Consume the token -- independent block, only if should_run */
     unlink_res = sysFsUnlink(LDTP_ENABLE_FLAG_PATH);
-    
-    /* ENFORCEMENT: Never arm if the token survives */
+
+    /* Deport error handling to buffer; do NOT reset should_run.
+     * Flushed to log file after fd is successfully opened. */
     if (unlink_res != 0) {
-        boot_log_write_fmt("[BOOT] FATAL: sysFsUnlink failed (error %d) -- aborting arm sequence", unlink_res);
-        return 0; /* FAILSAFE: Remain dormant to prevent infinite boot loops */
+        /* Format error into deferred buffer */
+        {
+            char num[32];
+            int i = 0, j = 0;
+            s64 n = (s64)unlink_res;
+            const char *prefix = "[BOOT] sysFsUnlink failed (error ";
+
+            while (*prefix && i < (int)sizeof(g_unlink_error_buf) - 2)
+                g_unlink_error_buf[i++] = *prefix++;
+
+            if (n < 0) {
+                if (i < (int)sizeof(g_unlink_error_buf) - 2)
+                    g_unlink_error_buf[i++] = '-';
+                n = -n;
+            }
+            if (n == 0) {
+                if (i < (int)sizeof(g_unlink_error_buf) - 2)
+                    g_unlink_error_buf[i++] = '0';
+            } else {
+                while (n > 0 && j < (int)sizeof(num) - 1) {
+                    num[j++] = '0' + (n % 10);
+                    n /= 10;
+                }
+                while (j > 0 && i < (int)sizeof(num) - 1) {
+                    j--;
+                    g_unlink_error_buf[i++] = num[j];
+                }
+            }
+
+            const char *suffix = ") -- continuing init";
+            while (*suffix && i < (int)sizeof(g_unlink_error_buf) - 2)
+                g_unlink_error_buf[i++] = *suffix++;
+
+            g_unlink_error_buf[i] = '\0';
+        }
+    } else {
+        boot_log_write("[BOOT] enable token consumed -- plugin armed");
+        DEBUG_PRINT("[LDTP] enable token consumed -- plugin armed for this boot\n");
     }
 
-    boot_log_write("[BOOT] enable token consumed -- plugin armed");
-    DEBUG_PRINT("[LDTP] enable token consumed -- plugin armed for this boot\n");
-
-    return 1;
+    return should_run;
 }
 
 /* ---------------------------------------------------------------
@@ -182,8 +223,41 @@ static void toypad_background_thread(void *arg)
 {
     uint8_t seq = 0;
     uint8_t udp_buf[NET_PACKET_MAX_SIZE];
+    int usbd_ret;
 
     (void)arg;
+
+    /* ---- CRT bypass: explicitly zero global structures ---- */
+    memset((void*)&g_debug, 0, sizeof(g_debug));
+    memset((void*)&g_net, 0, sizeof(g_net));
+    memset((void*)&g_ldd, 0, sizeof(g_ldd));
+    memset((void*)&g_toypad, 0, sizeof(g_toypad));
+
+    /* ---- Task 2.2: Startup stabilization delay ---- */
+    sys_ppu_thread_usleep(7000000); /* Strict 7-second hardware stabilization delay */
+
+    /* ---- Task 2.3: USBD sysmodule dependency resolution ---- */
+    usbd_ret = cellSysmoduleLoadModule(CELL_SYSMODULE_USBD);
+    if (usbd_ret != CELL_OK && usbd_ret != CELL_SYSMODULE_ERROR_ALREADY_LOADED) {
+        boot_log_write("[BOOT] USBD sysmodule load FAILED -- thread exiting");
+        sys_ppu_thread_exit(0);
+        return; /* unreachable, but present for structural clarity */
+    }
+
+    /* Flush deferred unlink error buffer to log */
+    if (g_unlink_error_buf[0] != '\0') {
+        int fd;
+        u64 written;
+        CellFsMode log_mode = 0666;
+        if (sysFsOpen(LDTP_BOOT_LOG_PATH,
+                      SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
+                      &fd, &log_mode, sizeof(CellFsMode)) == 0) {
+            sysFsWrite(fd, g_unlink_error_buf, strlen(g_unlink_error_buf), &written);
+            sysFsWrite(fd, "\n", 1, &written);
+            sysFsClose(fd);
+        }
+        g_unlink_error_buf[0] = '\0';
+    }
 
     boot_log_write("[BOOT] background thread started");
     DEBUG_PRINT("[LDTP] background thread started (prio=%d)\n",
@@ -316,8 +390,8 @@ __attribute__((visibility("default"))) int module_start(u64 args)
 
     boot_log_write("[BOOT] sysThreadCreate OK -- thread spawned");
 
-    /* Return immediately -- bootloader continues */
-    return SYS_PRX_START_OK;
+    /* Return SYS_PRX_RESIDENT -- PRX stays loaded */
+    return SYS_PRX_RESIDENT;
 }
 
 /* ---------------------------------------------------------------

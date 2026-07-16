@@ -11,14 +11,15 @@
 #define DEBUG_RING_BUFFER_SIZE  (64 * 1024)
 #define DEBUG_MAX_LINE_LENGTH   256
 
-static struct {
+struct debug_state {
     char ring_buffer[DEBUG_RING_BUFFER_SIZE];
     uint32_t write_pos;
     int socket_fd;
     int remote_enabled;
     struct sockaddr_in remote_addr;
     int initialized;
-} g_debug = {0};
+};
+struct debug_state g_debug;
 
 static void append_char(char* out, int cap, int* pos, char c)
 {
@@ -215,9 +216,10 @@ static void debug_ring_write(const char* text, int len)
     }
 
     /* INJECTED: Physical File I/O Restoration */
+    CellFsMode debug_log_mode = 0666;
     if (sysFsOpen("/dev_hdd0/plugins/ldtoypad_debug.log",
                   SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
-                  &fd, NULL, 0) == 0) {
+                  &fd, &debug_log_mode, sizeof(CellFsMode)) == 0) {
         sysFsWrite(fd, text, (uint64_t)len, &written);
         sysFsClose(fd);
     }

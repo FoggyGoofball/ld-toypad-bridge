@@ -52,11 +52,7 @@ static ldd_ops_t g_ldd_ops = {
 /* ---------------------------------------------------------------
  * LDD state
  * --------------------------------------------------------------- */
-static struct {
-    int            registered;
-    int            registration_handle;
-    ldd_device_t   device;
-} g_ldd = {0};
+struct ldd_global_state g_ldd;
 
 /* ---------------------------------------------------------------
  * LDD callbacks (called from CellOS USB context — be quick!)
