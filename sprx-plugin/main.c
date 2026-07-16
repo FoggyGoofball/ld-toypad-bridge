@@ -31,67 +31,23 @@
 #include "debug.h"
 
 /* ------------------------------------------------------------------------
- * PRX MODULE HEADER & EXPORT TABLE (Relocation-Free Assembly)
- * Replaces SYS_PROCESS_PARAM_FIXED to strip the EBOOT process marker.
- * Manually forges the 32-bit SPRX headers and exports directly into the 
- * ELF to satisfy Cobra VSH injection while bypassing GCC relocations.
+ * PRX MODULE INITIALIZATION
+ *
+ * SYS_PROCESS_PARAM_FIXED generates the .sys_proc_param and
+ * .sys_proc_prx_param sections that Cobra's VSH loader requires.
+ * This macro integrates with lv2-sprx.o (linked via the Makefile)
+ * to produce valid .lib.ent / .lib.stub tables WITHOUT manual
+ * assembly, avoiding the 64-bit PowerPC function descriptor
+ * truncation bug that plagued the hand-rolled approach.
+ *
+ * 1001 = SYS_PRX_TYPE (SPRX module)
+ * 0x4000 = default stack size (16 KB)
  * ------------------------------------------------------------------------ */
-__asm__(
-    /* --- 1. Module Parameter Information --- */
-    ".section .sys_proc_prx_param,\"a\"\n"
-    ".align 3\n"
-    ".long 0x00000028\n"
-    ".long 0x1B434CEC\n"
-    ".long 0x00000002\n"
-    ".long 0x00000000\n"
-    ".long __libentstart\n"
-    ".long __libentend\n"
-    ".long __libstubstart\n"
-    ".long __libstubend\n"
-    ".long 0x01010000\n"
-    ".long 0x00000000\n"
-    ".previous\n"
-
-    /* --- 2. Module Metadata (CRITICAL FOR COBRA VALIDATION) --- */
-    ".section .rodata.sceModuleInfo,\"a\"\n"
-    ".align 2\n"
-    ".short 0x0000\n"           /* Attributes */
-    ".byte 1\n"                 /* Minor Version */
-    ".byte 1\n"                 /* Major Version */
-    ".ascii \"ldtoypad\"\n"     /* Module Name (8 bytes) */
-    ".space 20\n"               /* Null padding to enforce 28-byte limit */
-    ".long 0x00000000\n"        /* TOC pointer (Resolved at load time) */
-    ".long __libentstart\n"
-    ".long __libentend\n"
-    ".long __libstubstart\n"
-    ".long __libstubend\n"
-    ".previous\n"
-
-    /* --- 3. Module Entry Hook --- */
-    ".section .lib.ent,\"a\"\n"
-    ".align 2\n"
-    ".long 0x01300000\n"        /* sys_prx_ent_info struct identifier (start) */
-    ".long 0x00000000\n"
-    ".long 0x00000000\n"
-    ".long 0x00000000\n"
-    ".long _start\n"            /* Exact match to C function signature */
-    ".long 0x00000000\n"
-    ".previous\n"
-
-    /* --- 4. Module Exit Hook --- */
-    ".section .lib.ent,\"a\"\n"
-    ".align 2\n"
-    ".long 0x01400000\n"        /* sys_prx_ent_info struct identifier (stop) */
-    ".long 0x00000000\n"
-    ".long 0x00000000\n"
-    ".long 0x00000000\n"
-    ".long _stop\n"             /* Exact match to C function signature */
-    ".long 0x00000000\n"
-    ".previous\n"
-);
+SYS_PROCESS_PARAM_FIXED(1001, 0x4000)
 
 /* _start/_stop are tagged with __attribute__((visibility("default")))
- * to override -fvisibility=hidden in the Makefile. */
+ * to override -fvisibility=hidden in the Makefile.
+ * These are the module entry/exit points called by the PRX loader. */
 
 #define CONFIG_UDP_PORT          28472
 #define CONFIG_MAIN_THREAD_PRIO  3072  /* ~= -0x400 in signed, low prio */

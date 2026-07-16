@@ -34,12 +34,28 @@ MACHDEP  := -mhard-float -fmodulo-sched
 
 INCLUDES := -I$(PSL1GHT)/ppu/include -I$(PSL1GHT)/ppu/include/simdmath
 
-# NO -fPIC -shared: PSL1GHT SDK builds SPRX as ET_EXEC (not ET_DYN).
-# The sprxlinker + make_self pipeline expects this format.
-CFLAGS := $(MACHDEP) -O2 -g -fno-pic -fno-stack-protector -fvisibility=hidden -D__SPRX__ \
+# ---------------------------------------------------------------
+# RELOCATION ARCHITECTURE:
+#
+# -fPIE generates position-independent code for executables,
+#   producing ET_EXEC (not ET_DYN) which sprxlinker requires
+#   for proper NID stub table resolution.
+#
+# -Wl,-q (--emit-relocs) preserves relocation data in the ELF
+#   output so that Cobra 8.5's VSH loader can dynamically remap
+#   the module into shared VSH memory space. Without this flag,
+#   the kernel loader has no relocation metadata and rejects a
+#   statically-mapped ET_EXEC as incompatible with VSH plugins.
+#
+# COMBINED EFFECT:
+#   Satisfies sprxlinker (needs ET_EXEC with .lib.stub entries)
+#   + Cobra VSH loader (needs reloc data for shared memory map).
+# ---------------------------------------------------------------
+CFLAGS := $(MACHDEP) -O2 -g -fPIE -fno-stack-protector -fvisibility=hidden -D__SPRX__ \
           $(INCLUDES)
 
 LDFLAGS := $(MACHDEP) -nostartfiles -nostdlib -nodefaultlibs \
+           -Wl,-q -fPIE \
            -L$(PSL1GHT)/ppu/lib -L$(PS3DEV)/ppu/lib -L$(PS3DEV)/portlibs/ppu/lib \
            -lusb -lnet -lsysutil -lsysmodule -lsysfs -lrt -llv2 \
            /usr/local/ps3dev/ppu/powerpc64-ps3-elf/lib/lv2-sprx.o -Wl,--start-group -lgcc -Wl,--end-group

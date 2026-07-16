@@ -4,8 +4,8 @@
  *
  * Provides debug output macros that can be compiled out for release builds.
  * On the PS3, debug output goes to:
- *   1. /dev_usb000/ldtoypad_debug.log (USB storage, if available)
- *   2. Kernel TTY (via lv2 poke)
+ *   1. /dev_hdd0/plugins/ldtoypad_debug.log (HDD via sysFs calls)
+ *   2. Remote UDP log stream (to bridge server port 28473)
  *
  * Debug levels:
  *   DEBUG_LEVEL_NONE     - No debug output
