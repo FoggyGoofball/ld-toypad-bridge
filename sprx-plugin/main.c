@@ -3,7 +3,7 @@
  * LD-ToyPad Bridge SPRX plugin -- CellOS background thread entry point.
  *
  * Architecture (refactored):
- *   ldtoypad_start() is minimal -- spawns a background thread and returns
+ *   _start() is minimal -- spawns a background thread and returns
  *   SYS_PRX_START_OK immediately. This guarantees the bootloader is
  *   never blocked by network I/O or USB setup.
  *
@@ -11,8 +11,8 @@
  *   continuous loop: poll USB endpoints, pump UDP traffic, sleep.
  *
  * Diagnostics:
- *   A boot log is written to /dev_hdd0/ldtoypad_boot.log via raw
- *   sysFs calls.  This works at the very first line of ldtoypad_start(),
+ *   A boot log is written to /dev_hdd0/plugins/ldtoypad_boot.log via raw
+ *   sysFs calls.  This works at the very first line of _start(),
  *   before any subsystem init, and survives crashes.  Retrieve it
  *   after boot via FTP.
  */
@@ -30,7 +30,7 @@
 #include "toypad_state.h"
 #include "debug.h"
 
-/* ldoypad_start/ldtoypad_stop are tagged with __attribute__((visibility("default")))
+/* _start/_stop are tagged with __attribute__((visibility("default")))
  * to override -fvisibility=hidden in the Makefile. */
 
 #define CONFIG_UDP_PORT          28472
@@ -41,64 +41,10 @@
 #define LDTP_ENABLE_FLAG_PATH "/dev_hdd0/plugins/ldtoypad.enable"
 #define LDTP_BOOT_LOG_PATH    "/dev_hdd0/plugins/ldtoypad_boot.log"
 
-/* ------------------------------------------------------------------------
- * PRX MODULE HEADER & EXPORT TABLE (Relocation-Free Assembly)
- * Forges the 32-bit PRX headers directly into the ELF to bypass
- * GCC R_PPC64_ADDR32 dynamic relocation errors.
- * ------------------------------------------------------------------------ */
-__asm__(
-    /* --- 1. Module Parameter Information --- */
-    ".section .sys_proc_prx_param,\"a\"\n"
-    ".align 3\n"
-    ".long 0x00000028\n"
-    ".long 0x1B434CEC\n"
-    ".long 0x00000002\n"
-    ".long 0x00000000\n"
-    ".long __libentstart\n"
-    ".long __libentend\n"
-    ".long __libstubstart\n"
-    ".long __libstubend\n"
-    ".long 0x01010000\n"
-    ".long 0x00000000\n"
-    ".previous\n"
-
-    /* --- 2. Module Metadata (CRITICAL FOR COBRA VALIDATION) --- */
-    ".section .rodata.sceModuleInfo,\"a\"\n"
-    ".align 2\n"
-    ".short 0x0000\n"           /* Attributes */
-    ".byte 1\n"                 /* Minor Version */
-    ".byte 1\n"                 /* Major Version */
-    ".ascii \"ldtoypad\"\n"     /* Module Name (8 bytes) */
-    ".space 20\n"               /* Null padding to enforce 28-byte name limit */
-    ".long 0x00000000\n"        /* TOC pointer (Resolved at kernel load time) */
-    ".long __libentstart\n"
-    ".long __libentend\n"
-    ".long __libstubstart\n"
-    ".long __libstubend\n"
-    ".previous\n"
-
-    /* --- 3. Module Entry Hook --- */
-    ".section .lib.ent,\"a\"\n"
-    ".align 2\n"
-    ".long 0x01300000\n"        /* sys_prx_ent_info struct identifier (start) */
-    ".long 0x00000000\n"
-    ".long 0x00000000\n"
-    ".long 0x00000000\n"
-    ".long ldtoypad_start\n"    /* Exact match to C function signature */
-    ".long 0x00000000\n"
-    ".previous\n"
-
-    /* --- 4. Module Exit Hook --- */
-    ".section .lib.ent,\"a\"\n"
-    ".align 2\n"
-    ".long 0x01400000\n"        /* sys_prx_ent_info struct identifier (stop) */
-    ".long 0x00000000\n"
-    ".long 0x00000000\n"
-    ".long 0x00000000\n"
-    ".long ldtoypad_stop\n"     /* Exact match to C function signature */
-    ".long 0x00000000\n"
-    ".previous\n"
-);
+/* PSL1GHT PRX module header -- generates .sys_proc_prx_param + .sceModuleInfo
+ * + .lib.ent + .lib.stub sections via CRT macros.  Must use _start/_stop
+ * entry points (these are what the SDK stub exports). */
+SYS_PROCESS_PARAM_FIXED(1001, 0x4000)
 
 /* ---------------------------------------------------------------
  * Global run flag -- set to 0 to signal background thread exit
@@ -113,7 +59,7 @@ static sys_ppu_thread_t g_thread_id = 0;
 /* ---------------------------------------------------------------
  * Boot log -- write diagnostic trace to HDD via raw sysFs calls.
  *
- * Works at any point in ldtoypad_start(), before any subsystem init.
+ * Works at any point in _start(), before any subsystem init.
  * Survives crashes. Retrieve via FTP after boot.
  *
  * NOTE: sysFsOpen does NOT take a mode/permission argument.
@@ -306,18 +252,18 @@ static void toypad_background_thread(void *arg)
 }
 
 /* ---------------------------------------------------------------
- * ldtoypad_start -- called by the kernel when loading the PRX
+ * _start -- called by the kernel when loading the PRX
  *
  * MUST return quickly!  We spawn a background thread so the
  * bootloader is never blocked.
  * --------------------------------------------------------------- */
-__attribute__((visibility("default"))) int ldtoypad_start(u64 args)
+__attribute__((visibility("default"))) int _start(u64 args)
 {
     int ret;
 
     (void)args;
 
-    boot_log_write("[BOOT] ldtoypad_start() called");
+    boot_log_write("[BOOT] _start() called");
 
     /* Gate: only activate when the enable flag is present */
     if (!check_enable_flag()) {
@@ -355,11 +301,11 @@ __attribute__((visibility("default"))) int ldtoypad_start(u64 args)
 }
 
 /* ---------------------------------------------------------------
- * ldtoypad_stop -- called by the kernel when unloading the PRX
+ * _stop -- called by the kernel when unloading the PRX
  *
  * Signals the background thread to exit and waits for it to join.
  * --------------------------------------------------------------- */
-__attribute__((visibility("default"))) int ldtoypad_stop(void)
+__attribute__((visibility("default"))) int _stop(void)
 {
     u64 retval = 0;
 
@@ -367,7 +313,7 @@ __attribute__((visibility("default"))) int ldtoypad_stop(void)
         return SYS_PRX_STOP_OK;
     }
 
-    boot_log_write("[BOOT] ldtoypad_stop() called -- shutting down");
+    boot_log_write("[BOOT] _stop() called -- shutting down");
     DEBUG_PRINT("[LDTP] stopping...\n");
     g_running = 0;
 
@@ -376,7 +322,7 @@ __attribute__((visibility("default"))) int ldtoypad_stop(void)
         g_thread_id = 0;
     }
 
-    boot_log_write("[BOOT] ldtoypad_stop() complete");
+    boot_log_write("[BOOT] _stop() complete");
     DEBUG_PRINT("[LDTP] stopped\n");
     return SYS_PRX_STOP_OK;
 }

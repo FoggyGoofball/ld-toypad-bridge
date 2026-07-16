@@ -18,5 +18,4 @@ make all 2>&1
 
 echo "--- COPYING OUTPUT ---"
 cp -v "$TMPDIR"/build/ldtoypad.sprx "$DST/ldtoypad.sprx"
-cp -v "$TMPDIR"/build/ldtoypad.fake.self "$DST/ldtoypad.fake.self"
 echo "BUILD_EXIT=$?"

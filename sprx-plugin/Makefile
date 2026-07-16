@@ -24,8 +24,7 @@ BUILDDIR := $(CURDIR)/build
 OBJDIR   := $(CURDIR)/obj
 
 # ---------------------------------------------------------------
-# Source files — NOTE: usb_hooks.c removed (LV2 patching retired).
-# ldd_driver.c added (native Extra LDD registration).
+# Source files
 # ---------------------------------------------------------------
 C_SRCS := main.c ldd_driver.c network.c toypad_state.c debug.c compat.c
 C_OBJS := $(C_SRCS:%.c=$(OBJDIR)/%.o)
@@ -35,7 +34,8 @@ MACHDEP  := -mhard-float -fmodulo-sched
 
 INCLUDES := -I$(PSL1GHT)/ppu/include -I$(PSL1GHT)/ppu/include/simdmath
 
-# No LV2 patch flags — clean build with network-only + Extra LDD support
+# NO -fPIC -shared: PSL1GHT SDK builds SPRX as ET_EXEC (not ET_DYN).
+# The sprxlinker + make_self pipeline expects this format.
 CFLAGS := $(MACHDEP) -O2 -g -fno-pic -fno-stack-protector -fvisibility=hidden -D__SPRX__ \
           $(INCLUDES)
 
