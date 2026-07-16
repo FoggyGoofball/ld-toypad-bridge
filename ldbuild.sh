@@ -10,7 +10,6 @@ DST="/mnt/c/Users/Admin/source/repos/dimensions plugin/sprx-plugin/build"
 
 cp "$SRC"/*.c "$TMPDIR/"
 cp "$SRC"/*.h "$TMPDIR/"
-cp "$SRC"/*.S "$TMPDIR/"
 cp "$SRC"/Makefile "$TMPDIR/"
 
 cd "$TMPDIR"

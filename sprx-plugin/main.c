@@ -12,16 +12,18 @@
  *
  * PRX metadata: provided by the stock PSL1GHT lv2-sprx.o (linked as a
  *   startup object), which supplies the correct .sys_proc_prx_param
- *   section with magic 0x1B434CEC and R_PPC64_ADDR32 relocation entries.
- *   crt0.S provides _start, .lib.ent exports for module_start/module_stop,
- *   and .lib.stub section markers.
+ *   section with magic 0x1B434CEC, R_PPC64_ADDR32 relocation entries,
+ *   and _start entry point. The SYS_MODULE_INFO/START/STOP macros
+ *   (from <sys/prx.h>) generate the .rodata.sceModuleInfo section with
+ *   correct NID exports for module_start/module_stop, replacing the
+ *   need for a custom crt0.S.
  *
  * Diagnostics:
- *   A boot log is written to /dev_flash/tmp/ldtoypad_boot.log via raw
+ *   A boot log is written to /dev_hdd0/plugins/ldtoypad_boot.log via raw
  *   sysFs calls.  This works at the very first line of module_start(),
  *   before any subsystem init, and survives crashes.
  */
-
+ 
 #include <ppu-types.h>
 #include <sys/prx.h>
 #include <sys/systime.h>
@@ -45,6 +47,20 @@
  * as the plugin and enable token. */
 #define LDTP_ENABLE_FLAG_PATH "/dev_hdd0/plugins/ldtoypad.enable"
 #define LDTP_BOOT_LOG_PATH    "/dev_hdd0/plugins/ldtoypad_boot.log"
+
+/* ---------------------------------------------------------------
+ * PSL1GHT Native PRX Macros
+ *
+ * SYS_MODULE_INFO generates the .rodata.sceModuleInfo section with
+ * correct PRX type (0x04) and module name.  SYS_MODULE_START/STOP
+ * generate .lib.ent export entries for module_start/module_stop.
+ *
+ * The _start entry point and .sys_proc_prx_param metadata section
+ * are provided by the stock PSL1GHT lv2-sprx.o startup object.
+ * --------------------------------------------------------------- */
+SYS_MODULE_INFO(ldtoypad, 0, 1, 1);
+SYS_MODULE_START(module_start);
+SYS_MODULE_STOP(module_stop);
 
 /* ---------------------------------------------------------------
  * Global run flag -- set to 0 to signal background thread exit
@@ -254,8 +270,9 @@ static void toypad_background_thread(void *arg)
 /* ---------------------------------------------------------------
  * module_start -- called by the kernel when loading the PRX
  *
- * crt0.S provides _start (proper .opd descriptor) which sets up
- * the TOC pointer (r2) and calls module_start().
+ * The _start entry point is provided by the stock PSL1GHT lv2-sprx.o
+ * startup object (not a custom crt0.S).  lv2-sprx.o sets up the TOC
+ * pointer (r2) and calls module_start().
  *
  * MUST return quickly!  We spawn a background thread so the
  * bootloader is never blocked.
@@ -306,7 +323,8 @@ __attribute__((visibility("default"))) int module_start(u64 args)
 /* ---------------------------------------------------------------
  * module_stop -- called by the kernel when unloading the PRX
  *
- * crt0.S provides the dispatch.  Signals the background thread to
+ * The dispatch is handled through the PRX NID export table generated
+ * by the SYS_MODULE_STOP macro.  Signals the background thread to
  * exit and waits for it to join.
  * --------------------------------------------------------------- */
 __attribute__((visibility("default"))) int module_stop(void)

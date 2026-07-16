@@ -4,14 +4,13 @@
 # Architecture: CellOS background thread + Extra LDD registration.
 # No LV2 kernel patching required.
 #
-# CRT: Uses custom crt0.S alongside the stock lv2-sprx.o from PSL1GHT.
-# lv2-sprx.o provides the .sys_proc_prx_param metadata block (magic
-# 0x1B434CEC) with correct R_PPC64_ADDR32 relocations for the
+# CRT: Uses the stock PSL1GHT lv2-sprx.o startup object for the
+# _start entry point, .sys_proc_prx_param metadata (magic 0x1B434CEC)
+# with correct R_PPC64_ADDR32 relocations for the
 # __libentstart/__libentend/__libstubstart/__libstubend symbols.
-# crt0.S provides _start, the .lib.ent export table (module_start/
-# module_stop), and empty .lib.stub markers for sprxlinker to fill.
-# crt0.S does NOT use .opd (function descriptors) — PSL1GHT's PPU
-# ELF ABI uses direct function pointers, not AIX-style descriptors.
+# PRX macros in main.c (SYS_MODULE_INFO/START/STOP from <sys/prx.h>)
+# generate the .rodata.sceModuleInfo section and .lib.ent export table.
+# No custom crt0.S is needed.
 
 .RECIPEPREFIX := >
 
@@ -21,7 +20,6 @@ PSL1GHT  ?= $(PS3DEV)/psl1ght
 CROSS := powerpc64-ps3-elf-
 
 CC       := $(PS3DEV)/ppu/bin/$(CROSS)gcc
-AS       := $(PS3DEV)/ppu/bin/$(CROSS)as
 LD       := $(PS3DEV)/ppu/bin/$(CROSS)gcc
 STRIP    := $(PS3DEV)/ppu/bin/$(CROSS)strip
 OBJCOPY  := $(PS3DEV)/ppu/bin/$(CROSS)objcopy
@@ -35,12 +33,11 @@ BUILDDIR := $(CURDIR)/build
 OBJDIR   := $(CURDIR)/obj
 
 # ---------------------------------------------------------------
-# Source files
+# Source files -- no assembler sources; PRX macros in main.c handle
+# the export table generation.
 # ---------------------------------------------------------------
 C_SRCS := main.c ldd_driver.c network.c toypad_state.c debug.c compat.c
-S_SRCS := crt0.S
 C_OBJS := $(C_SRCS:%.c=$(OBJDIR)/%.o)
-S_OBJS := $(S_SRCS:%.S=$(OBJDIR)/%.o)
 
 # Reduced section-splitting avoids ELF PHDR overflow
 MACHDEP  := -mhard-float -fmodulo-sched
@@ -61,25 +58,28 @@ INCLUDES := -I$(PSL1GHT)/ppu/include -I$(PSL1GHT)/ppu/include/simdmath
 CFLAGS := $(MACHDEP) -O2 -g -std=gnu99 -fno-pic -fno-stack-protector -fvisibility=hidden -D__SPRX__ \
           $(INCLUDES)
 
-# Assembler flags: we need the preprocessor to process #include in .S files,
-# and -D__SPRX__ to match CFLAGS for consistency.
-ASFLAGS := $(MACHDEP) -g -D__SPRX__ $(INCLUDES)
-
 # Linker flags:
-# -nostartfiles: we provide our own _start in crt0.S -> crt0.o
 # -nostdlib -nodefaultlibs: no standard CRT or libc
+# NOTE: -nostartfiles is NOT used. The stock lv2-sprx.o provides the
+#   _start entry point. Using -nostartfiles would suppress its
+#   inclusion via the default linker script.
 # No -fPIE, -pie, or -Wl,-q:
 #   VSH SPRX modules use the standard PSL1GHT ET_EXEC model.  The
 #   kernel PRX loader and sprxlinker handle all relocation through
 #   the NID import/export tables (.lib.ent / .lib.stub) and the
 #   .sys_proc_prx_param metadata provided by lv2-sprx.o.
-#   PIE-style relocations are not applicable to kernel PRX modules.
 #
-# lv2-sprx.o provides the correct .sys_proc_prx_param section (magic
-# 0x1B434CEC) with R_PPC64_ADDR32 relocation entries for the
-# __libentstart/__libentend/__libstubstart/__libstubend symbols.
-# crt0.o provides those symbols plus _start, .lib.ent, and .lib.stub.
-LDFLAGS := $(MACHDEP) -nostartfiles -nostdlib -nodefaultlibs \
+# lv2-sprx.o provides:
+#   - _start entry point (calls module_start)
+#   - .sys_proc_prx_param section (magic 0x1B434CEC) with
+#     R_PPC64_ADDR32 relocation entries for the
+#     __libentstart/__libentend/__libstubstart/__libstubend symbols
+#   - Correct PRX type (0x04) for Cobra VSH compatibility
+#
+# The PRX macros in main.c (SYS_MODULE_INFO/START/STOP) generate
+# the .rodata.sceModuleInfo section and .lib.ent export table
+# with proper NID entries for module_start/module_stop.
+LDFLAGS := $(MACHDEP) -nostdlib -nodefaultlibs \
            -L$(PSL1GHT)/ppu/lib -L$(PS3DEV)/ppu/lib -L$(PS3DEV)/portlibs/ppu/lib \
            /usr/local/ps3dev/ppu/powerpc64-ps3-elf/lib/lv2-sprx.o \
            -lusb -lnet -lsysutil -lsysmodule -lsysfs -lrt -llv2 \
@@ -94,13 +94,9 @@ $(OBJDIR)/%.o: %.c
 >@echo "  CC    $<"
 >$(CC) $(CFLAGS) -c $< -o $@
 
-$(OBJDIR)/%.o: %.S
->@echo "  AS    $<"
->$(CC) $(ASFLAGS) -c $< -o $@
-
-$(BUILDDIR)/$(TARGET).elf: $(S_OBJS) $(C_OBJS)
+$(BUILDDIR)/$(TARGET).elf: $(C_OBJS)
 >@echo "  LD    $@"
->$(LD) $(S_OBJS) $(C_OBJS) $(LDFLAGS) -o $@
+>$(LD) $(C_OBJS) $(LDFLAGS) -o $@
 
 # Strip the ELF before feeding to sprxlinker:
 #   Bare strip is correct for the standard PSL1GHT SPRX model

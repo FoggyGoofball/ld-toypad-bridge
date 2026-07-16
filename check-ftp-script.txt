@@ -1,0 +1,6 @@
+open 192.168.0.47
+mike
+mike
+ls /dev_hdd0/plugins/
+get /dev_hdd0/plugins/ldtoypad_boot.log
+quit
