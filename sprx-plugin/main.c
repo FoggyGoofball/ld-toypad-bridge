@@ -39,10 +39,12 @@
 #define CONFIG_MAIN_THREAD_STACK 0x2000 /* 8 KB stack                  */
 #define CONFIG_LOOP_SLEEP_USEC   10000  /* 10 ms between iterations    */
 
-/* Write to /dev_flash/tmp/ which is always mounted at boot time,
- * unlike /dev_hdd0 which may not be ready when VSH plugins load. */
+/* Write to /dev_hdd0/plugins/ which IS mounted at VSH plugin load time
+ * (the kernel loads us from /dev_hdd0/plugins/ldtoypad.sprx itself).
+ * This also keeps the boot log FTP-accessible via the same directory
+ * as the plugin and enable token. */
 #define LDTP_ENABLE_FLAG_PATH "/dev_hdd0/plugins/ldtoypad.enable"
-#define LDTP_BOOT_LOG_PATH    "/dev_flash/tmp/ldtoypad_boot.log"
+#define LDTP_BOOT_LOG_PATH    "/dev_hdd0/plugins/ldtoypad_boot.log"
 
 /* ---------------------------------------------------------------
  * Global run flag -- set to 0 to signal background thread exit

@@ -4,12 +4,14 @@
 # Architecture: CellOS background thread + Extra LDD registration.
 # No LV2 kernel patching required.
 #
-# CRT: Uses custom crt0.S instead of the stock lv2-sprx.o, because
-# lv2-sprx.o has an empty .text section (no _start code) and only
-# provides undefined symbol references.  crt0.S provides the real
-# _start entry point (with proper .opd 64-bit PowerPC function
-# descriptor), .lib.ent exports for module_start/module_stop, and
-# the .sys_proc_prx_param metadata block.
+# CRT: Uses custom crt0.S alongside the stock lv2-sprx.o from PSL1GHT.
+# lv2-sprx.o provides the .sys_proc_prx_param metadata block (magic
+# 0x1B434CEC) with correct R_PPC64_ADDR32 relocations for the
+# __libentstart/__libentend/__libstubstart/__libstubend symbols.
+# crt0.S provides _start, the .lib.ent export table (module_start/
+# module_stop), and empty .lib.stub markers for sprxlinker to fill.
+# crt0.S does NOT use .opd (function descriptors) — PSL1GHT's PPU
+# ELF ABI uses direct function pointers, not AIX-style descriptors.
 
 .RECIPEPREFIX := >
 
@@ -45,11 +47,17 @@ MACHDEP  := -mhard-float -fmodulo-sched
 
 INCLUDES := -I$(PSL1GHT)/ppu/include -I$(PSL1GHT)/ppu/include/simdmath
 
-# NO -fPIC -shared or -fPIE: PSL1GHT SDK builds SPRX as ET_EXEC (not ET_DYN).
-# The sprxlinker utility is fragile and fails to parse PIE/ET_DYN binaries.
-# It rigidly expects a statically-mapped ET_EXEC ELF to successfully
-# generate the .lib.stub NID import tables. The Cobra VSH loader will
-# remap the module using its own internal relocation mechanism.
+# NO -fPIC, -fPIE, or -shared:
+#   PSL1GHT SDK builds SPRX as ET_EXEC (statically-linked).  The kernel
+#   PRX loader and sprxlinker both expect ET_EXEC output.  -fPIE and -pie
+#   introduce GOT-based addressing designed for userspace process images,
+#   which is inappropriate for a VSH plugin background thread that runs
+#   in kernel PRX address space.
+#
+#   The standard PSL1GHT model uses -fno-pic, with relocation metadata
+#   provided by lv2-sprx.o (the stock PRX startup object).  The Cobra
+#   VSH loader handles memory mapping through its own internal PRX
+#   loader, not via ELF PIE relocations.
 CFLAGS := $(MACHDEP) -O2 -g -std=gnu99 -fno-pic -fno-stack-protector -fvisibility=hidden -D__SPRX__ \
           $(INCLUDES)
 
@@ -60,6 +68,12 @@ ASFLAGS := $(MACHDEP) -g -D__SPRX__ $(INCLUDES)
 # Linker flags:
 # -nostartfiles: we provide our own _start in crt0.S -> crt0.o
 # -nostdlib -nodefaultlibs: no standard CRT or libc
+# No -fPIE, -pie, or -Wl,-q:
+#   VSH SPRX modules use the standard PSL1GHT ET_EXEC model.  The
+#   kernel PRX loader and sprxlinker handle all relocation through
+#   the NID import/export tables (.lib.ent / .lib.stub) and the
+#   .sys_proc_prx_param metadata provided by lv2-sprx.o.
+#   PIE-style relocations are not applicable to kernel PRX modules.
 #
 # lv2-sprx.o provides the correct .sys_proc_prx_param section (magic
 # 0x1B434CEC) with R_PPC64_ADDR32 relocation entries for the
@@ -88,6 +102,13 @@ $(BUILDDIR)/$(TARGET).elf: $(S_OBJS) $(C_OBJS)
 >@echo "  LD    $@"
 >$(LD) $(S_OBJS) $(C_OBJS) $(LDFLAGS) -o $@
 
+# Strip the ELF before feeding to sprxlinker:
+#   Bare strip is correct for the standard PSL1GHT SPRX model
+#   (ET_EXEC with .lib.ent/.lib.stub NID tables).  There are no
+#   ELF .rela.* relocations to preserve — the Cobra kernel PRX
+#   loader does not use ELF relocations.  It maps the module
+#   through the .sys_proc_prx_param metadata and resolves NID
+#   imports via the .lib.stub table that sprxlinker generates.
 $(BUILDDIR)/$(TARGET).sprx: $(BUILDDIR)/$(TARGET).elf
 >@echo "  SPRX  $@"
 >$(STRIP) $< -o $(BUILDDIR)/$(TARGET)-strip.elf
