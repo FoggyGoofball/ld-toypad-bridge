@@ -30,6 +30,66 @@
 #include "toypad_state.h"
 #include "debug.h"
 
+/* ------------------------------------------------------------------------
+ * PRX MODULE HEADER & EXPORT TABLE (Relocation-Free Assembly)
+ * Replaces SYS_PROCESS_PARAM_FIXED to strip the EBOOT process marker.
+ * Manually forges the 32-bit SPRX headers and exports directly into the 
+ * ELF to satisfy Cobra VSH injection while bypassing GCC relocations.
+ * ------------------------------------------------------------------------ */
+__asm__(
+    /* --- 1. Module Parameter Information --- */
+    ".section .sys_proc_prx_param,\"a\"\n"
+    ".align 3\n"
+    ".long 0x00000028\n"
+    ".long 0x1B434CEC\n"
+    ".long 0x00000002\n"
+    ".long 0x00000000\n"
+    ".long __libentstart\n"
+    ".long __libentend\n"
+    ".long __libstubstart\n"
+    ".long __libstubend\n"
+    ".long 0x01010000\n"
+    ".long 0x00000000\n"
+    ".previous\n"
+
+    /* --- 2. Module Metadata (CRITICAL FOR COBRA VALIDATION) --- */
+    ".section .rodata.sceModuleInfo,\"a\"\n"
+    ".align 2\n"
+    ".short 0x0000\n"           /* Attributes */
+    ".byte 1\n"                 /* Minor Version */
+    ".byte 1\n"                 /* Major Version */
+    ".ascii \"ldtoypad\"\n"     /* Module Name (8 bytes) */
+    ".space 20\n"               /* Null padding to enforce 28-byte limit */
+    ".long 0x00000000\n"        /* TOC pointer (Resolved at load time) */
+    ".long __libentstart\n"
+    ".long __libentend\n"
+    ".long __libstubstart\n"
+    ".long __libstubend\n"
+    ".previous\n"
+
+    /* --- 3. Module Entry Hook --- */
+    ".section .lib.ent,\"a\"\n"
+    ".align 2\n"
+    ".long 0x01300000\n"        /* sys_prx_ent_info struct identifier (start) */
+    ".long 0x00000000\n"
+    ".long 0x00000000\n"
+    ".long 0x00000000\n"
+    ".long _start\n"            /* Exact match to C function signature */
+    ".long 0x00000000\n"
+    ".previous\n"
+
+    /* --- 4. Module Exit Hook --- */
+    ".section .lib.ent,\"a\"\n"
+    ".align 2\n"
+    ".long 0x01400000\n"        /* sys_prx_ent_info struct identifier (stop) */
+    ".long 0x00000000\n"
+    ".long 0x00000000\n"
+    ".long 0x00000000\n"
+    ".long _stop\n"             /* Exact match to C function signature */
+    ".long 0x00000000\n"
+    ".previous\n"
+);
+
 /* _start/_stop are tagged with __attribute__((visibility("default")))
  * to override -fvisibility=hidden in the Makefile. */
 
@@ -40,11 +100,6 @@
 
 #define LDTP_ENABLE_FLAG_PATH "/dev_hdd0/plugins/ldtoypad.enable"
 #define LDTP_BOOT_LOG_PATH    "/dev_hdd0/plugins/ldtoypad_boot.log"
-
-/* PSL1GHT PRX module header -- generates .sys_proc_prx_param + .sceModuleInfo
- * + .lib.ent + .lib.stub sections via CRT macros.  Must use _start/_stop
- * entry points (these are what the SDK stub exports). */
-SYS_PROCESS_PARAM_FIXED(1001, 0x4000)
 
 /* ---------------------------------------------------------------
  * Global run flag -- set to 0 to signal background thread exit
