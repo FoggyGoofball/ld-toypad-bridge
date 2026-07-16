@@ -121,7 +121,7 @@ for /f "usebackq delims=" %%P in (`powershell -NoProfile -Command "$ports=%UDP_P
 )
 %TIMEOUT% /t 1 /nobreak >nul
 
-start "LD-ToyPad Bridge" cmd /k "cd /d ""%~dp0"" && echo *** LD-ToyPad Bridge *** && echo PS3: !PS3_IP! && echo. && node server.js --http-port %HTTP_PORT% --port %UDP_PORT% --debug-port %DEBUG_PORT%"
+start "LD-ToyPad Bridge" cmd /k "cd /d ""%~dp0"" && echo *** LD-ToyPad Bridge *** && echo PS3: !PS3_IP! && echo. && node server.js --http-port %HTTP_PORT% --port %UDP_PORT% --debug-port %DEBUG_PORT% --ps3-ip !PS3_IP!"
 
 echo.
 echo  Browser UI: %SERVER_URL%
