@@ -215,11 +215,11 @@ static void debug_ring_write(const char* text, int len)
         g_debug.ring_buffer[g_debug.write_pos++ % DEBUG_RING_BUFFER_SIZE] = text[i];
     }
 
-    /* INJECTED: Physical File I/O Restoration */
-    CellFsMode debug_log_mode = 0666;
-    if (sysFsOpen("/dev_hdd0/plugins/ldtoypad_debug.log",
-                  SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
-                  &fd, &debug_log_mode, sizeof(CellFsMode)) == 0) {
+    /* Physical File I/O via PSL1GHT LV2 filesystem API */
+    u32 debug_log_mode = 0666;
+    if (sysLv2FsOpen("/dev_hdd0/plugins/ldtoypad_debug.log",
+                     SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
+                     &fd, debug_log_mode, NULL, 0) == 0) {
         sysFsWrite(fd, text, (uint64_t)len, &written);
         sysFsClose(fd);
     }

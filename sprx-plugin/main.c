@@ -3,12 +3,19 @@
  * LD-ToyPad Bridge SPRX plugin -- CellOS background thread entry point.
  *
  * Architecture:
- *   module_start() is minimal -- spawns a background thread and returns
- *   SYS_PRX_START_OK immediately. This guarantees the bootloader is
- *   never blocked by network I/O or USB setup.
+ *   module_start() evaluates the enable token. If missing, returns
+ *   SYS_PRX_NO_RESIDENT immediately -- no background thread is spawned,
+ *   preventing unconditional boot loops. If present, spawns a background
+ *   thread and returns SYS_PRX_RESIDENT.
  *
  *   toypad_background_thread() owns all initialization and runs a
  *   continuous loop: poll USB endpoints, pump UDP traffic, sleep.
+ *
+ * PSL1GHT SDK API Conventions:
+ *   Uses sysLv2FsOpen() for filesystem I/O (PSL1GHT LV2 wrapper),
+ *   sys_ppu_thread_create() for thread management,
+ *   and sysModuleLoad() for sysmodule dependency resolution.
+ *   No proprietary CellOS SDK types (CellFsMode, etc.) are used.
  *
  * PRX metadata: provided by the stock PSL1GHT lv2-sprx.o (linked as a
  *   startup object), which supplies the correct .sys_proc_prx_param
@@ -27,7 +34,7 @@
 #include <ppu-types.h>
 #include <sys/prx.h>
 #include <sys/systime.h>
-#include <sys/thread.h>
+#include <sys/ppu_thread.h>
 #include <sys/sysmodule.h>
 #include <lv2/sysfs.h>
 #include <string.h>
@@ -74,20 +81,21 @@ static volatile int g_running = 0;
 static sys_ppu_thread_t g_thread_id = 0;
 
 /* ---------------------------------------------------------------
- * Boot log -- write diagnostic trace via raw sysFs calls.
+ * Boot log -- write diagnostic trace via raw sysLv2FsOpen calls.
  *
- * Works at any point in module_start(), before any subsystem init.
- * Survives crashes. Retrieve via FTP after boot.
+ * Uses the correct PSL1GHT LV2 filesystem API signature:
+ *   sysLv2FsOpen(path, oflags, &fd, mode, NULL, 0)
+ * where mode is a plain u32 value (no CellFsMode type).
  * --------------------------------------------------------------- */
 static void boot_log_write(const char *msg)
 {
-    int fd;
+    s32 fd;
     u64 written;
-    CellFsMode log_mode = 0666;
+    u32 log_mode = 0666;
 
-    if (sysFsOpen(LDTP_BOOT_LOG_PATH,
-                  SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
-                  &fd, &log_mode, sizeof(CellFsMode)) == 0) {
+    if (sysLv2FsOpen(LDTP_BOOT_LOG_PATH,
+                     SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
+                     &fd, log_mode, NULL, 0) == 0) {
         sysFsWrite(fd, msg, strlen(msg), &written);
         sysFsWrite(fd, "\n", 1, &written);
         sysFsClose(fd);
@@ -129,12 +137,12 @@ static void boot_log_write_fmt(const char *fmt, s64 v)
     buf[i] = '\0';
 
     if (i > 0) {
-        int fd;
+        s32 fd;
         u64 written;
-        CellFsMode log_mode = 0666;
-        if (sysFsOpen(LDTP_BOOT_LOG_PATH,
-                      SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
-                      &fd, &log_mode, sizeof(CellFsMode)) == 0) {
+        u32 log_mode = 0666;
+        if (sysLv2FsOpen(LDTP_BOOT_LOG_PATH,
+                         SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
+                         &fd, log_mode, NULL, 0) == 0) {
             buf[i] = '\n';
             i++;
             sysFsWrite(fd, buf, i, &written);
@@ -236,9 +244,9 @@ static void toypad_background_thread(void *arg)
     /* ---- Task 2.2: Startup stabilization delay ---- */
     sys_ppu_thread_usleep(7000000); /* Strict 7-second hardware stabilization delay */
 
-    /* ---- Task 2.3: USBD sysmodule dependency resolution ---- */
-    usbd_ret = cellSysmoduleLoadModule(CELL_SYSMODULE_USBD);
-    if (usbd_ret != CELL_OK && usbd_ret != CELL_SYSMODULE_ERROR_ALREADY_LOADED) {
+    /* ---- Task 2.3: USBD sysmodule dependency resolution (PSL1GHT API) ---- */
+    usbd_ret = sysModuleLoad(SYSMODULE_USBD, 0);
+    if (usbd_ret != 0) {
         boot_log_write("[BOOT] USBD sysmodule load FAILED -- thread exiting");
         sys_ppu_thread_exit(0);
         return; /* unreachable, but present for structural clarity */
@@ -246,12 +254,12 @@ static void toypad_background_thread(void *arg)
 
     /* Flush deferred unlink error buffer to log */
     if (g_unlink_error_buf[0] != '\0') {
-        int fd;
+        s32 fd;
         u64 written;
-        CellFsMode log_mode = 0666;
-        if (sysFsOpen(LDTP_BOOT_LOG_PATH,
-                      SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
-                      &fd, &log_mode, sizeof(CellFsMode)) == 0) {
+        u32 log_mode = 0666;
+        if (sysLv2FsOpen(LDTP_BOOT_LOG_PATH,
+                         SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
+                         &fd, log_mode, NULL, 0) == 0) {
             sysFsWrite(fd, g_unlink_error_buf, strlen(g_unlink_error_buf), &written);
             sysFsWrite(fd, "\n", 1, &written);
             sysFsClose(fd);
@@ -361,9 +369,11 @@ __attribute__((visibility("default"))) int module_start(u64 args)
 
     /* Gate: only activate when the enable flag is present */
     if (!check_enable_flag()) {
-        /* Plugin remains dormant -- no threads, no memory */
-        boot_log_write("[BOOT] dormant exit");
-        return SYS_PRX_START_OK;
+        /* Plugin remains dormant -- no threads, no memory.
+         * Return SYS_PRX_NO_RESIDENT so the kernel unloads us,
+         * preventing unconditional boot loops. */
+        boot_log_write("[BOOT] no enable token -- returning NO_RESIDENT");
+        return SYS_PRX_NO_RESIDENT;
     }
 
     /* Prevent double-start */
@@ -374,21 +384,21 @@ __attribute__((visibility("default"))) int module_start(u64 args)
 
     g_running = 1;
 
-    ret = sysThreadCreate(&g_thread_id,
-                          toypad_background_thread,
-                          NULL,                         /* arg   */
-                          CONFIG_MAIN_THREAD_PRIO,
-                          CONFIG_MAIN_THREAD_STACK,
-                          THREAD_JOINABLE,
-                          "ldtoypad_bridge");
+    ret = sys_ppu_thread_create(&g_thread_id,
+                                toypad_background_thread,
+                                NULL,                         /* arg   */
+                                CONFIG_MAIN_THREAD_PRIO,
+                                (u64)CONFIG_MAIN_THREAD_STACK,
+                                SYS_PPU_THREAD_CREATE_JOINABLE,
+                                "ldtoypad_bridge");
     if (ret < 0) {
-        boot_log_write_fmt("[BOOT] sysThreadCreate FAILED ret=%d", ret);
-        DEBUG_ERROR("[LDTP] sysThreadCreate failed: %d\n", ret);
+        boot_log_write_fmt("[BOOT] sys_ppu_thread_create FAILED ret=%d", ret);
+        DEBUG_ERROR("[LDTP] sys_ppu_thread_create failed: %d\n", ret);
         g_running = 0;
         return SYS_PRX_START_OK; /* still return OK -- don't hang boot */
     }
 
-    boot_log_write("[BOOT] sysThreadCreate OK -- thread spawned");
+    boot_log_write("[BOOT] sys_ppu_thread_create OK -- thread spawned");
 
     /* Return SYS_PRX_RESIDENT -- PRX stays loaded */
     return SYS_PRX_RESIDENT;
@@ -414,7 +424,7 @@ __attribute__((visibility("default"))) int module_stop(void)
     g_running = 0;
 
     if (g_thread_id != 0) {
-        sysThreadJoin(g_thread_id, &retval);
+        sys_ppu_thread_join(g_thread_id, &retval);
         g_thread_id = 0;
     }
 

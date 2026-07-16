@@ -79,6 +79,16 @@ CFLAGS := $(MACHDEP) -O2 -g -std=gnu99 -fno-pic -fno-stack-protector -fvisibilit
 # The PRX macros in main.c (SYS_MODULE_INFO/START/STOP) generate
 # the .rodata.sceModuleInfo section and .lib.ent export table
 # with proper NID entries for module_start/module_stop.
+# lib mapping (PSL1GHT stub libraries):
+#   lv2-sprx.o  - PRX startup object (_start, .sys_proc_prx_param)
+#   -lusb       - sysUsbd* USB driver APIs
+#   -lnet       - sysNet* socket APIs
+#   -lsysutil   - sysUtil* system utility APIs
+#   -lsysmodule - sysModuleLoad() sysmodule dependency resolution
+#   -lsysfs     - sysFs*, sysLv2FsOpen() filesystem I/O
+#   -lrt        - sysTimer* real-time APIs
+#   -llv2       - sys_ppu_thread_*, sysUsleep() LV2 syscall wrappers
+#   -lgcc       - GCC runtime support (__divdi3, etc.)
 LDFLAGS := $(MACHDEP) -nostdlib -nodefaultlibs \
            -L$(PSL1GHT)/ppu/lib -L$(PS3DEV)/ppu/lib -L$(PS3DEV)/portlibs/ppu/lib \
            /usr/local/ps3dev/ppu/powerpc64-ps3-elf/lib/lv2-sprx.o \
