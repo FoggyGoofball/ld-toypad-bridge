@@ -181,6 +181,15 @@ static int check_enable_flag(void)
     /* Deport error handling to buffer; do NOT reset should_run.
      * Flushed to log file after fd is successfully opened. */
     if (unlink_res != 0) {
+        /* ---- HARD ABORT: Token survived deletion ----
+         * If we proceed and the plugin crashes during init (e.g. LDD
+         * registration, socket bind), the token will be present on the
+         * next boot and we'll be trapped in an infinite bootloop.
+         * Reset should_run to 0 regardless of the stat result.
+         * This restores the atomic gating model from v5 while keeping
+         * the deferred error buffer for diagnostics. */
+        should_run = 0;
+
         /* Format error into deferred buffer */
         {
             char num[32];
