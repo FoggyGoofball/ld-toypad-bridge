@@ -236,10 +236,10 @@ static void toypad_background_thread(void *arg)
     (void)arg;
 
     /* ---- CRT bypass: explicitly zero global structures ---- */
-    memset((void*)&g_debug, 0, sizeof(g_debug));
-    memset((void*)&g_net, 0, sizeof(g_net));
-    memset((void*)&g_ldd, 0, sizeof(g_ldd));
-    memset((void*)&g_toypad, 0, sizeof(g_toypad));
+    memset(&g_debug, 0, sizeof(g_debug));
+    memset(&g_net, 0, sizeof(g_net));
+    memset(&g_ldd, 0, sizeof(g_ldd));
+    memset(&g_toypad, 0, sizeof(g_toypad));
 
     /* ---- Task 2.2: Startup stabilization delay ---- */
     sys_ppu_thread_usleep(7000000); /* Strict 7-second hardware stabilization delay */
@@ -389,7 +389,7 @@ __attribute__((visibility("default"))) int module_start(u64 args)
                                 NULL,                         /* arg   */
                                 CONFIG_MAIN_THREAD_PRIO,
                                 (u64)CONFIG_MAIN_THREAD_STACK,
-                                SYS_PPU_THREAD_CREATE_JOINABLE,
+                                SYS_PPU_THREAD_CREATE_DETACHED,
                                 "ldtoypad_bridge");
     if (ret < 0) {
         boot_log_write_fmt("[BOOT] sys_ppu_thread_create FAILED ret=%d", ret);
@@ -409,12 +409,16 @@ __attribute__((visibility("default"))) int module_start(u64 args)
  *
  * The dispatch is handled through the PRX NID export table generated
  * by the SYS_MODULE_STOP macro.  Signals the background thread to
- * exit and waits for it to join.
+ * exit via the g_running flag.
+ *
+ * NOTE: The background thread is created as DETACHED, so we do NOT
+ * call sys_ppu_thread_join() here.  A detached thread's resources
+ * are automatically reclaimed by the kernel when it exits.  Calling
+ * join on a detached thread is undefined and will cause a kernel
+ * panic.
  * --------------------------------------------------------------- */
 __attribute__((visibility("default"))) int module_stop(void)
 {
-    u64 retval = 0;
-
     if (!g_running) {
         return SYS_PRX_STOP_OK;
     }
@@ -423,10 +427,8 @@ __attribute__((visibility("default"))) int module_stop(void)
     DEBUG_PRINT("[LDTP] stopping...\n");
     g_running = 0;
 
-    if (g_thread_id != 0) {
-        sys_ppu_thread_join(g_thread_id, &retval);
-        g_thread_id = 0;
-    }
+    /* No sys_ppu_thread_join() -- thread is DETACHED.
+     * g_thread_id kept for diagnostic reference only. */
 
     boot_log_write("[BOOT] module_stop() complete");
     DEBUG_PRINT("[LDTP] stopped\n");

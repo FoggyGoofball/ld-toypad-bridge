@@ -24,3 +24,6 @@ Thumbs.db
 
 # Orphaned backup
 /c
+
+# Working tracking
+task-progress.md

@@ -25,28 +25,40 @@
 #endif
 
 /*
- * LDD ops structure — matches the layout expected by
- * sysUsbdRegisterExtraLdd (see sys/usbd.h syscall 559).
+ * LDD ops structure — matches the full CellUsbdLddOps layout
+ * expected by sysUsbdRegisterExtraLdd (syscall 559).
  *
- * The kernel expects a table of function pointers for:
- *   probe, attach, detach
+ * The kernel expects a table of 5 function pointers:
+ *   probe, attach, detach, suspend, resume
+ *
+ * Using fewer than 5 pointers will cause the kernel to read
+ * zero-filled or garbage memory at offsets 24/32, jump to
+ * address 0x00000000, and trigger a DSI panic.  We therefore
+ * provide NO-OP stubs for suspend/resume to fill the table
+ * fully.
  */
 typedef struct {
     int  (*probe)(void *desc, int dev_index);
     int  (*attach)(int dev_index);
     int  (*detach)(int dev_index);
+    int  (*suspend)(int dev_index);
+    int  (*resume)(int dev_index);
 } ldd_ops_t;
 
 /* Forward declarations */
 static int ldd_probe(void *desc, int dev_index);
 static int ldd_attach(int dev_index);
 static int ldd_detach(int dev_index);
+static int ldd_suspend(int dev_index);
+static int ldd_resume(int dev_index);
 
-/* Ops table */
+/* Ops table — all 5 slots populated */
 static ldd_ops_t g_ldd_ops = {
-    .probe  = ldd_probe,
-    .attach = ldd_attach,
-    .detach = ldd_detach,
+    .probe   = ldd_probe,
+    .attach  = ldd_attach,
+    .detach  = ldd_detach,
+    .suspend = ldd_suspend,
+    .resume  = ldd_resume,
 };
 
 /* ---------------------------------------------------------------
@@ -94,6 +106,26 @@ static int ldd_detach(int dev_index)
 
     DEBUG_PRINT("[LDD] Toy Pad detached from dev_index=%d\n", dev_index);
     memset(&g_ldd.device, 0, sizeof(g_ldd.device));
+    return 0;
+}
+
+/* ---------------------------------------------------------------
+ * LDD suspend/resume stubs — required to fill the 5-pointer
+ * CellUsbdLddOps table.  The Toy Pad device does not support
+ * selective suspend, so these are strictly NO-OP.
+ * --------------------------------------------------------------- */
+
+static int ldd_suspend(int dev_index)
+{
+    (void)dev_index;
+    DEBUG_VERBOSE("[LDD] suspend dev_index=%d (NO-OP)\n", dev_index);
+    return 0;
+}
+
+static int ldd_resume(int dev_index)
+{
+    (void)dev_index;
+    DEBUG_VERBOSE("[LDD] resume dev_index=%d (NO-OP)\n", dev_index);
     return 0;
 }
 
