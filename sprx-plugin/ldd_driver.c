@@ -137,6 +137,16 @@ int ldd_driver_init(void)
 
 void ldd_driver_shutdown(void)
 {
+    if (g_ldd.registered) {
+        int ret = cellUsbdUnregisterExtraLdd(&g_ldd_ops);
+        if (ret == CELL_USBD_PROBE_SUCCEEDED) {
+            DEBUG_PRINT("[LDD] Extra LDD unregistered OK\n");
+        } else {
+            DEBUG_ERROR("[LDD] cellUsbdUnregisterExtraLdd failed: 0x%08X\n", ret);
+        }
+        g_ldd.registered = 0;
+    }
+
     memset(&g_ldd, 0, sizeof(g_ldd));
     DEBUG_PRINT("[LDD] Extra LDD shutdown\n");
 }

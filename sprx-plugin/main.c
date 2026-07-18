@@ -122,6 +122,7 @@ extern void debug_shutdown(void);
 extern void toypad_state_init(void);
 extern void toypad_state_deinit(void);
 extern int  network_init(uint16_t port);
+extern void network_wait_ready(void);
 extern void network_shutdown(void);
 extern int  network_recv(uint8_t *buf, int size);
 extern int  ldd_driver_init(void);
@@ -142,10 +143,14 @@ static void worker_thread(uint64_t arg)
     papertrail("OK: toypad_state_init");
 
     papertrail("Step 7: network_init(28472)...");
-    if (network_init(28472) != 0)
+    if (network_init(28472) != 0) {
         papertrail("WARN: network_init failed, continuing");
-    else
+    } else {
         papertrail("OK: network_init");
+        papertrail("Step 7b: network_wait_ready()...");
+        network_wait_ready();
+        papertrail("OK: network_wait_ready");
+    }
 
     papertrail("Step 8: ldd_driver_init()...");
     if (ldd_driver_init() != 0)

@@ -37,7 +37,8 @@ typedef struct {
     uint8_t     ep_addr_out;     /**< OUT endpoint address (e.g. 0x01)          */
     ldd_pipe_handle_t pipe_in;   /**< Open pipe handle for IN endpoint          */
     ldd_pipe_handle_t pipe_out;  /**< Open pipe handle for OUT endpoint         */
-    uint8_t     raw_in[64];      /**< Last IN data received                     */
+    uint8_t     raw_in[64] __attribute__((aligned(128)));
+                                 /**< Last IN data received (128B aligned for DMA) */
     int         raw_in_len;      /**< Length of last IN data                    */
 } ldd_device_t;
 

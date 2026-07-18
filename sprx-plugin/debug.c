@@ -256,6 +256,7 @@ void debug_init(void)
     g_debug.remote_addr.sin_addr.s_addr = 0;
 
     g_debug.socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+
     g_debug.initialized = 1;
 }
 

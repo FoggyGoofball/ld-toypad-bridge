@@ -1,28 +1,61 @@
 #!/usr/bin/env bash
+# Build script for LD-ToyPad Bridge SPRX (Sony SDK)
+# Copies sources to /tmp, builds with WSL-accessible paths.
 set -euo pipefail
 
-# Usage:
-#   ./build.sh [source_dir]
-#
-# Optional env:
-#   FIX_PSL1GHT=1                Apply sys/usbd.h patch before build
-#   RESTORE_MAIN_FROM=/path/main.c  Restore main.c before source fixes
+SRC="/mnt/c/Users/Admin/source/repos/dimensions plugin/sprx-plugin"
+TMPDIR=/tmp/ldtoypad-build
+rm -rf "$TMPDIR"
+mkdir -p "$TMPDIR"
 
-SRC_DIR="${1:-$(pwd)}"
+# Copy all C sources and headers
+cp "$SRC"/main.c "$SRC"/ldd_driver.c "$SRC"/network.c "$SRC"/toypad_state.c \
+   "$SRC"/debug.c "$SRC"/compat.c "$TMPDIR/"
+cp "$SRC"/ldd_driver.h "$SRC"/network.h "$SRC"/debug.h "$SRC"/toypad_state.h \
+   "$SRC"/syscall.h "$TMPDIR/"
 
-if [[ ! -d "$SRC_DIR" ]]; then
-	echo "[build] Source directory not found: $SRC_DIR" >&2
-	exit 1
-fi
+# Write a WSL-native Makefile
+CELL_SDK="/mnt/c/usr/local/cell"
+CROSS_PREFIX="$CELL_SDK/host-win32/ppu/ppu-lv2"
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+CC="$CROSS_PREFIX/bin/gcc.exe"
+LD="$CROSS_PREFIX/bin/gcc.exe"
+SCETOOL="wsl /usr/local/ps3dev/bin/make_self"
 
-if [[ "${FIX_PSL1GHT:-0}" == "1" ]]; then
-	"$SCRIPT_DIR/fix_psl1ght.sh"
-fi
+TARGET="ldtoypad"
+BUILDDIR="build"
+OBJDIR="obj"
 
-RESTORE_MAIN_FROM="${RESTORE_MAIN_FROM:-}" "$SCRIPT_DIR/fix_sources.sh" "$SRC_DIR"
+C_SRCS="main.c ldd_driver.c network.c toypad_state.c debug.c compat.c"
+C_OBJS=""
+for f in $C_SRCS; do
+  C_OBJS="$C_OBJS $OBJDIR/${f%.c}.o"
+done
 
-make -C "$SRC_DIR" clean >/dev/null 2>&1 || true
-make -C "$SRC_DIR" all
+INCLUDES="-I$CELL_SDK/target/ppu/include"
+CFLAGS="-mprx -std=gnu99 -O2 -g -fno-builtin -nodefaultlibs $INCLUDES"
+LDFLAGS="-mprx -nodefaultlibs -llv2_stub -lfs_stub -lnet_stub -lsysmodule_stub -lusbd_stub -lc_stub"
 
+cd "$TMPDIR"
+mkdir -p "$OBJDIR" "$BUILDDIR"
+
+echo "=== Compiling ==="
+for f in $C_SRCS; do
+  o="$OBJDIR/${f%.c}.o"
+  echo "  CC    $f"
+  $CC $CFLAGS -c "$f" -o "$o"
+done
+
+echo "=== Linking $TARGET.prx ==="
+$LD $C_OBJS $LDFLAGS -o "$BUILDDIR/$TARGET.prx"
+ls -la "$BUILDDIR/$TARGET.prx"
+
+echo "=== Signing with make_self ==="
+make_self "$BUILDDIR/$TARGET.prx" "$BUILDDIR/$TARGET.sprx"
+ls -la "$BUILDDIR/$TARGET.sprx"
+
+echo "=== Copying output ==="
+mkdir -p "$SRC/build"
+cp -v "$BUILDDIR/$TARGET.prx" "$SRC/build/$TARGET.prx"
+cp -v "$BUILDDIR/$TARGET.sprx" "$SRC/build/$TARGET.sprx"
+echo "=== Build complete ==="

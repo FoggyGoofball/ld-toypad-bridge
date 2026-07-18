@@ -1,7 +1,8 @@
 # ftp-deploy.ps1 — Deploy SPRX to PS3 and register in boot_plugins.txt
 
 $PS3_IP = "192.168.0.47"
-$SPRX_FILE = Join-Path $PSScriptRoot "sprx-plugin\ldtoypad.sprx"
+$SPRX_FILE = Join-Path $PSScriptRoot "sprx-plugin\build\ldtoypad.sprx"
+
 $REMOTE_DIR = "/dev_hdd0/plugins"
 $REMOTE_PLUGIN_PATH = "${REMOTE_DIR}/ldtoypad.sprx"
 

@@ -17,6 +17,8 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#include <sys/sys_time.h>
+
 #include "network.h"
 #include "debug.h"
 #include "syscall.h"
@@ -73,34 +75,63 @@ int network_init(uint16_t port)
     g_net.port = port;
     g_net.server_known = 0;
     g_net.last_probe_usec = 0;
-    g_net.initialized = 1;
+    /* NOT initialized yet — network_wait_ready() will mark it after
+     * confirming the interface is up (DHCP complete). This prevents
+     * sendto/recvfrom races during early boot. */
+    g_net.initialized = 0;
 
     debug_set_remote(0, 0);
 
-    DEBUG_PRINT("[NET] UDP ready on port %u\n", (unsigned)port);
+    DEBUG_PRINT("[NET] Socket bound on port %u, waiting for interface...\n", (unsigned)port);
 
-    /* Send rapid startup beacon salvo so the server can detect us.
-     * We send 10 beacons with a 100ms pause between each.  This
-     * dramatically improves the chance the PC server catches the
-     * initial announcement when boot timing is tight. */
+    return 0;
+}
+
+/* Wait for network interface to be ready for I/O.
+ * Since the Sony SDK doesn't provide poll()/select(), we use a simple
+ * sleep-based wait. The network stack on PS3 typically initializes
+ * within ~1.5 seconds after sysmodule load. We wait 3 seconds total
+ * (30 * 100ms) to be safe, then send a beacon salvo.
+ *
+ * NOTE: This is a crude heuristic. Real cellNetCtl would be ideal,
+ * but SDK 3.40 lacks it. */
+void network_wait_ready(void)
+{
+    int i;
+
+    if (g_net.initialized || g_net.socket_fd < 0) {
+        return;
+    }
+
+    DEBUG_PRINT("[NET] Waiting 3s for network interface (sleep)...\n");
+
+    /* Sleep 3 seconds to let DHCP complete and routing table populate.
+     * Total iterations: 30 * 100ms = 3s */
+    for (i = 0; i < 30; i++) {
+        sys_usleep(100000); /* 100ms per iteration */
+    }
+
+    /* Fire rapid beacon salvo now that interface should be ready */
+    DEBUG_PRINT("[NET] Sending startup beacon salvo...\n");
     {
-        int i;
         uint8_t beacon[NET_PACKET_HEADER_SIZE];
         memset(beacon, 0, sizeof(beacon));
         beacon[0] = NET_PACKET_TYPE_POLL;
-        beacon[1] = 1;  /* center zone */
+        beacon[1] = 1;
         beacon[2] = 0;
 
         for (i = 0; i < 10; i++) {
             beacon[2] = (uint8_t)i;
-            (void)sendto(g_net.socket_fd, beacon, (size_t)sizeof(beacon), 0,
+            (void)sendto(g_net.socket_fd, beacon,
+                         (size_t)sizeof(beacon), 0,
                          (const struct sockaddr*)&g_net.discovery_target,
                          (socklen_t)sizeof(g_net.discovery_target));
-            sys_usleep(100000); /* 100 ms */
+            sys_usleep(100000);
         }
     }
 
-    return 0;
+    g_net.initialized = 1;
+    DEBUG_PRINT("[NET] UDP ready on port %u\n", (unsigned)g_net.port);
 }
 
 void network_shutdown(void)

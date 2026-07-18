@@ -53,6 +53,16 @@ extern struct net_state g_net;
 int network_init(uint16_t port);
 
 /**
+ * Wait for network interface to be ready for I/O.
+ * Uses poll(POLLOUT) on the bound UDP socket to detect when the
+ * routing table is populated (DHCP complete). Blocks for up to
+ * ~3 seconds, yielding the thread via sys_usleep between polls.
+ *
+ * Must be called *after* network_init() and *before* any sendto/recvfrom.
+ */
+void network_wait_ready(void);
+
+/**
  * Shutdown the network subsystem
  * Closes the UDP socket and frees resources.
  */
