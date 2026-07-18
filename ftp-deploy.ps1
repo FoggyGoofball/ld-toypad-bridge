@@ -1,8 +1,7 @@
 # ftp-deploy.ps1 — Deploy SPRX to PS3 and register in boot_plugins.txt
 
 $PS3_IP = "192.168.0.47"
-$SPRX_FILE = "c:\Users\Admin\source\repos\dimensions plugin\sprx-plugin\build\ldtoypad.sprx"
-$FILESELF_FILE = "c:\Users\Admin\source\repos\dimensions plugin\sprx-plugin\build\ldtoypad.fake.self"
+$SPRX_FILE = Join-Path $PSScriptRoot "sprx-plugin\build\ldtoypad.sprx"
 $REMOTE_DIR = "/dev_hdd0/plugins"
 $REMOTE_PLUGIN_PATH = "${REMOTE_DIR}/ldtoypad.sprx"
 
@@ -19,15 +18,7 @@ try {
     Write-Host "  OK - ldtoypad.sprx uploaded ($(Get-Item $SPRX_FILE).Length bytes)"
 
     # ---------------------------------------------------------------
-    # Step 2: Upload fake.self (for reference)
-    # ---------------------------------------------------------------
-    $uri2 = "ftp://${PS3_IP}${REMOTE_DIR}/ldtoypad.fake.self"
-    Write-Host "Uploading ldtoypad.fake.self to ${uri2}..."
-    $wc.UploadFile($uri2, $FILESELF_FILE)
-    Write-Host "  OK - ldtoypad.fake.self uploaded"
-
-    # ---------------------------------------------------------------
-    # Step 3: Register in /dev_hdd0/boot_plugins.txt (Cobra)
+    # Step 2: Register in /dev_hdd0/boot_plugins.txt (Cobra)
     # ---------------------------------------------------------------
     Write-Host ""
     Write-Host "--- boot_plugins.txt registration ---"

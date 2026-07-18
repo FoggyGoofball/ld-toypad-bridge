@@ -12,8 +12,6 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include <sys/usbd.h>
-
 #include "toypad_state.h"
 #include "network.h"
 #include "debug.h"

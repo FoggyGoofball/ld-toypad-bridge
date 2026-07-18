@@ -1,132 +1,77 @@
-# Makefile for LD-ToyPad Bridge .sprx plugin
-# Uses PSL1GHT SDK toolchain
+# Makefile for LD-ToyPad Bridge SPRX plugin
+# Build with Sony PS3 DUPLEX SDK (SN Systems / SDK 3.40)
+# Package with make_self from PSL1GHT toolchain via WSL
+# Requires: PS3 environment variable set in WSL pointing to keys directory
+#   e.g. add to ~/.bashrc: export PS3=$HOME/.scetool
 #
-# Architecture: CellOS background thread + Extra LDD registration.
-# No LV2 kernel patching required.
+# Stub libraries:
+#   -llv2_stub       : sys_ppu_thread_*, basic LV2 syscalls
+#   -lfs_stub        : cellFsOpen/Write/Close (filesystem)
+#   -lnet_stub       : socket/bind/sendto/recvfrom/close (BSD sockets)
+#   -lsysmodule_stub : cellSysmoduleLoadModule
+#   -lusbd_stub      : cellUsbdInit, cellUsbdRegisterExtraLdd (USB)
 #
-# CRT: Uses the stock PSL1GHT lv2-sprx.o startup object for the
-# _start entry point, .sys_proc_prx_param metadata (magic 0x1B434CEC)
-# with correct R_PPC64_ADDR32 relocations for the
-# __libentstart/__libentend/__libstubstart/__libstubend symbols.
-# PRX macros in main.c (SYS_MODULE_INFO/START/STOP from <sys/prx.h>)
-# generate the .rodata.sceModuleInfo section and .lib.ent export table.
-# No custom crt0.S is needed.
+# compat.c is intentionally excluded: -lc_stub provides memcpy/memset/strlen/close
 
-.RECIPEPREFIX := >
+CELL_SDK   ?= C:/usr/local/cell
+CELL_HOST   = $(CELL_SDK)/host-win32
+CELL_TARGET = $(CELL_SDK)/target
 
-PS3DEV   ?= /usr/local/ps3dev
-PSL1GHT  ?= $(PS3DEV)/psl1ght
+CROSS_PREFIX := $(CELL_HOST)/ppu/ppu-lv2
 
-CROSS := powerpc64-ps3-elf-
-
-CC       := $(PS3DEV)/ppu/bin/$(CROSS)gcc
-LD       := $(PS3DEV)/ppu/bin/$(CROSS)gcc
-STRIP    := $(PS3DEV)/ppu/bin/$(CROSS)strip
-OBJCOPY  := $(PS3DEV)/ppu/bin/$(CROSS)objcopy
-
-SPRX     := $(PS3DEV)/bin/sprxlinker
-SELF     := $(PS3DEV)/bin/make_self
-FSELF    := $(PS3DEV)/bin/fself
+CC       := $(CROSS_PREFIX)/bin/gcc.exe
+LD       := $(CROSS_PREFIX)/bin/gcc.exe
+SCETOOL  := wsl /usr/local/ps3dev/bin/make_self
 
 TARGET   := ldtoypad
-BUILDDIR := $(CURDIR)/build
-OBJDIR   := $(CURDIR)/obj
+BUILDDIR := build
+OBJDIR   := obj
 
-# ---------------------------------------------------------------
-# Source files -- no assembler sources; PRX macros in main.c handle
-# the export table generation.
-# ---------------------------------------------------------------
-C_SRCS := main.c ldd_driver.c network.c toypad_state.c debug.c compat.c
-C_OBJS := $(C_SRCS:%.c=$(OBJDIR)/%.o)
+C_SRCS   := main.c ldd_driver.c network.c toypad_state.c debug.c
+C_OBJS   := $(C_SRCS:%.c=$(OBJDIR)/%.o)
 
-# Reduced section-splitting avoids ELF PHDR overflow
-MACHDEP  := -mhard-float -fmodulo-sched
+INCLUDES := -I$(CELL_TARGET)/ppu/include
 
-INCLUDES := -I$(PSL1GHT)/ppu/include -I$(PSL1GHT)/ppu/include/simdmath
+# CRITICAL: -fno-builtin -nodefaultlibs prevents TLS/stack canary crashes
+# -nodefaultlibs retains prx_crt0.o (provides _start, .sys_proc_prx_param).
+CFLAGS := -mprx -std=gnu99 -O2 -g -fno-builtin -nodefaultlibs $(INCLUDES)
 
-# NO -fPIC, -fPIE, or -shared:
-#   PSL1GHT SDK builds SPRX as ET_EXEC (statically-linked).  The kernel
-#   PRX loader and sprxlinker both expect ET_EXEC output.  -fPIE and -pie
-#   introduce GOT-based addressing designed for userspace process images,
-#   which is inappropriate for a VSH plugin background thread that runs
-#   in kernel PRX address space.
-#
-#   The standard PSL1GHT model uses -fno-pic, with relocation metadata
-#   provided by lv2-sprx.o (the stock PRX startup object).  The Cobra
-#   VSH loader handles memory mapping through its own internal PRX
-#   loader, not via ELF PIE relocations.
-CFLAGS := $(MACHDEP) -O2 -g -std=gnu99 -fno-pic -fno-stack-protector -fvisibility=hidden -D__SPRX__ \
-          $(INCLUDES)
+# Stub libraries needed for LD-ToyPad plugin functions.
+# -lusbd_stub added for cellUsbdInit / cellUsbdRegisterExtraLdd.
+LDFLAGS := -mprx -nodefaultlibs \
+           -llv2_stub -lfs_stub -lnet_stub -lsysmodule_stub -lusbd_stub -lc_stub
 
-# Linker flags:
-# -nostdlib -nodefaultlibs: no standard CRT or libc
-# NOTE: -nostartfiles is NOT used. The stock lv2-sprx.o provides the
-#   _start entry point. Using -nostartfiles would suppress its
-#   inclusion via the default linker script.
-# No -fPIE, -pie, or -Wl,-q:
-#   VSH SPRX modules use the standard PSL1GHT ET_EXEC model.  The
-#   kernel PRX loader and sprxlinker handle all relocation through
-#   the NID import/export tables (.lib.ent / .lib.stub) and the
-#   .sys_proc_prx_param metadata provided by lv2-sprx.o.
-#
-# lv2-sprx.o provides:
-#   - _start entry point (calls module_start)
-#   - .sys_proc_prx_param section (magic 0x1B434CEC) with
-#     R_PPC64_ADDR32 relocation entries for the
-#     __libentstart/__libentend/__libstubstart/__libstubend symbols
-#   - Correct PRX type (0x04) for Cobra VSH compatibility
-#
-# The PRX macros in main.c (SYS_MODULE_INFO/START/STOP) generate
-# the .rodata.sceModuleInfo section and .lib.ent export table
-# with proper NID entries for module_start/module_stop.
-# lib mapping (PSL1GHT stub libraries):
-#   lv2-sprx.o  - PRX startup object (_start, .sys_proc_prx_param)
-#   -lusb       - sysUsbd* USB driver APIs
-#   -lnet       - sysNet* socket APIs
-#   -lsysutil   - sysUtil* system utility APIs
-#   -lsysmodule - sysModuleLoad() sysmodule dependency resolution
-#   -lsysfs     - sysFs*, sysLv2FsOpen() filesystem I/O
-#   -lrt        - sysTimer* real-time APIs
-#   -llv2       - sys_ppu_thread_*, sysUsleep() LV2 syscall wrappers
-#   -lgcc       - GCC runtime support (__divdi3, etc.)
-LDFLAGS := $(MACHDEP) -nostdlib -nodefaultlibs \
-           -L$(PSL1GHT)/ppu/lib -L$(PS3DEV)/ppu/lib -L$(PS3DEV)/portlibs/ppu/lib \
-           /usr/local/ps3dev/ppu/powerpc64-ps3-elf/lib/lv2-sprx.o \
-           -lusb -lnet -lsysutil -lsysmodule -lsysfs -lrt -llv2 \
-           -Wl,--start-group -lgcc -Wl,--end-group
+# make_self is simple: usage is `make_self input.prx output.sprx`
+# No special flags needed.
+SCETOOL_FLAGS :=
 
 all: dirs $(BUILDDIR)/$(TARGET).sprx
 
 dirs:
->@mkdir -p $(OBJDIR) $(BUILDDIR)
+	mkdir -p "$(OBJDIR)" "$(BUILDDIR)"
 
 $(OBJDIR)/%.o: %.c
->@echo "  CC    $<"
->$(CC) $(CFLAGS) -c $< -o $@
+	@echo "  CC    $<"
+	$(CC) $(CFLAGS) -c "$<" -o "$@"
 
-$(BUILDDIR)/$(TARGET).elf: $(C_OBJS)
->@echo "  LD    $@"
->$(LD) $(C_OBJS) $(LDFLAGS) -o $@
+$(BUILDDIR)/$(TARGET).prx: $(C_OBJS)
+	@echo "  LD    $@"
+	$(LD) $(C_OBJS) $(LDFLAGS) -o "$@"
 
-# Strip the ELF before feeding to sprxlinker:
-#   Bare strip is correct for the standard PSL1GHT SPRX model
-#   (ET_EXEC with .lib.ent/.lib.stub NID tables).  There are no
-#   ELF .rela.* relocations to preserve — the Cobra kernel PRX
-#   loader does not use ELF relocations.  It maps the module
-#   through the .sys_proc_prx_param metadata and resolves NID
-#   imports via the .lib.stub table that sprxlinker generates.
-$(BUILDDIR)/$(TARGET).sprx: $(BUILDDIR)/$(TARGET).elf
->@echo "  SPRX  $@"
->$(STRIP) $< -o $(BUILDDIR)/$(TARGET)-strip.elf
->$(SPRX) $(BUILDDIR)/$(TARGET)-strip.elf
->$(SELF) $(BUILDDIR)/$(TARGET)-strip.elf $@
->$(FSELF) $(BUILDDIR)/$(TARGET)-strip.elf $(BUILDDIR)/$(TARGET).fake.self
->@echo "Build complete: $@"
->ls -la $@ $(BUILDDIR)/$(TARGET).fake.self
+# make_self must be run from within WSL with WSL-accessible paths.
+# We copy the .prx to a WSL temp (/tmp), sign it, copy the .sprx back.
+$(BUILDDIR)/$(TARGET).sprx: $(BUILDDIR)/$(TARGET).prx
+	@echo "  SPRX  $@ (via make_self in WSL)"
+	wsl bash -c 'cp "$(subst /mnt/c,C:,/)"/"$(subst \,/, $(subst C:,,$(abspath $<)))" /tmp/$(TARGET).prx 2>/dev/null; \
+		cp "$(realpath $<)" /tmp/$(TARGET).prx; \
+		/usr/local/ps3dev/bin/make_self /tmp/$(TARGET).prx /tmp/$(TARGET).sprx && \
+		cp /tmp/$(TARGET).sprx "$(realpath $@)" && \
+		echo "  SPRX  Signed: $(realpath $@)"'
+	@echo "Build complete: $(BUILDDIR)/$(TARGET).sprx"
 
 clean:
->@echo "  CLEAN"
->rm -rf $(OBJDIR) $(BUILDDIR)
+	@echo "  CLEAN"
+	rm -rf "$(OBJDIR)" "$(BUILDDIR)"
 
 rebuild: clean all
 

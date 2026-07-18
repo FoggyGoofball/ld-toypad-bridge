@@ -11,7 +11,7 @@
 #ifndef TOYPAD_STATE_H
 #define TOYPAD_STATE_H
 
-#include <ppu-types.h>
+#include <stdint.h>
 
 // Toy Pad USB identifiers (LEGO Dimensions Toy Pad by PDP/Logic3)
 #define TOYPAD_VID  0x0E6F  // Logic3 / PDP

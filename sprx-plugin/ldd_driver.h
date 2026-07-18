@@ -14,7 +14,7 @@
 #ifndef LDD_DRIVER_H
 #define LDD_DRIVER_H
 
-#include <ppu-types.h>
+#include <stdint.h>
 
 /**
  * Maximum number of USB pipes (endpoints) we track.
@@ -44,7 +44,6 @@ typedef struct {
 /* LDD global state -- CRT bypass accessible from main.c */
 struct ldd_global_state {
     int            registered;
-    int            registration_handle;
     ldd_device_t   device;
 };
 extern struct ldd_global_state g_ldd;

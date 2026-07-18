@@ -1,24 +1,32 @@
+/**
+ * debug.c — Debug logging for LD-ToyPad SPRX (Sony SDK)
+ *
+ * Provides:
+ *   1. Ring buffer in memory (64KB)
+ *   2. File logging to /dev_hdd0/plugins/ldtoypad_debug.log via cellFsWrite
+ *   3. Remote UDP log streaming via BSD sockets (sendto)
+ *
+ * Sony SDK equivalents:
+ *   cellFsOpen / cellFsWrite / cellFsClose  (from -lfs_stub)
+ *   socket / sendto / close                  (from -lnet_stub)
+ */
+
+#include <stdint.h>
 #include <stdarg.h>
-#include <ppu-types.h>
+#include <string.h>
+
+#include <cell/cell_fs.h>
 #include <sys/socket.h>
-#include <net/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
-#include <lv2/sysfs.h>
+#include <unistd.h>
 
 #include "debug.h"
 
 #define DEBUG_RING_BUFFER_SIZE  (64 * 1024)
 #define DEBUG_MAX_LINE_LENGTH   256
 
-struct debug_state {
-    char ring_buffer[DEBUG_RING_BUFFER_SIZE];
-    uint32_t write_pos;
-    int socket_fd;
-    int remote_enabled;
-    struct sockaddr_in remote_addr;
-    int initialized;
-};
+/* g_debug is defined here (extern in debug.h) */
 struct debug_state g_debug;
 
 static void append_char(char* out, int cap, int* pos, char c)
@@ -42,7 +50,7 @@ static void append_str(char* out, int cap, int* pos, const char* s)
     }
 }
 
-static void append_u64_base(char* out, int cap, int* pos, u64 v, int base, int uppercase)
+static void append_u64_base(char* out, int cap, int* pos, uint64_t v, int base, int uppercase)
 {
     char tmp[32];
     int i = 0;
@@ -58,8 +66,8 @@ static void append_u64_base(char* out, int cap, int* pos, u64 v, int base, int u
     }
 
     while (v != 0 && i < (int)sizeof(tmp)) {
-        tmp[i++] = d[v % (u64)base];
-        v /= (u64)base;
+        tmp[i++] = d[v % (uint64_t)base];
+        v /= (uint64_t)base;
     }
 
     while (i > 0) {
@@ -124,63 +132,63 @@ static int debug_vformat(char* out, int cap, const char* fmt, va_list ap)
             }
             case 'd':
             case 'i': {
-                s64 v;
+                int64_t v;
                 if (len_l >= 2) {
-                    v = (s64)va_arg(ap, long long);
+                    v = (int64_t)va_arg(ap, long long);
                 } else if (len_l == 1) {
-                    v = (s64)va_arg(ap, long);
+                    v = (int64_t)va_arg(ap, long);
                 } else {
-                    v = (s64)va_arg(ap, int);
+                    v = (int64_t)va_arg(ap, int);
                 }
                 if (v < 0) {
-                    u64 uv = (u64)(-(v + 1)) + 1;
+                    uint64_t uv = (uint64_t)(-(v + 1)) + 1;
                     append_char(out, cap, &pos, '-');
                     append_u64_base(out, cap, &pos, uv, 10, 0);
                 } else {
-                    append_u64_base(out, cap, &pos, (u64)v, 10, 0);
+                    append_u64_base(out, cap, &pos, (uint64_t)v, 10, 0);
                 }
                 break;
             }
             case 'u': {
-                u64 v;
+                uint64_t v;
                 if (len_l >= 2) {
-                    v = (u64)va_arg(ap, unsigned long long);
+                    v = (uint64_t)va_arg(ap, unsigned long long);
                 } else if (len_l == 1) {
-                    v = (u64)va_arg(ap, unsigned long);
+                    v = (uint64_t)va_arg(ap, unsigned long);
                 } else {
-                    v = (u64)va_arg(ap, unsigned int);
+                    v = (uint64_t)va_arg(ap, unsigned int);
                 }
-                append_u64_base(out, cap, &pos, (u64)v, 10, 0);
+                append_u64_base(out, cap, &pos, (uint64_t)v, 10, 0);
                 break;
             }
             case 'x': {
-                u64 v;
+                uint64_t v;
                 if (len_l >= 2) {
-                    v = (u64)va_arg(ap, unsigned long long);
+                    v = (uint64_t)va_arg(ap, unsigned long long);
                 } else if (len_l == 1) {
-                    v = (u64)va_arg(ap, unsigned long);
+                    v = (uint64_t)va_arg(ap, unsigned long);
                 } else {
-                    v = (u64)va_arg(ap, unsigned int);
+                    v = (uint64_t)va_arg(ap, unsigned int);
                 }
-                append_u64_base(out, cap, &pos, (u64)v, 16, 0);
+                append_u64_base(out, cap, &pos, (uint64_t)v, 16, 0);
                 break;
             }
             case 'X': {
-                u64 v;
+                uint64_t v;
                 if (len_l >= 2) {
-                    v = (u64)va_arg(ap, unsigned long long);
+                    v = (uint64_t)va_arg(ap, unsigned long long);
                 } else if (len_l == 1) {
-                    v = (u64)va_arg(ap, unsigned long);
+                    v = (uint64_t)va_arg(ap, unsigned long);
                 } else {
-                    v = (u64)va_arg(ap, unsigned int);
+                    v = (uint64_t)va_arg(ap, unsigned int);
                 }
-                append_u64_base(out, cap, &pos, (u64)v, 16, 1);
+                append_u64_base(out, cap, &pos, (uint64_t)v, 16, 1);
                 break;
             }
             case 'p': {
                 uintptr_t v = (uintptr_t)va_arg(ap, void*);
                 append_str(out, cap, &pos, "0x");
-                append_u64_base(out, cap, &pos, (u64)v, 16, 0);
+                append_u64_base(out, cap, &pos, (uint64_t)v, 16, 0);
                 break;
             }
             default:
@@ -215,13 +223,12 @@ static void debug_ring_write(const char* text, int len)
         g_debug.ring_buffer[g_debug.write_pos++ % DEBUG_RING_BUFFER_SIZE] = text[i];
     }
 
-    /* Physical File I/O via PSL1GHT LV2 filesystem API */
-    u32 debug_log_mode = 0666;
-    if (sysLv2FsOpen("/dev_hdd0/plugins/ldtoypad_debug.log",
-                     SYS_O_WRONLY | SYS_O_CREAT | SYS_O_APPEND,
-                     &fd, debug_log_mode, NULL, 0) == 0) {
-        sysFsWrite(fd, text, (uint64_t)len, &written);
-        sysFsClose(fd);
+    /* File I/O via Sony SDK cellFs API */
+    if (cellFsOpen("/dev_hdd0/plugins/ldtoypad_debug.log",
+                   CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_APPEND,
+                   &fd, NULL, 0) == CELL_OK) {
+        cellFsWrite(fd, text, (uint64_t)len, &written);
+        cellFsClose(fd);
     }
 }
 
@@ -231,12 +238,12 @@ static void debug_send_remote(const char* text, int len)
         return;
     }
 
-    (void)sysNetSendto(g_debug.socket_fd,
-                       text,
-                       (size_t)len,
-                       0,
-                       (const struct sockaddr*)&g_debug.remote_addr,
-                       (socklen_t)sizeof(g_debug.remote_addr));
+    (void)sendto(g_debug.socket_fd,
+                 text,
+                 (size_t)len,
+                 0,
+                 (const struct sockaddr*)&g_debug.remote_addr,
+                 (socklen_t)sizeof(g_debug.remote_addr));
 }
 
 void debug_init(void)
@@ -248,14 +255,14 @@ void debug_init(void)
     g_debug.remote_addr.sin_port = 0;
     g_debug.remote_addr.sin_addr.s_addr = 0;
 
-    g_debug.socket_fd = sysNetSocket(AF_INET, SOCK_DGRAM, 0);
+    g_debug.socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
     g_debug.initialized = 1;
 }
 
 void debug_shutdown(void)
 {
     if (g_debug.socket_fd >= 0) {
-        sysNetClose(g_debug.socket_fd);
+        close(g_debug.socket_fd);
         g_debug.socket_fd = -1;
     }
 

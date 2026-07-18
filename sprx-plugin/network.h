@@ -12,7 +12,8 @@
 #ifndef NETWORK_H
 #define NETWORK_H
 
-#include <ppu-types.h>
+#include <stdint.h>
+#include <netinet/in.h>
 
 /* Network global state -- CRT bypass accessible from main.c */
 struct net_state {
@@ -21,7 +22,7 @@ struct net_state {
     int server_known;
     int broadcast_enabled;
     uint16_t port;
-    u64 last_probe_usec;
+    uint64_t last_probe_usec;
     struct sockaddr_in server;
     struct sockaddr_in discovery_target;
 };

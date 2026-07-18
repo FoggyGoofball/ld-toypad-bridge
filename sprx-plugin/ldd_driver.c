@@ -1,17 +1,22 @@
 /**
- * ldd_driver.c
- * Native Logical Device Driver — Extra LDD registration for Toy Pad.
+ * ldd_driver.c — Extra LDD registration for Toy Pad (Sony SDK)
  *
- * Registers with CellOS via sysUsbdRegisterExtraLdd so the kernel
+ * Registers with CellOS via cellUsbdRegisterExtraLdd so the kernel
  * notifies us when a USB device with matching VID/PID is connected.
  *
  * Until hardware is attached, the background thread operates in
  * "network-only" mode: the PC server discovers the PS3 via UDP beacons.
+ *
+ * Sony SDK API (from <cell/usbd.h>):
+ *   cellUsbdInit()                         — no arguments, returns int32_t
+ *   cellUsbdRegisterExtraLdd(ops, vid, pid) — simplified signature
+ *   CellUsbdLddOps { name, probe, attach, detach } — 3 callbacks + name
  */
 
 #include <string.h>
-#include <ppu-types.h>
-#include <sys/usbd.h>
+#include <stdint.h>
+
+#include <cell/usbd.h>
 
 #include "ldd_driver.h"
 #include "debug.h"
@@ -24,41 +29,25 @@
 #define LDTP_TOYPAD_PID 0x0241
 #endif
 
-/*
- * LDD ops structure — matches the full CellUsbdLddOps layout
- * expected by sysUsbdRegisterExtraLdd (syscall 559).
- *
- * The kernel expects a table of 5 function pointers:
- *   probe, attach, detach, suspend, resume
- *
- * Using fewer than 5 pointers will cause the kernel to read
- * zero-filled or garbage memory at offsets 24/32, jump to
- * address 0x00000000, and trigger a DSI panic.  We therefore
- * provide NO-OP stubs for suspend/resume to fill the table
- * fully.
- */
-typedef struct {
-    int  (*probe)(void *desc, int dev_index);
-    int  (*attach)(int dev_index);
-    int  (*detach)(int dev_index);
-    int  (*suspend)(int dev_index);
-    int  (*resume)(int dev_index);
-} ldd_ops_t;
-
 /* Forward declarations */
-static int ldd_probe(void *desc, int dev_index);
-static int ldd_attach(int dev_index);
-static int ldd_detach(int dev_index);
-static int ldd_suspend(int dev_index);
-static int ldd_resume(int dev_index);
+static int32_t ldd_probe(int32_t dev_id);
+static int32_t ldd_attach(int32_t dev_id);
+static int32_t ldd_detach(int32_t dev_id);
 
-/* Ops table — all 5 slots populated */
-static ldd_ops_t g_ldd_ops = {
-    .probe   = ldd_probe,
-    .attach  = ldd_attach,
-    .detach  = ldd_detach,
-    .suspend = ldd_suspend,
-    .resume  = ldd_resume,
+/*
+ * Sony SDK CellUsbdLddOps structure.
+ *   - name:     string identifier for the LDD
+ *   - probe:    called when kernel finds a new device; return 0 to claim
+ *   - attach:   called after probe succeeds; set up pipes etc.
+ *   - detach:   called when device is removed; clean up
+ *
+ * Only 3 callbacks (no suspend/resume in the Sony SDK version).
+ */
+static CellUsbdLddOps g_ldd_ops = {
+    .name   = "ldtoypad",
+    .probe  = ldd_probe,
+    .attach = ldd_attach,
+    .detach = ldd_detach,
 };
 
 /* ---------------------------------------------------------------
@@ -70,27 +59,24 @@ struct ldd_global_state g_ldd;
  * LDD callbacks (called from CellOS USB context — be quick!)
  * --------------------------------------------------------------- */
 
-static int ldd_probe(void *desc, int dev_index)
+static int32_t ldd_probe(int32_t dev_id)
 {
-    /* In PSL1GHT, we work with the raw sysUsbd API.
-     * For now, we accept any device index and let attach()
-     * verify the descriptor. */
-    (void)desc;
-    DEBUG_VERBOSE("[LDD] probe dev_index=%d\n", dev_index);
-    return 1; /* claim everything — attach will verify */
+    (void)dev_id;
+    DEBUG_VERBOSE("[LDD] probe dev_id=%d\n", dev_id);
+    return 0; /* claim — attach() will finalize */
 }
 
-static int ldd_attach(int dev_index)
+static int32_t ldd_attach(int32_t dev_id)
 {
-    DEBUG_PRINT("[LDD] attach dev_index=%d\n", dev_index);
+    DEBUG_PRINT("[LDD] attach dev_id=%d\n", dev_id);
 
     memset(&g_ldd.device, 0, sizeof(g_ldd.device));
     g_ldd.device.claimed    = 1;
-    g_ldd.device.dev_index  = dev_index;
+    g_ldd.device.dev_index  = dev_id;
     g_ldd.device.ep_addr_in  = 0x81;
     g_ldd.device.ep_addr_out = 0x01;
-    g_ldd.device.pipe_in  = dev_index | 0x100;
-    g_ldd.device.pipe_out = dev_index | 0x200;
+    g_ldd.device.pipe_in  = dev_id | 0x100;
+    g_ldd.device.pipe_out = dev_id | 0x200;
     g_ldd.device.raw_in_len = 0;
 
     DEBUG_PRINT("[LDD] Toy Pad attached: IN=0x%02X OUT=0x%02X\n",
@@ -98,34 +84,14 @@ static int ldd_attach(int dev_index)
     return 0;
 }
 
-static int ldd_detach(int dev_index)
+static int32_t ldd_detach(int32_t dev_id)
 {
-    if (!g_ldd.device.claimed || g_ldd.device.dev_index != dev_index) {
+    if (!g_ldd.device.claimed || g_ldd.device.dev_index != dev_id) {
         return 0;
     }
 
-    DEBUG_PRINT("[LDD] Toy Pad detached from dev_index=%d\n", dev_index);
+    DEBUG_PRINT("[LDD] Toy Pad detached from dev_id=%d\n", dev_id);
     memset(&g_ldd.device, 0, sizeof(g_ldd.device));
-    return 0;
-}
-
-/* ---------------------------------------------------------------
- * LDD suspend/resume stubs — required to fill the 5-pointer
- * CellUsbdLddOps table.  The Toy Pad device does not support
- * selective suspend, so these are strictly NO-OP.
- * --------------------------------------------------------------- */
-
-static int ldd_suspend(int dev_index)
-{
-    (void)dev_index;
-    DEBUG_VERBOSE("[LDD] suspend dev_index=%d (NO-OP)\n", dev_index);
-    return 0;
-}
-
-static int ldd_resume(int dev_index)
-{
-    (void)dev_index;
-    DEBUG_VERBOSE("[LDD] resume dev_index=%d (NO-OP)\n", dev_index);
     return 0;
 }
 
@@ -136,7 +102,6 @@ static int ldd_resume(int dev_index)
 int ldd_driver_init(void)
 {
     int ret;
-    u32 usbd_handle = 0;
 
     if (g_ldd.registered) {
         DEBUG_PRINT("[LDD] Already registered\n");
@@ -145,31 +110,28 @@ int ldd_driver_init(void)
 
     memset(&g_ldd, 0, sizeof(g_ldd));
 
-    /* Initialize USB subsystem */
-    ret = sysUsbdInitialize(&usbd_handle);
-    if (ret < 0) {
-        DEBUG_ERROR("[LDD] sysUsbdInitialize failed: %d\n", ret);
+    /* Initialize USB subsystem (no handle returned in Sony SDK) */
+    ret = cellUsbdInit();
+    if (ret != CELL_USBD_PROBE_SUCCEEDED) {
+        DEBUG_ERROR("[LDD] cellUsbdInit failed: 0x%08X\n", ret);
         return -1;
     }
+    DEBUG_PRINT("[LDD] cellUsbdInit OK\n");
 
     /* Register Extra LDD for the Toy Pad VID/PID
-     * sysUsbdRegisterExtraLdd(handle, lddOps, strLen, vendorID, productID, unk1) */
-    ret = sysUsbdRegisterExtraLdd(usbd_handle,
-                                  (void*)&g_ldd_ops,
-                                  0,             /* strLen */
-                                  LDTP_TOYPAD_VID,
-                                  LDTP_TOYPAD_PID,
-                                  0);            /* unk1 */
-    if (ret < 0) {
-        DEBUG_ERROR("[LDD] sysUsbdRegisterExtraLdd failed: %d\n", ret);
+     * Signature: cellUsbdRegisterExtraLdd(ops, id_vendor, id_product) */
+    ret = cellUsbdRegisterExtraLdd(&g_ldd_ops,
+                                   LDTP_TOYPAD_VID,
+                                   LDTP_TOYPAD_PID);
+    if (ret != CELL_USBD_PROBE_SUCCEEDED) {
+        DEBUG_ERROR("[LDD] cellUsbdRegisterExtraLdd failed: 0x%08X\n", ret);
         DEBUG_PRINT("[LDD] Extra LDD not supported in this CFW.\n");
         DEBUG_PRINT("[LDD] Plugin will operate in network-only mode.\n");
         return -1;
     }
 
-    g_ldd.registration_handle = usbd_handle;
     g_ldd.registered = 1;
-    DEBUG_PRINT("[LDD] Extra LDD registered OK (handle=%d)\n", usbd_handle);
+    DEBUG_PRINT("[LDD] Extra LDD registered OK\n");
     return 0;
 }
 

@@ -1,12 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Dynamically locate the script root context
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+SRC="$SCRIPT_DIR/sprx-plugin"
+DST="$SCRIPT_DIR/sprx-plugin/build"
+
 TMPDIR=/tmp/ldtoypad-build
 rm -rf "$TMPDIR"
 mkdir -p "$TMPDIR"
 
-SRC="/mnt/c/Users/Admin/source/repos/dimensions plugin/sprx-plugin"
-DST="/mnt/c/Users/Admin/source/repos/dimensions plugin/sprx-plugin/build"
+mkdir -p "$DST"
 
 cp "$SRC"/*.c "$TMPDIR/"
 cp "$SRC"/*.h "$TMPDIR/"

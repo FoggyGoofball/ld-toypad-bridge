@@ -1,22 +1,25 @@
 /**
- * network.c
- * UDP transport for Toy Pad bridge traffic.
+ * network.c — UDP transport for Toy Pad bridge (Sony SDK)
  *
- * Refactored: the startup recv spin (busy-wait loop) has been removed.
- * Discovery now happens naturally via the background thread's
- * periodic polling loop.
+ * Uses BSD socket API (socket/bind/sendto/recvfrom/close) from
+ * -lnet_stub  (Sony SDK network library).
+ *
+ * Discovered server IP/port is stored in g_net.server.  When no
+ * server is known, periodic broadcast probes are sent on the
+ * discovery_target (INADDR_BROADCAST).
  */
 
 #include <string.h>
+#include <stdint.h>
 
 #include <sys/socket.h>
-#include <sys/systime.h>
-#include <net/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <unistd.h>
 
 #include "network.h"
 #include "debug.h"
+#include "syscall.h"
 
 #ifndef LDTP_DEBUG_LOG_PORT
 #define LDTP_DEBUG_LOG_PORT 28473
@@ -26,16 +29,7 @@
 #define LDTP_DISCOVERY_INTERVAL_USEC 250000ULL
 #endif
 
-struct net_state {
-    int socket_fd;
-    int initialized;
-    int server_known;
-    int broadcast_enabled;
-    uint16_t port;
-    u64 last_probe_usec;
-    struct sockaddr_in server;
-    struct sockaddr_in discovery_target;
-};
+/* g_net is defined here (extern in network.h) */
 struct net_state g_net;
 
 int network_init(uint16_t port)
@@ -46,7 +40,7 @@ int network_init(uint16_t port)
         return 0;
     }
 
-    g_net.socket_fd = sysNetSocket(AF_INET, SOCK_DGRAM, 0);
+    g_net.socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
     if (g_net.socket_fd < 0) {
         DEBUG_ERROR("[NET] socket failed: %d\n", g_net.socket_fd);
         return -1;
@@ -57,9 +51,9 @@ int network_init(uint16_t port)
     local_addr.sin_port = htons(port);
     local_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-    if (sysNetBind(g_net.socket_fd, (struct sockaddr*)&local_addr, sizeof(local_addr)) < 0) {
+    if (bind(g_net.socket_fd, (struct sockaddr*)&local_addr, sizeof(local_addr)) < 0) {
         DEBUG_ERROR("[NET] bind failed on port %u\n", (unsigned)port);
-        sysNetClose(g_net.socket_fd);
+        close(g_net.socket_fd);
         g_net.socket_fd = -1;
         return -1;
     }
@@ -99,16 +93,12 @@ int network_init(uint16_t port)
 
         for (i = 0; i < 10; i++) {
             beacon[2] = (uint8_t)i;
-            (void)sysNetSendto(g_net.socket_fd, beacon, (size_t)sizeof(beacon), 0,
-                               (const struct sockaddr*)&g_net.discovery_target,
-                               (socklen_t)sizeof(g_net.discovery_target));
-            sysUsleep(100000); /* 100 ms */
+            (void)sendto(g_net.socket_fd, beacon, (size_t)sizeof(beacon), 0,
+                         (const struct sockaddr*)&g_net.discovery_target,
+                         (socklen_t)sizeof(g_net.discovery_target));
+            sys_usleep(100000); /* 100 ms */
         }
     }
-
-    /* NOTE: The old startup recv spin (busy-wait loop) has been REMOVED.
-     * Server discovery now happens naturally via the background thread's
-     * periodic network_recv() calls in the main loop. */
 
     return 0;
 }
@@ -116,7 +106,7 @@ int network_init(uint16_t port)
 void network_shutdown(void)
 {
     if (g_net.socket_fd >= 0) {
-        sysNetClose(g_net.socket_fd);
+        close(g_net.socket_fd);
         g_net.socket_fd = -1;
     }
 
@@ -137,9 +127,9 @@ int network_send(const uint8_t* data, int len)
         return -1;
     }
 
-    ret = sysNetSendto(g_net.socket_fd, data, (size_t)len, 0,
-                       (const struct sockaddr*)&g_net.server,
-                       (socklen_t)sizeof(g_net.server));
+    ret = sendto(g_net.socket_fd, data, (size_t)len, 0,
+                 (const struct sockaddr*)&g_net.server,
+                 (socklen_t)sizeof(g_net.server));
     if (ret < 0) {
         DEBUG_ERROR("[NET] sendto failed: %d\n", ret);
         return ret;
@@ -160,8 +150,8 @@ int network_recv(uint8_t* buffer, int buf_size)
         return -1;
     }
 
-    ret = sysNetRecvfrom(g_net.socket_fd, buffer, (size_t)buf_size, MSG_DONTWAIT,
-                         (const struct sockaddr*)&from_addr, &from_len);
+    ret = recvfrom(g_net.socket_fd, buffer, (size_t)buf_size, MSG_DONTWAIT,
+                   (struct sockaddr*)&from_addr, &from_len);
     if (ret > 0 && !g_net.server_known) {
         memcpy(&g_net.server, &from_addr, sizeof(from_addr));
         g_net.server_known = 1;
@@ -188,19 +178,13 @@ int network_send_poll(uint8_t zone, uint8_t sequence)
 void network_maybe_probe_server(uint8_t sequence)
 {
     uint8_t packet[NET_PACKET_HEADER_SIZE];
-    u64 sec = 0;
-    u64 nsec = 0;
-    u64 now_usec;
+    uint64_t now_usec;
 
     if (!g_net.initialized || g_net.socket_fd < 0 || g_net.server_known || !g_net.broadcast_enabled) {
         return;
     }
 
-    if (sysGetCurrentTime(&sec, &nsec) != 0) {
-        return;
-    }
-
-    now_usec = (sec * 1000000ULL) + (nsec / 1000ULL);
+    now_usec = sys_get_timebase_usec();
     if (g_net.last_probe_usec != 0 && (now_usec - g_net.last_probe_usec) < LDTP_DISCOVERY_INTERVAL_USEC) {
         return;
     }
@@ -210,9 +194,9 @@ void network_maybe_probe_server(uint8_t sequence)
     packet[1] = 1;  /* center zone */
     packet[2] = sequence;
 
-    if (sysNetSendto(g_net.socket_fd, packet, (size_t)sizeof(packet), 0,
-                     (const struct sockaddr*)&g_net.discovery_target,
-                     (socklen_t)sizeof(g_net.discovery_target)) >= 0) {
+    if (sendto(g_net.socket_fd, packet, (size_t)sizeof(packet), 0,
+               (const struct sockaddr*)&g_net.discovery_target,
+               (socklen_t)sizeof(g_net.discovery_target)) >= 0) {
         g_net.last_probe_usec = now_usec;
         DEBUG_VERBOSE("[NET] Discovery probe broadcast sent\n");
     }

@@ -18,7 +18,8 @@
 #ifndef DEBUG_H
 #define DEBUG_H
 
-#include <ppu-types.h>
+#include <stdint.h>
+#include <netinet/in.h>
 
 /* Debug global state -- CRT bypass accessible from main.c */
 struct debug_state {
