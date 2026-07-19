@@ -8,13 +8,15 @@
  * NO PSL1GHT, NO inline asm collisions.
  *
  * PAPERTRAIL LOGGING:
- *   Every step logs to /dev_hdd0/plugins/ldtoypad_boot.log via
+ *   Every step logs to /dev/hdd0/plugins/ldtoypad_boot.log via
  *   cellFsWrite(). module_start returns 0 (SYS_PRX_RESIDENT)
  *   on success or 1 (SYS_PRX_NO_RESIDENT) on failure.
  *
  * THREADING:
  *   module_start creates a joinable background thread (prio 1000,
  *   64KB stack). module_stop signals shutdown & joins.
+ *   ALL heavy lifting (sysmodules, USB, network) happens in
+ *   worker_thread to avoid blocking Cobra's loader.
  */
 
 #include <sys/prx.h>
@@ -23,6 +25,8 @@
 #include <cell/sysmodule.h>
 #include <string.h>
 #include <stddef.h>
+
+#include "syscall.h"
 
 SYS_MODULE_INFO(ldtoypad, 0, 1, 1);
 SYS_MODULE_START(module_start);
@@ -33,6 +37,11 @@ static void worker_thread(uint64_t arg);
 
 static volatile int g_shutdown = 0;
 static sys_ppu_thread_t g_worker_tid = SYS_PPU_THREAD_ID_INVALID;
+
+/* CELL_SYSMODULE_ERROR_DUPLICATED might not be defined in all SDKs */
+#ifndef CELL_SYSMODULE_ERROR_DUPLICATED
+#define CELL_SYSMODULE_ERROR_DUPLICATED 0x8002a002
+#endif
 
 /* Write a line to the boot log */
 static int papertrail(const char *msg)
@@ -52,17 +61,12 @@ static int papertrail(const char *msg)
     return 0;
 }
 
-/* Raw syscall 74: usleep */
-static inline int sys_usleep(uint64_t usec)
-{
-    register uint64_t num __asm__("r3") = 74;
-    register uint64_t arg1 __asm__("r4") = usec;
-    __asm__ volatile("sc\n" : "+r"(num) : "r"(arg1)
-                     : "memory", "cr0", "r11", "r12");
-    return (int)num;
-}
-
-/* module_start - called by Cobra PRX loader */
+/**
+ * module_start - called by Cobra PRX loader
+ *
+ * MUST return quickly. Delegate all initialization to worker_thread.
+ * Do NOT call cellSysmoduleLoadModule here - do it in the thread.
+ */
 int module_start(size_t args, void *argp)
 {
     (void)args; (void)argp;
@@ -70,24 +74,8 @@ int module_start(size_t args, void *argp)
 
     papertrail("=== ldtoypad module_start ===");
 
-    /* Load sysmodule dependencies */
-    papertrail("Step 1: Loading CELL_SYSMODULE_FS...");
-    ret = cellSysmoduleLoadModule(CELL_SYSMODULE_FS);
-    if (ret != CELL_OK) { papertrail("FAIL: FS"); return 1; }
-    papertrail("OK: FS loaded");
-
-    papertrail("Step 2: Loading CELL_SYSMODULE_NET...");
-    ret = cellSysmoduleLoadModule(CELL_SYSMODULE_NET);
-    if (ret != CELL_OK) { papertrail("FAIL: NET"); return 1; }
-    papertrail("OK: NET loaded");
-
-    papertrail("Step 3: Loading CELL_SYSMODULE_USBD...");
-    ret = cellSysmoduleLoadModule(CELL_SYSMODULE_USBD);
-    if (ret != CELL_OK) { papertrail("FAIL: USBD"); return 1; }
-    papertrail("OK: USBD loaded");
-
-    /* Create worker thread */
-    papertrail("Step 4: Creating worker thread...");
+    /* Create worker thread - it will load sysmodules and init subsystems */
+    papertrail("Step 1: Creating worker thread...");
     ret = sys_ppu_thread_create(&g_worker_tid,
                                 (void(*)(uint64_t))worker_thread,
                                 0, 1000, 64*1024,
@@ -96,14 +84,19 @@ int module_start(size_t args, void *argp)
     if (ret != CELL_OK) { papertrail("FAIL: thread create"); return 1; }
     papertrail("OK: thread created");
 
-    papertrail("=== module_start SUCCESS ===");
+    papertrail("=== module_start returning 0 (RESIDENT) ===");
     return 0; /* SYS_PRX_RESIDENT */
 }
 
-/* module_stop - called by Cobra PRX loader */
-int module_stop(size_t args, void *argp)
+/**
+ * module_stop - called by Cobra PRX loader on unload
+ *
+ * Note: Cobra 8.5 expects int module_stop(void), NOT
+ * module_stop(size_t, void*).  The void signature matches
+ * the working hello-plugin.
+ */
+int module_stop(void)
 {
-    (void)args; (void)argp;
     papertrail("=== module_stop ===");
     g_shutdown = 1;
     if (g_worker_tid != SYS_PPU_THREAD_ID_INVALID) {
@@ -128,31 +121,53 @@ extern int  network_recv(uint8_t *buf, int size);
 extern int  ldd_driver_init(void);
 extern void ldd_driver_shutdown(void);
 
-/* Worker thread body */
+/* Helper: load sysmodule, tolerate DUPLICATED */
+static int load_sysmodule(uint16_t id, const char *name)
+{
+    int ret = cellSysmoduleLoadModule(id);
+    if (ret == CELL_OK) {
+        papertrail(name); papertrail("OK: loaded");
+        return 0;
+    }
+    if (ret == CELL_SYSMODULE_ERROR_DUPLICATED) {
+        papertrail(name); papertrail("OK: already loaded (dupe)");
+        return 0;
+    }
+    papertrail(name); papertrail("FAIL");
+    return -1;
+}
+
+/* Worker thread body - runs all initialization */
 static void worker_thread(uint64_t arg)
 {
     (void)arg;
     papertrail("=== worker_thread started ===");
 
-    papertrail("Step 5: debug_init()...");
+    /* Step 1: Load sysmodules (in thread, not loader) */
+    papertrail("Step 2: Loading sysmodules...");
+    if (load_sysmodule(CELL_SYSMODULE_FS,   "FS")   != 0) goto fail;
+    if (load_sysmodule(CELL_SYSMODULE_NET,  "NET")  != 0) goto fail;
+    if (load_sysmodule(CELL_SYSMODULE_USBD, "USBD") != 0) goto fail;
+
+    papertrail("Step 3: debug_init()...");
     debug_init();
     papertrail("OK: debug_init");
 
-    papertrail("Step 6: toypad_state_init()...");
+    papertrail("Step 4: toypad_state_init()...");
     toypad_state_init();
     papertrail("OK: toypad_state_init");
 
-    papertrail("Step 7: network_init(28472)...");
+    papertrail("Step 5: network_init(28472)...");
     if (network_init(28472) != 0) {
         papertrail("WARN: network_init failed, continuing");
     } else {
         papertrail("OK: network_init");
-        papertrail("Step 7b: network_wait_ready()...");
+        papertrail("Step 5b: network_wait_ready()...");
         network_wait_ready();
         papertrail("OK: network_wait_ready");
     }
 
-    papertrail("Step 8: ldd_driver_init()...");
+    papertrail("Step 6: ldd_driver_init()...");
     if (ldd_driver_init() != 0)
         papertrail("NOTE: ldd_driver_init not supported, network-only mode");
     else
@@ -175,4 +190,9 @@ static void worker_thread(uint64_t arg)
     debug_shutdown();
     papertrail("=== worker_thread EXIT ===");
     sys_ppu_thread_exit(0);
+    return;
+
+fail:
+    papertrail("=== worker_thread FAILED - exiting ===");
+    sys_ppu_thread_exit(1);
 }

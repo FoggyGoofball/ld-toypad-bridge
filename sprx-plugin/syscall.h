@@ -1,13 +1,13 @@
 /**
- * syscall.h — PPU syscall wrappers for Sony SDK SPRX builds
+ * syscall.h ??? PPU syscall wrappers for Sony SDK SPRX builds
  *
  * Provides lightweight inline asm wrappers for LV2 syscalls that
  * are not provided by any Sony SDK stub library.  These use the
  * standard PPU `sc` instruction with full clobber lists.
  *
  * Available wrappers:
- *   sys_usleep(usec)          — sc 74:  microsecond sleep
- *   sys_get_timebase_usec()   — mftb:  return timebase in microseconds
+ *   sys_usleep(usec)          ??? sc 74:  microsecond sleep
+ *   sys_get_timebase_usec()   ??? mftb:  return timebase in microseconds
  */
 
 #ifndef SYSCALL_H
@@ -20,7 +20,7 @@ extern "C" {
 #endif
 
 /**
- * sys_usleep — LV2 syscall 74
+ * sys_usleep ??? LV2 syscall 74
  *
  * Busy-wait sleep accurate to ~1 microsecond.
  * Clobbers: r3 (return), r11, r12, cr0, memory.
@@ -36,23 +36,26 @@ static inline int sys_usleep(uint64_t usec)
         "sc\n"
         : "+r"(num)
         : "r"(arg1)
-        : "memory", "cr0", "r11", "r12"
+        : "r5", "r6", "r7", "r8", "r9", "r10",
+          "r11", "r12", "r0", "cr0", "ctr", "xer", "lr",
+          "memory"
     );
+
     return (int)num;
 }
 
 /**
- * sys_get_timebase_usec — Read PPU timebase in microseconds
+ * sys_get_timebase_usec ??? Read PPU timebase in microseconds
  *
  * Uses the mftb (Move From Time Base) instruction to read the
  * 64-bit timebase register (TBR 268/269).  On Cell/BE this
  * increments at a known frequency tied to the system bus clock.
- * We divide by a hard-coded approximate divisor to get µs.
+ * We divide by a hard-coded approximate divisor to get ??s.
  *
  * WARNING: This is an *estimate* (~+/-40ppm).  The exact divisor
  * depends on the actual PS3 model's timebase frequency.  For most
  * models it's 80000000 (80 MHz) dividing to ~12.5 ns ticks.  We
- * use 80 here for microsecond resolution (80 ticks ≈ 1 µs).
+ * use 80 here for microsecond resolution (80 ticks ??? 1 ??s).
  *
  * @return  Approximate microseconds since boot (may wrap)
  */
@@ -72,7 +75,7 @@ static inline uint64_t sys_get_timebase_usec(void)
     uint64_t tb = ((uint64_t)tbu << 32) | (uint64_t)tbl;
     /* Divide by timebase MHz to get microseconds.
      * PS3 timebase is typically 80 MHz (80000000 Hz).
-     * 80 ticks = 1 µs. */
+     * 80 ticks = 1 ??s. */
     return tb / 80ULL;
 }
 
