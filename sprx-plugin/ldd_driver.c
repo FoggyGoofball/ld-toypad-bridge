@@ -112,11 +112,12 @@ int ldd_driver_init(void)
 
     /* Initialize USB subsystem (no handle returned in Sony SDK) */
     ret = cellUsbdInit();
-    if (ret != CELL_USBD_PROBE_SUCCEEDED) {
+    if (ret != CELL_OK) {
         DEBUG_ERROR("[LDD] cellUsbdInit failed: 0x%08X\n", ret);
         return -1;
     }
     DEBUG_PRINT("[LDD] cellUsbdInit OK\n");
+
 
     /* Register Extra LDD for the Toy Pad VID/PID
      * Signature: cellUsbdRegisterExtraLdd(ops, id_vendor, id_product) */

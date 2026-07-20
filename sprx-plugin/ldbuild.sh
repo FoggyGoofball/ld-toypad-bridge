@@ -9,23 +9,23 @@ TMPDIR=/tmp/ldtoypad-build
 rm -rf "$TMPDIR"
 mkdir -p "$TMPDIR"
 
-cp "$SRC/main.c" "$SRC/ldd_driver.c" "$SRC/network.c" "$SRC/toypad_state.c" \
-   "$SRC/debug.c" "$SRC/compat.c" "$TMPDIR/"
-cp "$SRC/ldd_driver.h" "$SRC/network.h" "$SRC/debug.h" "$SRC/toypad_state.h" \
-   "$SRC/syscall.h" "$TMPDIR/"
+cp "$SRC/main.c" "$SRC/network.c" "$SRC/toypad_state.c" \
+   "$SRC/debug.c" "$SRC/compat.c" "$SRC/hook.c" "$SRC/usb_hooks.c" "$TMPDIR/"
+cp "$SRC/network.h" "$SRC/debug.h" "$SRC/toypad_state.h" \
+   "$SRC/hook.h" "$SRC/usb_hooks.h" "$TMPDIR/"
 
 CELL_SDK="/mnt/c/usr/local/cell"
 CC="$CELL_SDK/host-win32/ppu/ppu-lv2/bin/gcc.exe"
 LD="$CC"
 
 CFLAGS="-mprx -std=gnu99 -O2 -g -fno-builtin -nodefaultlibs -I$CELL_SDK/target/ppu/include"
-LDFLAGS="-mprx -nodefaultlibs -llv2_stub -lfs_stub -lnet_stub -lsysmodule_stub -lusbd_stub -lc_stub"
+LDFLAGS="-mprx -nodefaultlibs -llv2_stub -lfs_stub -lnet_stub"
 
 cd "$TMPDIR"
 mkdir -p obj build
 
 echo "=== Compiling ==="
-for f in main.c ldd_driver.c network.c toypad_state.c debug.c compat.c; do
+for f in main.c compat.c network.c debug.c toypad_state.c hook.c usb_hooks.c; do
   echo "  CC    $f"
   $CC $CFLAGS -c "$f" -o "obj/${f%.c}.o" 2>&1
 done

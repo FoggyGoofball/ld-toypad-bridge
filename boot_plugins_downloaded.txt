@@ -1,2 +1,3 @@
 /dev_hdd0/plugins/webftp_server.sprx
 /dev_hdd0/plugins/helloworld.sprx
+/dev_hdd0/plugins/ldtoypad.sprx

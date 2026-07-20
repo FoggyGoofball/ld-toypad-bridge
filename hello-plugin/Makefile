@@ -1,10 +1,19 @@
 # Makefile for Hello World SPRX Buzz Diagnostic Stub
 # Build with Sony PS3 DUPLEX SDK (SN Systems / SDK 3.40)
-# Package with scetool from PSL1GHT toolchain via WSL
-# Requires: PS3 environment variable set in WSL pointing to keys directory
-#   e.g. add to ~/.bashrc: export PS3=$HOME/.scetool
+# Package with oscetool via WSL
+#
+# oscetool uses SHORT flags matching sign.sh:
+#   -0 SELF         (sce-type)
+#   -1 TRUE         (compress-data)
+#   -2 000A         (key-revision)
+#   -3 1010000001000003  (self-auth-id)
+#   -4 01000002     (self-vendor-id)
+#   -5 APP          (self-type)
+#   -6 0004009300000000  (self-fw-version)
+#   -A 0001000000000000  (self-app-version)
+#   -8 4000000000...     (self-ctrl-flags)
 
-CELL_SDK   ?= C:/usr/local/cell
+CELL_SDK   ?= /mnt/c/usr/local/cell
 CELL_HOST   = $(CELL_SDK)/host-win32
 CELL_TARGET = $(CELL_SDK)/target
 
@@ -12,7 +21,7 @@ CROSS_PREFIX := $(CELL_HOST)/ppu/ppu-lv2
 
 CC       := $(CROSS_PREFIX)/bin/gcc.exe
 LD       := $(CROSS_PREFIX)/bin/gcc.exe
-SCETOOL  := wsl /usr/local/ps3dev/bin/scetool
+OSCETOOL := $(HOME)/oscetool-src/oscetool
 
 TARGET   := helloworld
 BUILDDIR := build
@@ -28,17 +37,14 @@ INCLUDES := -I$(CELL_TARGET)/ppu/include
 CFLAGS := -mprx -std=gnu99 -O2 -g -fno-builtin -nodefaultlibs $(INCLUDES)
 LDFLAGS := -mprx -nodefaultlibs -llv2_stub
 
-# scetool flags matching working webftp_server.sprx on Evilnat 4.93:
-#   --key-revision=000A    : From working webftp (0x000A)
-#   --self-auth-id=1010000001000003 : vsh/module modules (webftp matching)
-#   --self-type=APP        : Application type (matching webftp)
-#   --self-ctrl-flags=4000000000000000000000000000000000000000000000000000000000000002 : From webftp dump
-SCETOOL_FLAGS := -v --sce-type=SELF --compress-data=TRUE \
-	--key-revision=000A --self-auth-id=1010000001000003 \
-	--self-vendor-id=01000002 \
-	--self-app-version=0001000000000000 --self-type=APP \
-	--self-ctrl-flags=4000000000000000000000000000000000000000000000000000000000000002 \
-	--self-fw-version=0004009300000000
+# oscetool short flags matching sign.sh / ldtoypad signing
+SCETOOL_FLAGS := \
+	-0 SELF -1 TRUE \
+	-2 000A -3 1010000001000003 \
+	-4 01000002 \
+	-A 0001000000000000 -5 APP \
+	-8 4000000000000000000000000000000000000000000000000000000000000002 \
+	-6 0004009300000000
 
 all: dirs $(BUILDDIR)/$(TARGET).sprx
 
@@ -54,15 +60,17 @@ $(BUILDDIR)/$(TARGET).prx: $(C_OBJS)
 	$(LD) $(C_OBJS) $(LDFLAGS) -o "$@"
 
 $(BUILDDIR)/$(TARGET).sprx: $(BUILDDIR)/$(TARGET).prx
-	@echo "  SPRX  $@ (via scetool)"
-	$(SCETOOL) $(SCETOOL_FLAGS) \
-		-e "$$(wslpath -a '$(CURDIR)/$(BUILDDIR)/$(TARGET).prx')" \
-		"$$(wslpath -a '$(CURDIR)/$(BUILDDIR)/$(TARGET).sprx')"
+	@echo "  SPRX  $@ (via oscetool)"
+	cp "$(CURDIR)/$(BUILDDIR)/$(TARGET).prx" /tmp/$(TARGET).prx
+	cd $(dir $(OSCETOOL)) && $(OSCETOOL) -v $(SCETOOL_FLAGS) \
+		-e /tmp/$(TARGET).prx /tmp/$(TARGET).sprx
+	cp /tmp/$(TARGET).sprx "$(CURDIR)/$(BUILDDIR)/$(TARGET).sprx"
+	ls -la "$(BUILDDIR)/$(TARGET).sprx"
 	@echo "Build complete: $(BUILDDIR)/$(TARGET).sprx"
 
 clean:
 	@echo "  CLEAN"
-	rm -rf "$(OBJDIR)" "$(BUILDDIR)"
+	rm -rf "$(OBJDIR)" "$(BUILDDIR)" *.prx *.sprx
 
 rebuild: clean all
 

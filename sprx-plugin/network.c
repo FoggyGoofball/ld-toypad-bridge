@@ -17,11 +17,14 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
+#include <sys/timer.h>
 #include <sys/sys_time.h>
+#include <netex/net.h>
+#include <cell/cell_fs.h>
 
 #include "network.h"
 #include "debug.h"
-#include "syscall.h"
+
 
 #ifndef LDTP_DEBUG_LOG_PORT
 #define LDTP_DEBUG_LOG_PORT 28473
@@ -37,31 +40,89 @@ struct net_state g_net;
 int network_init(uint16_t port)
 {
     struct sockaddr_in local_addr;
+    int ret;
 
     if (g_net.initialized) {
         return 0;
     }
 
-    g_net.socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (g_net.socket_fd < 0) {
-        DEBUG_ERROR("[NET] socket failed: %d\n", g_net.socket_fd);
-        return -1;
+    /* Initialize the sys_net network stack before any socket() calls.
+     * sys_net_initialize_network() is a convenience macro that allocates
+     * 128 KB of static memory and calls sys_net_initialize_network_ex().
+     * It is safe to call multiple times (no-op after first init). */
+    ret = sys_net_initialize_network();
+    if (ret != 0) {
+        DEBUG_ERROR("[NET] sys_net_initialize_network failed: 0x%x\n", ret);
+        /* Continue anyway — the socket() retry below will handle deferral */
     }
 
-    memset(&local_addr, 0, sizeof(local_addr));
-    local_addr.sin_family = AF_INET;
-    local_addr.sin_port = htons(port);
-    local_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    /* Retry socket() + bind() up to 30 times (3 seconds total at 100ms intervals).
+     * During early VSH boot, sys_net may not be fully loaded yet, and the network
+     * interface may not have an IP assigned.  socket() returns
+     * CELL_NET_ERROR_NET_NOT_INITIALIZED (0x80010010) early on, and bind()
+     * will fail if the interface isn't ready.  By retrying the whole sequence,
+     * we converge on the window when everything is live. */
+    {
+        int attempt;
+        int last_socket_err = 0;
+        int last_bind_err = 0;
+        for (attempt = 0; attempt < 30; attempt++) {
+            /* Create socket */
+            g_net.socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+            if (g_net.socket_fd < 0) {
+                last_socket_err = g_net.socket_fd;
+                sys_timer_usleep(100000); /* 100ms */
+                continue;
+            }
 
-    if (bind(g_net.socket_fd, (struct sockaddr*)&local_addr, sizeof(local_addr)) < 0) {
-        DEBUG_ERROR("[NET] bind failed on port %u\n", (unsigned)port);
-        close(g_net.socket_fd);
-        g_net.socket_fd = -1;
-        return -1;
+            /* Bind to port */
+            memset(&local_addr, 0, sizeof(local_addr));
+            local_addr.sin_family = AF_INET;
+            local_addr.sin_port = htons(port);
+            local_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+
+            if (bind(g_net.socket_fd, (struct sockaddr*)&local_addr, sizeof(local_addr)) == 0) {
+                /* Both socket and bind succeeded */
+                break;
+            }
+            last_bind_err = g_net.socket_fd; /* close to retry */
+            socketclose(g_net.socket_fd);
+            g_net.socket_fd = -1;
+            sys_timer_usleep(100000); /* 100ms */
+        }
+        if (g_net.socket_fd < 0) {
+            DEBUG_ERROR("[NET] socket+bind failed after %d attempts (socket err: 0x%x, bind err: 0x%x)\n",
+                        30, last_socket_err, last_bind_err);
+            return -1;
+        }
+        DEBUG_PRINT("[NET] socket()+bind() succeeded on attempt %d\n", attempt + 1);
+    }
+
+    /* Enable broadcast for discovery probes */
+    {
+        int optval = 1;
+        if (setsockopt(g_net.socket_fd, SOL_SOCKET, SO_BROADCAST,
+                       (void*)&optval, sizeof(optval)) < 0) {
+            DEBUG_ERROR("[NET] setsockopt SO_BROADCAST failed\n");
+            /* Non-fatal: discovery may still work on local subnet */
+        }
+    }
+
+    /* Set non-blocking mode on socket using SO_NBIO (CellOS SDK).
+     * On CellOS -lnet_stub, MSG_DONTWAIT flag in recvfrom() is unreliable.
+     * Setting SO_NBIO via setsockopt ensures the socket descriptor itself
+     * is non-blocking. recvfrom then uses flags=0. */
+    {
+        int optval = 1;  /* SO_NBIO: 0 = blocking, 1 = non-blocking */
+        if (setsockopt(g_net.socket_fd, SOL_SOCKET, SO_NBIO,
+                       (void*)&optval, sizeof(optval)) < 0) {
+            DEBUG_ERROR("[NET] setsockopt SO_NBIO failed\n");
+        }
     }
 
     /* Keep broadcast probing path enabled */
     g_net.broadcast_enabled = 1;
+
 
     memset(&g_net.server, 0, sizeof(g_net.server));
     g_net.server.sin_family = AF_INET;
@@ -70,11 +131,16 @@ int network_init(uint16_t port)
     memset(&g_net.discovery_target, 0, sizeof(g_net.discovery_target));
     g_net.discovery_target.sin_family = AF_INET;
     g_net.discovery_target.sin_port = htons(port);
-    g_net.discovery_target.sin_addr.s_addr = htonl(INADDR_BROADCAST);
+    /* Use subnet broadcast (192.168.0.255) instead of INADDR_BROADCAST (255.255.255.255).
+     * The PS3's routing stack handles global broadcast poorly — packets are frequently
+     * dropped internally. Subnet broadcast is more reliable on the same /24 subnet.
+     * Inet address: 192.168.0.255 = 0xC0A800FF in network byte order. */
+    g_net.discovery_target.sin_addr.s_addr = 0xC0A800FF;
 
     g_net.port = port;
     g_net.server_known = 0;
     g_net.last_probe_usec = 0;
+    g_net.self_ip = 0;
     /* NOT initialized yet — network_wait_ready() will mark it after
      * confirming the interface is up (DHCP complete). This prevents
      * sendto/recvfrom races during early boot. */
@@ -108,15 +174,60 @@ void network_wait_ready(void)
     /* Sleep 3 seconds to let DHCP complete and routing table populate.
      * Total iterations: 30 * 100ms = 3s */
     for (i = 0; i < 30; i++) {
-        sys_usleep(100000); /* 100ms per iteration */
+        sys_timer_usleep(100000); /* 100ms per iteration */
     }
 
-    /* Fire rapid beacon salvo now that interface should be ready */
+
+    /* Retrieve our own IP via getsockname — needed to reject self-looped
+     * broadcast packets during discovery.  After the 3s wait for interface
+     * readiness, the kernel should have assigned an IP via DHCP. */
+    {
+        struct sockaddr_in self_addr;
+        socklen_t self_len = sizeof(self_addr);
+        if (getsockname(g_net.socket_fd, (struct sockaddr*)&self_addr, &self_len) == 0 &&
+            self_addr.sin_addr.s_addr != htonl(INADDR_ANY)) {
+            g_net.self_ip = self_addr.sin_addr.s_addr;
+            {
+                int fd_p;
+                uint64_t written_p;
+                if (cellFsOpen("/dev_hdd0/tmp/ld_self_ip.txt",
+                               CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
+                               &fd_p, NULL, 0) == CELL_OK) {
+                    char ipmsg[32];
+                    uint32_t ip = ntohl(g_net.self_ip);
+                    int pos = 0;
+                    /* Format: "SELF_IP=192.168.0.47\n" */
+                    const char *p = "SELF_IP=";
+                    while (*p) ipmsg[pos++] = *p++;
+                    ipmsg[pos++] = '0' + ((ip >> 24) & 0xFF);
+                    ipmsg[pos++] = '.';
+                    ipmsg[pos++] = '0' + ((ip >> 16) & 0xFF);
+                    ipmsg[pos++] = '.';
+                    ipmsg[pos++] = '0' + ((ip >> 8) & 0xFF);
+                    ipmsg[pos++] = '.';
+                    ipmsg[pos++] = '0' + (ip & 0xFF);
+                    ipmsg[pos++] = '\n';
+                    ipmsg[pos] = '\0';
+                    cellFsWrite(fd_p, ipmsg, pos, &written_p);
+                    cellFsClose(fd_p);
+                }
+            }
+            DEBUG_PRINT("[NET] Self IP determined\n");
+        } else {
+            DEBUG_PRINT("[NET] Could not determine self IP via getsockname\n");
+            /* self_ip stays 0 — self-rejection will be disabled,
+             * but discovery may still work via packet-type filtering */
+        }
+    }
+
+    /* Fire rapid beacon salvo now that interface should be ready.
+     * Uses NET_PACKET_TYPE_DISCOVERY (0xF0) to distinguish from
+     * normal poll packets (0x01), avoiding protocol collision. */
     DEBUG_PRINT("[NET] Sending startup beacon salvo...\n");
     {
         uint8_t beacon[NET_PACKET_HEADER_SIZE];
         memset(beacon, 0, sizeof(beacon));
-        beacon[0] = NET_PACKET_TYPE_POLL;
+        beacon[0] = NET_PACKET_TYPE_DISCOVERY;
         beacon[1] = 1;
         beacon[2] = 0;
 
@@ -126,7 +237,8 @@ void network_wait_ready(void)
                          (size_t)sizeof(beacon), 0,
                          (const struct sockaddr*)&g_net.discovery_target,
                          (socklen_t)sizeof(g_net.discovery_target));
-            sys_usleep(100000);
+            sys_timer_usleep(100000);
+
         }
     }
 
@@ -137,7 +249,7 @@ void network_wait_ready(void)
 void network_shutdown(void)
 {
     if (g_net.socket_fd >= 0) {
-        close(g_net.socket_fd);
+        socketclose(g_net.socket_fd);
         g_net.socket_fd = -1;
     }
 
@@ -146,6 +258,11 @@ void network_shutdown(void)
     g_net.broadcast_enabled = 0;
     g_net.last_probe_usec = 0;
     debug_set_remote(0, 0);
+
+    /* Finalize sys_net network stack to release resources.
+     * This is safe to call even if sys_net_initialize_network() was
+     * never called or failed. */
+    sys_net_finalize_network();
 
     DEBUG_PRINT("[NET] UDP shutdown\n");
 }
@@ -181,16 +298,101 @@ int network_recv(uint8_t* buffer, int buf_size)
         return -1;
     }
 
-    ret = recvfrom(g_net.socket_fd, buffer, (size_t)buf_size, MSG_DONTWAIT,
+    /* Socket is set SO_NBIO (non-blocking) at init time, so plain recvfrom returns
+     * -1/EWOULDBLOCK immediately when no data is available.
+     * Do NOT use MSG_DONTWAIT flag — it's unreliable on CellOS -lnet_stub. */
+    ret = recvfrom(g_net.socket_fd, buffer, (size_t)buf_size, 0,
                    (struct sockaddr*)&from_addr, &from_len);
-    if (ret > 0 && !g_net.server_known) {
-        memcpy(&g_net.server, &from_addr, sizeof(from_addr));
-        g_net.server_known = 1;
-        debug_set_remote(from_addr.sin_addr.s_addr, LDTP_DEBUG_LOG_PORT);
-        DEBUG_PRINT("[NET] Server learned on port %u\n", (unsigned)ntohs(from_addr.sin_port));
-        DEBUG_PRINT("[NET] Remote debug stream target %u\n", (unsigned)LDTP_DEBUG_LOG_PORT);
-    } else if (ret > 0) {
-        DEBUG_VERBOSE("[NET] RX len=%d\n", ret);
+    if (ret > 0) {
+        /* ── SELF-REJECTION ──────────────────────────────────────────
+         * Ignore packets looped back from our own socket.  When the PS3
+         * sends a broadcast to 192.168.0.255:28472, the kernel mirrors
+         * it back to any local socket listening on port 28472.  Without
+         * this check, the PS3 would lock g_net.server to its own IP
+         * and discovery would stall permanently. */
+        if (g_net.self_ip != 0 &&
+            from_addr.sin_addr.s_addr == g_net.self_ip) {
+            DEBUG_VERBOSE("[NET] Ignored self-looped packet\n");
+            return 0;
+        }
+
+        /* ── PAPERTRAIL: dump sender IP + first bytes ───────────────
+         * Proves the PS3 is actually receiving the server's beacons.
+         * Throttled to first 10 packets to avoid filesystem churn. */
+        {
+            static int recv_log_count = 0;
+            if (recv_log_count < 10) {
+                int fd_r;
+                uint64_t written_r;
+                if (cellFsOpen("/dev_hdd0/tmp/ld_recv_papertrail.txt",
+                               CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_APPEND,
+                               &fd_r, NULL, 0) == CELL_OK) {
+                    char rmsg[80];
+                    uint32_t sip = ntohl(from_addr.sin_addr.s_addr);
+                    int rp = 0;
+                    const char *rp_prefix = "RECV from=";
+                    while (*rp_prefix) rmsg[rp++] = *rp_prefix++;
+                    rmsg[rp++] = '0' + ((sip >> 24) & 0xFF);
+                    rmsg[rp++] = '.';
+                    rmsg[rp++] = '0' + ((sip >> 16) & 0xFF);
+                    rmsg[rp++] = '.';
+                    rmsg[rp++] = '0' + ((sip >> 8) & 0xFF);
+                    rmsg[rp++] = '.';
+                    rmsg[rp++] = '0' + (sip & 0xFF);
+                    rmsg[rp++] = ':';
+                    /* port */
+                    uint16_t sport = ntohs(from_addr.sin_port);
+                    if (sport >= 10000) { rmsg[rp++] = '0' + (sport / 10000); sport %= 10000; }
+                    if (sport >= 1000)  { rmsg[rp++] = '0' + (sport / 1000);  sport %= 1000; }
+                    if (sport >= 100)   { rmsg[rp++] = '0' + (sport / 100);   sport %= 100; }
+                    if (sport >= 10)    { rmsg[rp++] = '0' + (sport / 10);    sport %= 10; }
+                    rmsg[rp++] = '0' + sport;
+                    const char *rp_type = " type=";
+                    while (*rp_type) rmsg[rp++] = *rp_type++;
+                    rmsg[rp++] = '0';
+                    rmsg[rp++] = 'x';
+                    uint8_t type0 = (uint8_t)buffer[0];
+                    rmsg[rp++] = (type0 >> 4) <= 9 ? '0' + (type0 >> 4) : 'A' + ((type0 >> 4) - 10);
+                    rmsg[rp++] = (type0 & 0x0F) <= 9 ? '0' + (type0 & 0x0F) : 'A' + ((type0 & 0x0F) - 10);
+                    const char *rp_len = " len=";
+                    while (*rp_len) rmsg[rp++] = *rp_len++;
+                    int rlen = ret;
+                    if (rlen >= 100) { rmsg[rp++] = '0' + (rlen / 100); rlen %= 100; }
+                    if (rlen >= 10)  { rmsg[rp++] = '0' + (rlen / 10);  rlen %= 10; }
+                    rmsg[rp++] = '0' + rlen;
+                    rmsg[rp++] = '\n';
+                    rmsg[rp] = '\0';
+                    cellFsWrite(fd_r, rmsg, rp, &written_r);
+                    cellFsClose(fd_r);
+                    recv_log_count++;
+                }
+            }
+        }
+
+        /* ── DISCOVERY LOGIC ────────────────────────────────────────
+         * Only accept the sender as the server if the packet type
+         * matches NET_PACKET_TYPE_DISCOVERY (0xF0).  This prevents
+         * random broadcast noise or collision from locking us to a
+         * wrong address.  Once server_known is set, all packets are
+         * accepted normally. */
+        if (!g_net.server_known) {
+            if (buffer[0] == NET_PACKET_TYPE_DISCOVERY) {
+                memcpy(&g_net.server, &from_addr, sizeof(from_addr));
+                g_net.server_known = 1;
+                debug_set_remote(from_addr.sin_addr.s_addr, LDTP_DEBUG_LOG_PORT);
+                DEBUG_PRINT("[NET] Server learned via discovery: %u.%u.%u.%u:%u\n",
+                            (unsigned)((ntohl(from_addr.sin_addr.s_addr) >> 24) & 0xFF),
+                            (unsigned)((ntohl(from_addr.sin_addr.s_addr) >> 16) & 0xFF),
+                            (unsigned)((ntohl(from_addr.sin_addr.s_addr) >> 8) & 0xFF),
+                            (unsigned)(ntohl(from_addr.sin_addr.s_addr) & 0xFF),
+                            (unsigned)ntohs(from_addr.sin_port));
+            } else {
+                DEBUG_VERBOSE("[NET] Ignored non-discovery packet during server search (type=0x%02x)\n",
+                              (unsigned)buffer[0]);
+            }
+        } else {
+            DEBUG_VERBOSE("[NET] RX len=%d\n", ret);
+        }
     }
 
     return ret;
@@ -215,13 +417,47 @@ void network_maybe_probe_server(uint8_t sequence)
         return;
     }
 
-    now_usec = sys_get_timebase_usec();
+    now_usec = sys_time_get_system_time();
     if (g_net.last_probe_usec != 0 && (now_usec - g_net.last_probe_usec) < LDTP_DISCOVERY_INTERVAL_USEC) {
         return;
     }
 
+    /* RAW PAPERTRAIL: Confirm probe fires by writing directly to HDD.
+     * Throttled to first 5 calls to avoid choking VSH with disk I/O.
+     * This bypasses all debug macros — it proves the function executes. */
+    {
+        static int probe_log_count = 0;
+        if (probe_log_count < 5) {
+            int fd;
+            uint64_t written;
+            if (cellFsOpen("/dev_hdd0/tmp/ld_probe_papertrail.txt",
+                           CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_APPEND,
+                           &fd, NULL, 0) == CELL_OK) {
+                char msg[64];
+                /* Build message manually (no snprintf dependency) */
+                const char *prefix = "PROBE seq=";
+                int mi = 0;
+                /* Write prefix */
+                while (prefix[mi]) {
+                    msg[mi] = prefix[mi];
+                    mi++;
+                }
+                /* Write sequence digit (simple 0-9) */
+                uint8_t s = sequence;
+                if (s >= 100) { msg[mi++] = '0' + (s / 100); s %= 100; }
+                if (s >= 10)  { msg[mi++] = '0' + (s / 10);  s %= 10; }
+                msg[mi++] = '0' + s;
+                msg[mi++] = '\n';
+                msg[mi] = '\0';
+                cellFsWrite(fd, msg, mi, &written);
+                cellFsClose(fd);
+                probe_log_count++;
+            }
+        }
+    }
+
     memset(packet, 0, sizeof(packet));
-    packet[0] = NET_PACKET_TYPE_POLL;
+    packet[0] = NET_PACKET_TYPE_DISCOVERY;
     packet[1] = 1;  /* center zone */
     packet[2] = sequence;
 

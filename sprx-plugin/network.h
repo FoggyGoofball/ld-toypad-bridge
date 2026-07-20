@@ -23,6 +23,7 @@ struct net_state {
     int broadcast_enabled;
     uint16_t port;
     uint64_t last_probe_usec;
+    uint32_t self_ip;                   /* PS3's own IP (from getsockname) */
     struct sockaddr_in server;
     struct sockaddr_in discovery_target;
 };
@@ -33,6 +34,10 @@ extern struct net_state g_net;
 #define NET_PACKET_TYPE_READ_TAG   0x02  // Read tag data from a zone
 #define NET_PACKET_TYPE_WRITE_TAG  0x03  // Write data to a tag
 #define NET_PACKET_TYPE_DATA_OUT   0x04  // USB interrupt OUT data
+
+// Discovery protocol — separate from normal packet types to avoid
+// protocol collision (both sides were using 0x01 for different purposes).
+#define NET_PACKET_TYPE_DISCOVERY  0xF0  // Discovery probe/beacon
 
 // Response status from PC -> PS3
 #define NET_RESPONSE_OK            0x00  // Successful response with data

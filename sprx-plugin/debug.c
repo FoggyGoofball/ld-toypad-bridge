@@ -263,7 +263,7 @@ void debug_init(void)
 void debug_shutdown(void)
 {
     if (g_debug.socket_fd >= 0) {
-        close(g_debug.socket_fd);
+        socketclose(g_debug.socket_fd);
         g_debug.socket_fd = -1;
     }
 

@@ -1,0 +1,83 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+<META HTTP-EQUIV="CACHE-CONTROL" CONTENT="NO-CACHE">
+<head>
+<title>wMAN MOD 1.47.45</title>
+<link rel="stylesheet" type="text/css" href="/dev_hdd0/xmlhost/game_plugin/sman.css"/>
+<script src="/dev_hdd0/xmlhost/game_plugin/jquery.min.js"></script>
+<script src="/dev_hdd0/xmlhost/game_plugin/jquery-ui.min.js"></script>
+<script src="/dev_hdd0/xmlhost/game_plugin/sman.js"></script>
+<script>$(function(){$("#mg").sortable();});</script>
+</head>
+<body bgcolor="#303030" onresize="resizeEvent()">
+<div class="top_line">&nbsp;</div>
+<div id="smv" class="smv"><a style="cursor:pointer" onclick="home();return false;">wMAN MOD</a></div>
+
+<font face="Helvetica">
+<div id="rxml"><H1 id="msg1">Refreshing XML <script>dot();</script></H1></div>
+<div id="rhtm"><H1 id="msg2">Loading Games <script>dot();</script></H1></div>
+<div id="wmsg"><H1><script>dot();</script></H1></div>
+
+<script>
+function find()
+{
+	var s=prompt('Search:','');
+	if(s){
+		document.getElementById('rhtm').style.display='block';
+		document.getElementById('rhtm').innerHTML='<h1>Searching...</h1>';
+		var url=self.location.href;
+		if(url.indexOf('etmem.ps3mapi')>0||url.indexOf('/hexview.ps3')>0){
+			var pos=url.indexOf('&find=');
+			if(pos>0)
+				self.location=url.substring(0,pos)+'&find='+escape(s);
+			else
+				self.location+='&find='+escape(s);
+		}
+		else if(url.indexOf('/peek')>0||url.indexOf('/poke')>0||url.indexOf('/find')>0){
+			var pos=url.indexOf('=');
+			if(pos>0)
+				self.location=url.substring(0,pos).replace('/peek','/find').replace('/poke','/find')+'='+escape(s);
+			else
+				self.location=url.replace('/peek','/find').replace('/poke','/find')+'='+escape(s);
+		}
+		else
+			self.location+='?'+escape(s);
+	}
+}
+</script>
+
+<div id="top_action">
+	<div id="top_buttons">
+	<a onclick="document.getElementById('rxml').style.display='block';self.location=(event.ctrlKey)?'/refresh.ps3;/sman.ps3':'/refresh.ps3?xmb;/sman.ps3';" class="t_menu"><span id="refresh">Refresh</span></a>
+	<a onclick="self.location=(event.ctrlKey)?'/mount_ps3/unmount?/sman.ps3':'/mount.ps3/unmount?/sman.ps3';" class="t_menu"><span id="eject">Eject</span></a>
+	<a onclick="self.location='/insert.ps3';" class="t_menu"><span id="insert">Insert</span></a>
+	<a onclick="self.location='/restart.ps3';" class="t_menu"><span id="restart">Restart</span></a>
+	<a onclick="self.location='/shutdown.ps3';" class="t_menu"><span id="shutdown">Shutdown</span></a>
+	</div>
+
+	<div id="cpursx" style="position:absolute;top:5px;right:150px;max-width:220px;overflow:hidden;">
+	<iframe src="/cpursx_ps3" frameborder="0" scrolling="no" seamless="seamless" style="border:none;height:35px;top:5px;overflow:hidden;"></iframe>
+	</div>
+
+	<span style="position:absolute;float:right;right:-5px;top:10px;">
+	<a onclick="if(self.location.href.indexOf('/cpursx.ps3')>0){self.location='/cpursx.html';}else{find();}"><span id="ngames"></span> &nbsp; <img src="/dev_hdd0/tmp/wm_icons/find.png" style="position:relative;top:6px;"></a></font>
+	</span>
+</div>
+
+<div id="left_action">
+	<a onclick="document.getElementById('rhtm').style.display='block';self.location=(event.ctrlKey)?'/index.ps3':'/sman.ps3?';" class="b_games"><span id="games">Games</span></a>
+	<a onclick="self.location='/';" class="b_files"><span id="files">Files</span></a>
+	<a onclick="self.location='/games.ps3';" class="b_cflow">Coverflow</a>
+	<a onclick="self.location='/home.ps3mapi/sman.ps3';" class="b_ps3mapi">PS3MAPI</a>
+	<a onclick="self.location='/setup.ps3/sman.ps3';" class="b_setup" style="color:#0FF;"><span id="setup">Setup</span></a>
+	<a onclick="self.location=(self.location.href.indexOf('/cpursx.ps3')>0)?'/tempc.html':'/cpursx.ps3?/sman.ps3';" class="b_cpursx">CPU/RSX</a>
+</div>
+</font>
+
+<script>
+resizeEvent();
+</script>
+
+<div id="content" class="propfont">
+<noscript><h1 style='color:#f03'> Javascript </h1></noscript><div id='toolbox'></div>  : <a class="f" href="/dev_hdd0/">/dev_hdd0</a>/boot_plugins.txt<br><script>setTimeout(function(){self.location="/dev_hdd0"},0);</script><div style="position:fixed;right:20px;bottom:10px;opacity:0.2"><a href="#Top">&#9650;</a></div><b></font></body></html>
