@@ -196,16 +196,27 @@ void network_wait_ready(void)
                     char ipmsg[32];
                     uint32_t ip = ntohl(g_net.self_ip);
                     int pos = 0;
-                    /* Format: "SELF_IP=192.168.0.47\n" */
+                    /* Format: "SELF_IP=192.168.0.47\n"
+                     * NOTE: Must format each octet as a multi-digit decimal.
+                     * The old code used '0'+byte which only works for 0-9. */
+                    uint8_t o0 = (ip >> 24) & 0xFF;
+                    uint8_t o1 = (ip >> 16) & 0xFF;
+                    uint8_t o2 = (ip >> 8) & 0xFF;
+                    uint8_t o3 = ip & 0xFF;
                     const char *p = "SELF_IP=";
                     while (*p) ipmsg[pos++] = *p++;
-                    ipmsg[pos++] = '0' + ((ip >> 24) & 0xFF);
-                    ipmsg[pos++] = '.';
-                    ipmsg[pos++] = '0' + ((ip >> 16) & 0xFF);
-                    ipmsg[pos++] = '.';
-                    ipmsg[pos++] = '0' + ((ip >> 8) & 0xFF);
-                    ipmsg[pos++] = '.';
-                    ipmsg[pos++] = '0' + (ip & 0xFF);
+                    if (o0 >= 100) { ipmsg[pos++] = '0' + (o0 / 100); o0 %= 100; }
+                    if (o0 >= 10)  { ipmsg[pos++] = '0' + (o0 / 10);  o0 %= 10; }
+                    ipmsg[pos++] = '0' + o0; ipmsg[pos++] = '.';
+                    if (o1 >= 100) { ipmsg[pos++] = '0' + (o1 / 100); o1 %= 100; }
+                    if (o1 >= 10)  { ipmsg[pos++] = '0' + (o1 / 10);  o1 %= 10; }
+                    ipmsg[pos++] = '0' + o1; ipmsg[pos++] = '.';
+                    if (o2 >= 100) { ipmsg[pos++] = '0' + (o2 / 100); o2 %= 100; }
+                    if (o2 >= 10)  { ipmsg[pos++] = '0' + (o2 / 10);  o2 %= 10; }
+                    ipmsg[pos++] = '0' + o2; ipmsg[pos++] = '.';
+                    if (o3 >= 100) { ipmsg[pos++] = '0' + (o3 / 100); o3 %= 100; }
+                    if (o3 >= 10)  { ipmsg[pos++] = '0' + (o3 / 10);  o3 %= 10; }
+                    ipmsg[pos++] = '0' + o3;
                     ipmsg[pos++] = '\n';
                     ipmsg[pos] = '\0';
                     cellFsWrite(fd_p, ipmsg, pos, &written_p);
@@ -328,17 +339,27 @@ int network_recv(uint8_t* buffer, int buf_size)
                                CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_APPEND,
                                &fd_r, NULL, 0) == CELL_OK) {
                     char rmsg[80];
-                    uint32_t sip = ntohl(from_addr.sin_addr.s_addr);
+                    uint32_t sip_raw = ntohl(from_addr.sin_addr.s_addr);
                     int rp = 0;
+                    /* Format each octet as proper multi-digit decimal */
+                    uint8_t r0 = (sip_raw >> 24) & 0xFF;
+                    uint8_t r1 = (sip_raw >> 16) & 0xFF;
+                    uint8_t r2 = (sip_raw >> 8) & 0xFF;
+                    uint8_t r3 = sip_raw & 0xFF;
                     const char *rp_prefix = "RECV from=";
                     while (*rp_prefix) rmsg[rp++] = *rp_prefix++;
-                    rmsg[rp++] = '0' + ((sip >> 24) & 0xFF);
-                    rmsg[rp++] = '.';
-                    rmsg[rp++] = '0' + ((sip >> 16) & 0xFF);
-                    rmsg[rp++] = '.';
-                    rmsg[rp++] = '0' + ((sip >> 8) & 0xFF);
-                    rmsg[rp++] = '.';
-                    rmsg[rp++] = '0' + (sip & 0xFF);
+                    if (r0 >= 100) { rmsg[rp++] = '0' + (r0 / 100); r0 %= 100; }
+                    if (r0 >= 10)  { rmsg[rp++] = '0' + (r0 / 10);  r0 %= 10; }
+                    rmsg[rp++] = '0' + r0; rmsg[rp++] = '.';
+                    if (r1 >= 100) { rmsg[rp++] = '0' + (r1 / 100); r1 %= 100; }
+                    if (r1 >= 10)  { rmsg[rp++] = '0' + (r1 / 10);  r1 %= 10; }
+                    rmsg[rp++] = '0' + r1; rmsg[rp++] = '.';
+                    if (r2 >= 100) { rmsg[rp++] = '0' + (r2 / 100); r2 %= 100; }
+                    if (r2 >= 10)  { rmsg[rp++] = '0' + (r2 / 10);  r2 %= 10; }
+                    rmsg[rp++] = '0' + r2; rmsg[rp++] = '.';
+                    if (r3 >= 100) { rmsg[rp++] = '0' + (r3 / 100); r3 %= 100; }
+                    if (r3 >= 10)  { rmsg[rp++] = '0' + (r3 / 10);  r3 %= 10; }
+                    rmsg[rp++] = '0' + r3;
                     rmsg[rp++] = ':';
                     /* port */
                     uint16_t sport = ntohs(from_addr.sin_port);
@@ -396,6 +417,34 @@ int network_recv(uint8_t* buffer, int buf_size)
     }
 
     return ret;
+}
+
+int network_send_keepalive(void)
+{
+    uint8_t packet[NET_PACKET_HEADER_SIZE];
+    static uint64_t last_ka_usec = 0;
+    uint64_t now_usec;
+
+    if (!g_net.initialized || g_net.socket_fd < 0 || !g_net.server_known) {
+        return -1;
+    }
+
+    now_usec = sys_time_get_system_time();
+    if (last_ka_usec != 0 && (now_usec - last_ka_usec) < NET_KEEPALIVE_INTERVAL_USEC) {
+        return 0; /* Not yet time for next heartbeat */
+    }
+
+    memset(packet, 0, sizeof(packet));
+    packet[0] = NET_PACKET_TYPE_KEEPALIVE;  /* 0xEE */
+    packet[1] = 0;  /* reserved / state byte */
+    packet[2] = 0;  /* reserved / sub-type */
+
+    if (network_send(packet, (int)sizeof(packet)) > 0) {
+        last_ka_usec = now_usec;
+        DEBUG_VERBOSE("[NET] Keepalive heartbeat sent\n");
+    }
+
+    return 0;
 }
 
 int network_send_poll(uint8_t zone, uint8_t sequence)

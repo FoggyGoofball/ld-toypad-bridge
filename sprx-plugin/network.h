@@ -39,6 +39,15 @@ extern struct net_state g_net;
 // protocol collision (both sides were using 0x01 for different purposes).
 #define NET_PACKET_TYPE_DISCOVERY  0xF0  // Discovery probe/beacon
 
+// Keepalive heartbeat — sent periodically by PS3 after server is known
+// so the PC server can register and track the client even without USB hooks.
+// Distinct from all USB HID payload (0x01-0x04) and discovery (0xF0).
+#define NET_PACKET_TYPE_KEEPALIVE 0xEE  // Heartbeat / client announcement
+
+// Keepalive interval: 3 seconds between heartbeats (plenty for registration,
+// low enough to not flood the network).
+#define NET_KEEPALIVE_INTERVAL_USEC 3000000ULL
+
 // Response status from PC -> PS3
 #define NET_RESPONSE_OK            0x00  // Successful response with data
 #define NET_RESPONSE_NO_TAG        0x01  // No tag on requested zone
@@ -122,6 +131,16 @@ int network_send_data(uint8_t zone, uint8_t sequence, const uint8_t* data, int l
  * @param sequence Sequence counter value used for probe packet
  */
 void network_maybe_probe_server(uint8_t sequence);
+
+/**
+ * Send a periodic keepalive heartbeat to the PC server.
+ * Rate-limited to once every NET_KEEPALIVE_INTERVAL_USEC (3 seconds).
+ * Ensures the server registers the PS3 client even when no USB hooks
+ * are installed (VSH mode). Called from the main background loop.
+ *
+ * @return 1 if a heartbeat was sent, 0 if rate-limited, -1 on error
+ */
+int network_send_keepalive(void);
 
 /**
  * Set the PC server's IP address (optional, for when discovery isn't working)

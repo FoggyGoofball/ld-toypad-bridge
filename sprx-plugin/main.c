@@ -207,8 +207,16 @@ static void worker_thread(uint64_t arg)
             DEBUG_VERBOSE("[MAIN] RX %d bytes from server\n", n);
         }
 
-        /* Probe for server if not yet discovered (rate-limited) */
+        /* Probe for server if not yet discovered (rate-limited).
+         * Once server is known via hardcode in step 3b, this is a no-op. */
         network_maybe_probe_server(seq++);
+
+        /* Send periodic keepalive heartbeat to PC server.
+         * This is the ONLY outbound traffic in VSH mode (no USB hooks).
+         * It ensures the Node.js server registers/keeps the PS3 client
+         * in its clientAddress field before any game boots.
+         * Rate-limited internally to once per 3 seconds. */
+        network_send_keepalive();
 
         /* Yield PPU — critical: without this, VSH will freeze */
         sys_timer_usleep(10000); /* 10ms */

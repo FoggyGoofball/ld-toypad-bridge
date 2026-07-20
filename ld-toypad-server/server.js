@@ -101,6 +101,7 @@ const CONFIG = {
   PACKET_TYPE_WRITE_TAG: 0x03,
   PACKET_TYPE_DATA_OUT: 0x04,
   PACKET_TYPE_DISCOVERY: 0xF0,
+  PACKET_TYPE_KEEPALIVE: 0xEE,
 
   RESPONSE_OK: 0x00,
   RESPONSE_NO_TAG: 0x01,
@@ -504,6 +505,37 @@ async function processPacket(packetType, zone, sequence, rinfo, packetBuffer) {
 
     case CONFIG.PACKET_TYPE_DATA_OUT:
       response = handleDataOut(zone, sequence, packetBuffer);
+      break;
+
+    case CONFIG.PACKET_TYPE_DISCOVERY:
+      if (CONFIG.VERBOSE) {
+        console.log(`[Server] Discovery probe from ${rinfo.address}:${rinfo.port}`);
+      }
+      // Respond with a discovery ACK — same 0xF0 type, zone echoed, seq echoed
+      {
+        const ack = Buffer.alloc(8, 0x00);
+        ack[0] = CONFIG.PACKET_TYPE_DISCOVERY;
+        ack[1] = zone;
+        ack[2] = sequence;
+        ack[3] = CONFIG.RESPONSE_OK;
+        response = ack;
+      }
+      break;
+
+    case CONFIG.PACKET_TYPE_KEEPALIVE:
+      // Keepalive heartbeat from PS3 – just register client and ACK.
+      // No zone/data processing needed.  The PS3 sends this every 3 seconds
+      // so the server knows it's alive (especially in VSH mode with no USB hooks).
+      if (CONFIG.VERBOSE) {
+        console.log(`[Server] Keepalive from ${rinfo.address}:${rinfo.port} (seq=${sequence})`);
+      }
+      {
+        const ack = Buffer.alloc(8, 0x00);
+        ack[0] = CONFIG.PACKET_TYPE_KEEPALIVE;
+        ack[1] = CONFIG.RESPONSE_OK;
+        ack[2] = sequence;
+        response = ack;
+      }
       break;
 
     default:
