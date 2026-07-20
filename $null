@@ -1,2 +1,1 @@
-rm: unknown option -- o
-Try 'rm --help' for more information.
+error: did you mean `--force` (with two dashes)?
