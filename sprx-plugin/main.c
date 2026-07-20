@@ -141,6 +141,14 @@ static void worker_thread(uint64_t arg)
     DEBUG_PRINT("[MAIN] Network interface ready\n");
 
     /* -------------------------------------------------------
+     * 3b. Hardcode PC server IP (dev phase — bypass broadcast discovery)
+     *     PC=192.168.0.17:28472 (0xC0A80011 = 192.168.0.17 in network order)
+     * ------------------------------------------------------- */
+    network_set_server(htonl(0xC0A80011), 28472);
+    papertrail("OK: network_set_server(192.168.0.17:28472)");
+    DEBUG_PRINT("[MAIN] Server hardcoded to 192.168.0.17:28472\n");
+
+    /* -------------------------------------------------------
      * 4. Install USB detour hooks for Toy Pad emulation.
      *
      *    Intercepts the game's cellUsbdInit, cellUsbdOpenPipe,

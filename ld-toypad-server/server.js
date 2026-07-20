@@ -460,15 +460,11 @@ server.on('message', (msg, rinfo) => {
   }
 
   // Track PS3 address (skip our own IPs — server echoes its beacons).
-  // ONLY accept discovery-packet type (0xF0) for initial registration
-  // to prevent protocol collision and self-discovery loops.
+  // Any packet from a non-local IP is accepted for registration.
+  // The byte 0x01 is a USB HID Report ID, not a custom protocol type.
   if (!clientAddress) {
     const addr = rinfo.address;
     if (addr === '127.0.0.1' || addr === '::1' || addr === '0.0.0.0' || addr === '192.168.0.17') {
-      return;
-    }
-    // Must be a discovery packet (0xF0) to register as client
-    if (msg[0] !== CONFIG.PACKET_TYPE_DISCOVERY) {
       return;
     }
     clientAddress = { address: addr, port: rinfo.port };
@@ -508,12 +504,6 @@ async function processPacket(packetType, zone, sequence, rinfo, packetBuffer) {
 
     case CONFIG.PACKET_TYPE_DATA_OUT:
       response = handleDataOut(zone, sequence, packetBuffer);
-      break;
-
-    case CONFIG.PACKET_TYPE_DISCOVERY:
-      // Discovery ping from PS3 — ACK with a discovery-type response.
-      // Once client is registered, these serve as keep-alive pings.
-      response = buildDiscoveryAck(zone, sequence);
       break;
 
     default:
@@ -615,18 +605,6 @@ function buildPacket(status, zone, sequence, data) {
 function buildErrorResponse(status, zone, sequence) {
   const buf = Buffer.alloc(80, 0x00);
   buf[0] = status;
-  buf[1] = zone;
-  buf[2] = sequence;
-  return buf;
-}
-
-/**
- * Build a discovery ACK response
- * Echoes back the discovery byte (0xF0) as acknowledgment.
- */
-function buildDiscoveryAck(zone, sequence) {
-  const buf = Buffer.alloc(80, 0x00);
-  buf[0] = CONFIG.PACKET_TYPE_DISCOVERY;  // 0xF0 ACK
   buf[1] = zone;
   buf[2] = sequence;
   return buf;
