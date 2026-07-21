@@ -19,7 +19,7 @@ $LDFLAGS = @(
 )
 
 Write-Host "=== Compiling C sources ==="
-$cFiles = @("main.c","compat.c","network.c","debug.c","toypad_state.c","usb_hooks.c")
+$cFiles = @("main.c","compat.c","network.c","debug.c","toypad_state.c","usb_hooks.c","toc_trampoline_c.c")
 foreach ($f in $cFiles) {
     $o = [System.IO.Path]::GetFileNameWithoutExtension($f) + ".o"
     Write-Host "  CC    $f"
@@ -44,7 +44,8 @@ $objs = @(
     "$Tmp\obj\main.o","$Tmp\obj\compat.o","$Tmp\obj\network.o",
     "$Tmp\obj\debug.o","$Tmp\obj\toypad_state.o",
     "$Tmp\obj\usb_hooks.o",
-    "$Tmp\obj\toc_trampoline.o"
+    "$Tmp\obj\toc_trampoline.o",
+    "$Tmp\obj\toc_trampoline_c.o"
 )
 & $CC @objs @LDFLAGS -o "$Tmp\build\ldtoypad.prx" 2>&1
 if ($LASTEXITCODE -ne 0) {

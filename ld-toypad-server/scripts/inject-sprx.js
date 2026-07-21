@@ -2,20 +2,23 @@
 /**
  * inject-sprx.js — PS3MAPI Game Process Injector for LD-ToyPad Bridge
  *
- * TWO-PHASE HOOK INSTALLATION (REFACTORED 2026-07-20):
+ * TWO-PHASE HOOK INSTALLATION (REFACTORED 2026-07-21):
+ *
+ * Uses webMAN MOD 1.47.48c+ JSON RESTful API endpoint:
+ *   GET /ps3mapi.ps3?<COMMAND>
  *
  * PHASE 1 (SPRX-side):
- *   - SPRX injected into game process
+ *   - SPRX injected into game process via /ps3mapi.ps3?MODULE%20LOAD...
  *   - NID scan finds cellUsbd function addresses
  *   - sys_memory_allocate allocates R-W-X trampoline pages
  *   - Original 4 instructions copied + branch-back written
  *   - IPC file written to /dev_hdd0/tmp/ld_hooks_ready.txt
  *
  * PHASE 2 (Node.js-side, THIS SCRIPT):
- *   - Polls for IPC file via HTTP GET download.ps3?file=...
+ *   - Polls for IPC file via direct HTTP GET /dev_hdd0/tmp/ld_hooks_ready.txt
  *   - Parses target and wrapper addresses
  *   - Writes 4-instruction preamble (lis/ori/mtctr/bctr) to each
- *     target function via PS3MAPI /write_process (Ring 0)
+ *     target function via PS3MAPI MEMORY SET command
  *   - R-X .text segment protection bypassed by PS3MAPI kernel module
  *
  * ARCHITECTURE:
@@ -24,12 +27,12 @@
  *   │  webMAN   │                    │  -sprx.js  │
  *   │  MOD      │                    └─────┬──────┘
  *   └────┬─────┘                           │
- *        │ 1) PS3MAPI load_prx             │
+ *        │ 1) MODULE LOAD                  │
  *        ▼                                 │
  *   ┌──────────┐  2) writes IPC file      │
  *   │ SPRX     │ ──────────────────────→  │
  *   │ (game)   │                          │
- *   └──────────┘  3) /write_process       │
+ *   └──────────┘  3) MEMORY SET           │
  *        │        ←─────────────────────  │
  *        │  preamble (4 insns)            │
  *        ▼                                │
@@ -37,6 +40,16 @@
  *   │ GAME     │ ────────────────→  server│
  *   │ process  │  UDP:28472              │
  *   └──────────┘                         │
+ *
+ * URL MIGRATION NOTES (webMAN MOD 1.47.48c+):
+ *   OLD: /ps3mapi_process                    →  400 Bad Request
+ *   NEW: /ps3mapi.ps3?PROCESS%20GETCURRENTPID
+ *   OLD: /ps3mapi_process?pid=X&load_prx=... →  400 Bad Request
+ *   NEW: /ps3mapi.ps3?MODULE%20LOAD%200xX%20/path
+ *   OLD: /cpursx.ps3?/write_process...       →  Non-standard
+ *   NEW: /ps3mapi.ps3?MEMORY%20SET%200xX%200xADDR%20HEX
+ *   OLD: /cpursx.ps3?/read_process?path=...   →  Non-standard
+ *   NEW: /dev_hdd0/tmp/filename.txt          →  Direct filesystem
  *
  * USAGE:
  *   node inject-sprx.js [options]
@@ -123,15 +136,19 @@ function verbose(msg) {
 // ──────────────────────────────────────────────
 // 1. Detect Game Process
 // ──────────────────────────────────────────────
+// Uses webMAN MOD 1.47.48c+ JSON RESTful API:
+//   GET /ps3mapi.ps3?PROCESS%20GETCURRENTPID
+// Returns JSON: { "result": "0x01030000" } or similar
 async function detectGame() {
   log(`Detecting game on ${PS3_IP}:${PS3MAPI_PORT} (poll every ${POLL_MS}ms)...`);
+  log('  Using webMAN 1.47.48c+ JSON API: /ps3mapi.ps3?PROCESS%20GETCURRENTPID');
   
   while (true) {
     try {
-      const resp = await ps3mapiRequest('/ps3mapi_process');
+      const resp = await ps3mapiRequest('/ps3mapi.ps3?PROCESS%20GETCURRENTPID');
       verbose(`Process list response:\n${resp || '(empty)'}`);
       
-      const gamePid = parseGamePid(resp);
+      const gamePid = parseJsonPid(resp);
       if (gamePid !== null) {
         log(`✓ Game detected! PID=0x${gamePid.toString(16)} (${gamePid})`);
         return gamePid;
@@ -144,68 +161,57 @@ async function detectGame() {
   }
 }
 
-function parseGamePid(resp) {
+// Parse JSON response from /ps3mapi.ps3?PROCESS GETCURRENTPID
+// Actual observed format: { "response": "0x0000000001010200" }
+//   - Key is "response" (not "result")
+//   - Value is 64-bit hex with leading zeros, e.g. 0x0000000001010200
+// Fallback: raw hex string like "0x01030000"
+function parseJsonPid(resp) {
   if (!resp) return null;
   
-  const candidates = [];
-  
-  const gamePatterns = [/EBOOT\.?BIN/i, /BLUS\d+/i, /BLES\d+/i, /NPUB\d+/i, /NPEB\d+/i, /LEGO/i, /DIMENSION/i, /GAME/i];
-  
-  const lines = resp.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-  
-  for (const line of lines) {
-    let pid = null;
-    let name = null;
-    
-    const pidMatch = line.match(/pid\s*[=:]\s*(0x[0-9a-fA-F]+)/i);
-    if (pidMatch) pid = parseInt(pidMatch[1], 16);
-    
-    const pidMatch2 = line.match(/process\s*id\s*[=:]\s*(0x[0-9a-fA-F]+)/i);
-    if (pidMatch2 && pid === null) pid = parseInt(pidMatch2[1], 16);
-    
-    const pidMatch3 = line.match(/^0x([0-9a-fA-F]+)$/);
-    if (pidMatch3 && pid === null) pid = parseInt(pidMatch3[1], 16);
-    
-    const nameMatch = line.match(/name\s*[=:]\s*(\S+)/i);
-    if (nameMatch) name = nameMatch[1];
-    
-    if (!name) {
-      const namePrefix = line.match(/^(\S+)\s*:/);
-      if (namePrefix) name = namePrefix[1];
-    }
-    
-    if (pid !== null) {
-      if (name) {
-        const isGame = gamePatterns.some(p => p.test(name));
-        if (isGame) candidates.push({ pid, name, score: 10 });
-      }
-      
-      if (pid !== 0x10005 && pid !== 0x10000005) {
-        candidates.push({ pid, name: name || `PID_${pid.toString(16)}`, score: 5 });
-      }
-    }
-  }
-  
-  if (candidates.length === 0) {
-    const rawPids = resp.match(/0x([0-9a-fA-F]{4,8})/g);
-    if (rawPids) {
-      for (const raw of rawPids) {
-        const pid = parseInt(raw, 16);
-        if (pid !== 0x10005 && pid > 0x10005) {
-          candidates.push({ pid, name: `RAW_${raw}`, score: 3 });
+  // Try JSON parse first (official webMAN MOD 1.47.48c+ format)
+  try {
+    const json = JSON.parse(resp);
+    // Try "response" key first (actual webMAN MOD API format)
+    const pidStr = (json && json.response) ? String(json.response) :
+                   (json && json.result) ? String(json.result) : null;
+    if (pidStr) {
+      const hexMatch = pidStr.match(/0x([0-9a-fA-F]+)/);
+      if (hexMatch) {
+        const pid = parseInt(hexMatch[1], 16);
+        // PID 0x10005 = VSH (XMB), PID must be > 0x10000
+        if (pid > 0 && pid !== 0x10005) {
+          verbose(`  PID candidate from JSON: ${pidStr} → parsed ${pid} (0x${pid.toString(16)})`);
+          return pid;
         }
       }
     }
+  } catch {
+    // Not JSON, try raw formats below
   }
   
-  if (candidates.length > 0) {
-    candidates.sort((a, b) => b.score - a.score);
-    verbose(`Process candidates: ${JSON.stringify(candidates)}`);
-    return candidates[0].pid;
+  // Fallback: any hex string in the response (handles 64-bit leading zeros)
+  const hexMatch = resp.match(/0x([0-9a-fA-F]+)/);
+  if (hexMatch) {
+    const pid = parseInt(hexMatch[1], 16);
+    // VSH (XMB) PID, skip it
+    if (pid !== 0x10005 && pid > 0x10000) {
+      verbose(`  PID candidate from raw hex: 0x${hexMatch[1]} → ${pid}`);
+      return pid;
+    }
+  }
+  
+  // Fallback: decimal number string
+  const numMatch = resp.match(/(\d+)/);
+  if (numMatch) {
+    const pid = parseInt(numMatch[1], 10);
+    if (pid > 0x10000) return pid;
   }
   
   return null;
 }
+
+
 
 // ──────────────────────────────────────────────
 // 2. Wait for Game to Stabilize
@@ -231,11 +237,16 @@ async function waitForGame(gamePid) {
 }
 
 // ──────────────────────────────────────────────
-// 3. Inject SPRX via PS3MAPI
+// 3. Inject SPRX via PS3MAPI JSON API
 // ──────────────────────────────────────────────
+// Uses webMAN MOD 1.47.48c+ JSON RESTful API:
+//   UNLOAD: GET /ps3mapi.ps3?MODULE%20UNLOAD%200x{PID}%20{path}
+//   LOAD:   GET /ps3mapi.ps3?MODULE%20LOAD%200x{PID}%20{path}
+// Returns JSON: { "result": "success" } or similar
 async function injectSprx(gamePid) {
   log(`Injecting SPRX into game PID=0x${gamePid.toString(16)}...`);
   log(`  SPRX path: ${SPRX_PATH}`);
+  log('  Using webMAN 1.47.48c+ JSON API: /ps3mapi.ps3?MODULE%20LOAD/UNLOAD...');
 
   // Step 3a: Unload previous PRX (if any)
   //
@@ -252,7 +263,9 @@ async function injectSprx(gamePid) {
   // close → sys_net_finalize → clean slate.
   log('  CRITICAL: Unloading previous PRX (clean teardown)...');
   try {
-    const unloadEndpoint = `/ps3mapi_process?pid=0x${gamePid.toString(16)}&unload_prx=${encodeURIComponent(SPRX_PATH)}`;
+    const pidHex = '0x' + gamePid.toString(16);
+    const encodedPath = encodeURIComponent(SPRX_PATH);
+    const unloadEndpoint = `/ps3mapi.ps3?MODULE%20UNLOAD%20${pidHex}%20${encodedPath}`;
     const unloadResp = await ps3mapiRequest(unloadEndpoint, 5000);
     verbose(`  Unload response: ${unloadResp ? unloadResp.trim() : '(empty)'}`);
     await sleep(500);  // Wait for module_stop to complete
@@ -263,17 +276,22 @@ async function injectSprx(gamePid) {
   }
 
   // Step 3b: Load new PRX
-  const endpoint = `/ps3mapi_process?pid=0x${gamePid.toString(16)}&load_prx=${encodeURIComponent(SPRX_PATH)}`;
+  const pidHex = '0x' + gamePid.toString(16);
+  const encodedPath = encodeURIComponent(SPRX_PATH);
+  const endpoint = `/ps3mapi.ps3?MODULE%20LOAD%20${pidHex}%20${encodedPath}`;
   verbose(`Endpoint: ${endpoint}`);
   
   try {
     const resp = await ps3mapiRequest(endpoint, 15000);
     log(`  Response: ${resp ? resp.trim() : '(empty)'}`);
     
-    if (resp && (resp.includes('success') || resp.includes('loaded') || resp.includes('OK') || resp.includes('0x0'))) {
-      log('✓ SPRX injection SUCCESSFUL!');
-      return true;
-    } else if (resp && resp.length > 0) {
+    // Check for success indicators in JSON response
+    if (resp) {
+      const lower = resp.toLowerCase();
+      if (lower.includes('success') || lower.includes('loaded') || lower.includes('ok') || lower.includes('"result"')) {
+        log('✓ SPRX injection SUCCESSFUL!');
+        return true;
+      }
       log(`⚠ Injection response: "${resp.trim()}"`);
       return true;
     } else {
@@ -297,22 +315,28 @@ async function injectSprx(gamePid) {
   }
 }
 
+
 // ──────────────────────────────────────────────
 // 4. Wait for SPRX IPC file + Write Preambles
 // ──────────────────────────────────────────────
+// Uses webMAN MOD 1.47.48c+ endpoints:
+//   IPC POLL:  GET /dev_hdd0/tmp/ld_hooks_ready.txt  (direct filesystem)
+//   MEM WRITE: GET /ps3mapi.ps3?MEMORY%20SET%200x{PID}%200x{ADDR}%20{HEX}
 async function waitForIpcAndInstall(gamePid) {
   log('Waiting for SPRX to write IPC file (ld_hooks_ready.txt)...');
   log('  SPRX will NID-scan, allocate trampolines, copy original');
   log('  instructions, and write IPC file on /dev_hdd0/tmp/.');
   log('  This should take < 1 second after injection.');
+  log('  Using direct HTTP GET: /dev_hdd0/tmp/ld_hooks_ready.txt');
   
   let ipcContent = null;
   
   // Poll for IPC file (up to 15 seconds)
+  // Uses direct filesystem access via webMAN HTTP server
   for (let attempt = 0; attempt < 30; attempt++) {
     try {
       const resp = await ps3mapiRequest(
-        `/cpursx.ps3?/read_process?path=/dev_hdd0/tmp/ld_hooks_ready.txt`,
+        `/dev_hdd0/tmp/ld_hooks_ready.txt`,
         3000
       );
       
@@ -393,9 +417,12 @@ async function waitForIpcAndInstall(gamePid) {
     preamble.writeUInt32BE(0x7D6B03A6, 8);  // mtctr r11
     preamble.writeUInt32BE(0x4E800420, 12); // bctr
     
-    // Write via PS3MAPI /write_process (Ring 0, bypasses R-X protection)
+    // Write via PS3MAPI MEMORY SET command (webMAN MOD 1.47.48c+ JSON API)
+    // Ring 0 level, bypasses R-X .text segment protection
     const hexData = preamble.toString('hex').toUpperCase();
-    const writeEndpoint = `/cpursx.ps3?/write_process?pid=0x${gamePid.toString(16)}&addr=0x${targetAddr.toString(16)}&data=${hexData}`;
+    const pidHex = '0x' + gamePid.toString(16);
+    const addrHex = '0x' + targetAddr.toString(16);
+    const writeEndpoint = `/ps3mapi.ps3?MEMORY%20SET%20${pidHex}%20${addrHex}%20${hexData}`;
     
     verbose(`  Write endpoint: ${writeEndpoint}`);
     
@@ -414,6 +441,7 @@ async function waitForIpcAndInstall(gamePid) {
   log('  Game will now route Toy Pad USB traffic via hooks.');
   return true;
 }
+
 
 // ──────────────────────────────────────────────
 // Utility
