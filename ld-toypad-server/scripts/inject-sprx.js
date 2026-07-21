@@ -2,30 +2,41 @@
 /**
  * inject-sprx.js — PS3MAPI Game Process Injector for LD-ToyPad Bridge
  *
- * PURPOSE:
- *   Detects when the LEGO Dimensions game launches on the PS3, waits for
- *   it to fully initialize (intro cinematics, trophy scan, heap init),
- *   scans the game's memory for cellUsbd function addresses, then injects
- *   the ldtoypad.sprx plugin into the game process.
+ * TWO-PHASE HOOK INSTALLATION (REFACTORED 2026-07-20):
  *
- * ONCE INJECTED:
- *   The SPRX resides in the game's address space and can install PowerPC
- *   detour hooks on the game's cellUsbdInit, cellUsbdOpenPipe,
- *   cellUsbdTransfer, and cellUsbdClosePipe functions.  USB Toy Pad
- *   traffic is then routed to the Node.js server via UDP.
+ * PHASE 1 (SPRX-side):
+ *   - SPRX injected into game process
+ *   - NID scan finds cellUsbd function addresses
+ *   - sys_memory_allocate allocates R-W-X trampoline pages
+ *   - Original 4 instructions copied + branch-back written
+ *   - IPC file written to /dev_hdd0/tmp/ld_hooks_ready.txt
+ *
+ * PHASE 2 (Node.js-side, THIS SCRIPT):
+ *   - Polls for IPC file via HTTP GET download.ps3?file=...
+ *   - Parses target and wrapper addresses
+ *   - Writes 4-instruction preamble (lis/ori/mtctr/bctr) to each
+ *     target function via PS3MAPI /write_process (Ring 0)
+ *   - R-X .text segment protection bypassed by PS3MAPI kernel module
  *
  * ARCHITECTURE:
- *   ┌──────────┐   HTTP (port 80)    ┌────────┐
- *   │  PS3      │ ←───────────────── │   PC   │
- *   │  webMAN   │                    │ inject │
- *   │  MOD      │                    │ .sprx  │
- *   └────┬─────┘                    └────────┘
- *        │ PS3MAPI process injection
- *        ▼
- *   ┌──────────┐  cellUsbd hooks    ┌────────┐
- *   │ GAME     │ ────────────────→  │ server │
- *   │ process  │  UDP:28472         │ .js    │
- *   └──────────┘                    └────────┘
+ *   ┌──────────┐   HTTP (port 80)    ┌────────────┐
+ *   │  PS3      │ ←───────────────── │  inject    │
+ *   │  webMAN   │                    │  -sprx.js  │
+ *   │  MOD      │                    └─────┬──────┘
+ *   └────┬─────┘                           │
+ *        │ 1) PS3MAPI load_prx             │
+ *        ▼                                 │
+ *   ┌──────────┐  2) writes IPC file      │
+ *   │ SPRX     │ ──────────────────────→  │
+ *   │ (game)   │                          │
+ *   └──────────┘  3) /write_process       │
+ *        │        ←─────────────────────  │
+ *        │  preamble (4 insns)            │
+ *        ▼                                │
+ *   ┌──────────┐  cellUsbd hooks         │
+ *   │ GAME     │ ────────────────→  server│
+ *   │ process  │  UDP:28472              │
+ *   └──────────┘                         │
  *
  * USAGE:
  *   node inject-sprx.js [options]
@@ -84,17 +95,6 @@ const NO_INJECT = process.argv.includes('--no-inject');
 const VERBOSE = process.argv.includes('--verbose') || process.argv.includes('-v');
 
 // ──────────────────────────────────────────────
-// Known cellUsbd NID Values (FNV-1a 32-bit, masked 0x7FFFFFFF)
-// These identify the functions in the game's PRX import table.
-// ──────────────────────────────────────────────
-const CELLUSBD_NIDS = {
-  cellUsbdInit:           0x7F5F00D3,
-  cellUsbdOpenPipe:       0x1AB6D80B,
-  cellUsbdTransfer:       0x7B4436CE,
-  cellUsbdClosePipe:      0x2F82F1A5,
-};
-
-// ──────────────────────────────────────────────
 // PS3MAPI HTTP Helper
 // ──────────────────────────────────────────────
 function ps3mapiRequest(endpoint, timeoutMs = 5000) {
@@ -131,12 +131,6 @@ async function detectGame() {
       const resp = await ps3mapiRequest('/ps3mapi_process');
       verbose(`Process list response:\n${resp || '(empty)'}`);
       
-      // Parse process listing — multiple format variants:
-      // Format 1: "VSH: process id=0x10005 game: process id=0x1000a"
-      // Format 2: "pid=0x10005 name=VSH"
-      // Format 3: XML
-      // Format 4: CSV or raw text
-      
       const gamePid = parseGamePid(resp);
       if (gamePid !== null) {
         log(`✓ Game detected! PID=0x${gamePid.toString(16)} (${gamePid})`);
@@ -155,56 +149,43 @@ function parseGamePid(resp) {
   
   const candidates = [];
   
-  // Method 1: Look for game process by name (EBOOT.BIN, BLUS31548, BLES02206, etc.)
   const gamePatterns = [/EBOOT\.?BIN/i, /BLUS\d+/i, /BLES\d+/i, /NPUB\d+/i, /NPEB\d+/i, /LEGO/i, /DIMENSION/i, /GAME/i];
   
-  // Split into lines
   const lines = resp.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   
   for (const line of lines) {
-    // Extract process ID
     let pid = null;
     let name = null;
     
-    // Try different formats
-    
-    // Format: "VSH : process id=0x10005" or "game: pid=0x1000a"
     const pidMatch = line.match(/pid\s*[=:]\s*(0x[0-9a-fA-F]+)/i);
     if (pidMatch) pid = parseInt(pidMatch[1], 16);
     
-    // Format: "process id=0x10005"
     const pidMatch2 = line.match(/process\s*id\s*[=:]\s*(0x[0-9a-fA-F]+)/i);
     if (pidMatch2 && pid === null) pid = parseInt(pidMatch2[1], 16);
     
-    // Format: just "0x10005" or "10005" 
     const pidMatch3 = line.match(/^0x([0-9a-fA-F]+)$/);
     if (pidMatch3 && pid === null) pid = parseInt(pidMatch3[1], 16);
     
-    // Extract name
     const nameMatch = line.match(/name\s*[=:]\s*(\S+)/i);
     if (nameMatch) name = nameMatch[1];
     
-    // Format: "VSH : process id=..." — name is before colon
     if (!name) {
       const namePrefix = line.match(/^(\S+)\s*:/);
       if (namePrefix) name = namePrefix[1];
     }
     
     if (pid !== null) {
-      // Check if this looks like a game (not VSH)
       if (name) {
         const isGame = gamePatterns.some(p => p.test(name));
         if (isGame) candidates.push({ pid, name, score: 10 });
       }
       
-      // VSH is always pid 0x10005 — anything else with higher pid is likely game
       if (pid !== 0x10005 && pid !== 0x10000005) {
         candidates.push({ pid, name: name || `PID_${pid.toString(16)}`, score: 5 });
       }
     }
   }
   
-  // If nothing parsed via patterns, try raw hex extraction
   if (candidates.length === 0) {
     const rawPids = resp.match(/0x([0-9a-fA-F]{4,8})/g);
     if (rawPids) {
@@ -217,7 +198,6 @@ function parseGamePid(resp) {
     }
   }
   
-  // Return highest-scored candidate
   if (candidates.length > 0) {
     candidates.sort((a, b) => b.score - a.score);
     verbose(`Process candidates: ${JSON.stringify(candidates)}`);
@@ -233,7 +213,6 @@ function parseGamePid(resp) {
 async function waitForGame(gamePid) {
   log(`Waiting ${WAIT_SECONDS}s for game to initialize...`);
   
-  // Show countdown every 10 seconds
   const start = Date.now();
   const totalMs = WAIT_SECONDS * 1000;
   
@@ -252,170 +231,38 @@ async function waitForGame(gamePid) {
 }
 
 // ──────────────────────────────────────────────
-// 3. Scan game memory for cellUsbd function addresses
-// ──────────────────────────────────────────────
-async function scanCellUsbdAddresses(gamePid) {
-  log('Scanning game memory for cellUsbd function addresses...');
-  
-  // Strategy: Read the game's .got2 section which contains pointers to
-  // imported system library functions like cellUsbd.
-  //
-  // On PS3, import stubs in the game's PRX have the pattern:
-  //   lis r12, <nid_high>    0x3D80xxxx
-  //   ori r12, r12, <nid_low> 0x618Cxxxx
-  //   ...
-  // The resolved function pointer is stored in .got2.
-  //
-  // Since directly scanning the entire 256MB game memory is slow via HTTP,
-  // we use a targeted approach: read the PRX module list to find .got2 segments.
-  
-  const foundAddrs = {};
-  let totalScanned = 0;
-  
-  // Read game memory regions that might contain import stubs
-  // Typical game segments: .text (0x00100000+), .got2, etc.
-  // We search regions where PRX modules are mapped
-  const searchRegions = [
-    // Game's main executable region (EBOOT.BIN mapped at base address)
-    { start: 0x00100000, size: 0x00800000 },   // 8MB
-    { start: 0x01000000, size: 0x01000000 },   // 16MB
-    { start: 0x02000000, size: 0x01000000 },   // 16MB
-    // Some games load at higher addresses
-    { start: 0x30000000, size: 0x00800000 },   // 8MB
-    { start: 0x40000000, size: 0x01000000 },   // 16MB
-  ];
-  
-  for (const region of searchRegions) {
-    const hexAddr = region.start.toString(16).padStart(8, '0');
-    const hexSize = region.size.toString(16).padStart(8, '0');
-    
-    verbose(`Reading memory: 0x${hexAddr} (${region.size} bytes)...`);
-    
-    try {
-      const resp = await ps3mapiRequest(
-        `/cpursx.ps3?/read_process?pid=0x${gamePid.toString(16)}&addr=0x${hexAddr}&size=0x${hexSize}`,
-        10000
-      );
-      
-      if (resp && resp.length > 0) {
-        // Convert hex string response to buffer
-        const buf = Buffer.from(resp.replace(/[^0-9a-fA-F]/g, ''), 'hex');
-        totalScanned += region.size;
-        
-        // Search for cellUsbd NIDs in import stubs
-        // Import stub pattern: lis r12, nid_high + ori r12, nid_low
-        // lis r12 = 0x3D80xxxx
-        // ori r12, r12, 0x618Cxxxx
-        for (const [funcName, nid] of Object.entries(CELLUSBD_NIDS)) {
-          if (foundAddrs[funcName]) continue; // Already found
-          
-          const nidHigh = (nid >> 16) & 0xFFFF;
-          const nidLow = nid & 0xFFFF;
-          
-          // Search for the lis/ori pair
-          const lisPattern = Buffer.alloc(4);
-          lisPattern.writeUInt32BE((0x3D80 << 16) | nidHigh, 0);
-          
-          const oriPattern = Buffer.alloc(4);
-          oriPattern.writeUInt32BE((0x618C << 16) | nidLow, 0);
-          
-          let idx = 0;
-          while (idx < buf.length - 8) {
-            const lisMatch = buf.indexOf(lisPattern, idx);
-            if (lisMatch === -1 || lisMatch > buf.length - 8) break;
-            
-            // Check if next instruction is the ori
-            if (buf.readUInt32BE(lisMatch + 4) === oriPattern.readUInt32BE(0)) {
-              // Found the import stub! The actual function address is at a
-              // .got2 slot offset from this stub. Look for the lwz instruction
-              // that loads from GOT: lwz r12, offset(r11) = 0x858Bxxxx
-              // We'll take a different approach: search look for the lwz after the ori
-              
-              // The typical pattern continues after lis/ori:
-              //   lwz r12, offset(r11)  — load ptr from GOT
-              //   mtctr r12
-              //   bctr
-              // We need to read the pointer value from the GOT offset
-              
-              // For simplicity in v1, we read the next 12 bytes and look for lwz
-              if (lisMatch + 16 <= buf.length) {
-                const stubEnd = buf.slice(lisMatch, lisMatch + 16);
-                verbose(`${funcName} import stub at 0x${(region.start + lisMatch).toString(16)}: ${stubEnd.toString('hex')}`);
-              }
-              
-              // Use a heuristic: the function address is likely near this stub
-              // in the GOT. But finding the exact GOT slot requires full PRX parsing.
-              // 
-              // For v1, we record the base address and continue scanning.
-              // The actual address resolution will be done inside the SPRX
-              // (which has full memory access).
-              
-              foundAddrs[funcName] = true; // Mark as found for scanning purposes
-              const relAddr = (region.start + lisMatch).toString(16);
-              log(`  [SCAN] Found ${funcName} import stub at game+0x${relAddr}`);
-            }
-            
-            idx = lisMatch + 1;
-          }
-        }
-      }
-    } catch (err) {
-      verbose(`Region 0x${hexAddr} read failed: ${err.message}`);
-    }
-  }
-  
-  log(`Scanned ${(totalScanned / 1024 / 1024).toFixed(1)}MB of game memory`);
-  
-  // For now, we write the known NID values and let the SPRX resolve them internally.
-  // The SPRX has full memory access once injected.
-  return CELLUSBD_NIDS;
-}
-
-// ──────────────────────────────────────────────
-// 4. Write cellUsbd addresses to PS3 temp file
-// ──────────────────────────────────────────────
-async function writeAddressFile(gamePid, nidMap) {
-  log('Writing cellUsbd NID reference file to PS3...');
-  
-  // Build content
-  const lines = [];
-  for (const [name, nid] of Object.entries(nidMap)) {
-    lines.push(`${name}=0x${nid.toString(16).padStart(8, '0')}`);
-  }
-  lines.push(`game_pid=0x${gamePid.toString(16)}`);
-  const content = lines.join('\n') + '\n';
-  
-  // Write via PS3MAPI's file management or FTP
-  // webMAN MOD supports file write through its HTTP API
-  try {
-    // Attempt to write via PS3MAPI file endpoint
-    // Most webMAN MOD versions support: /cpursx.ps3?/write_file?path=...&data=...
-    // But this is not universally available. Fallback: skip and let SPRX handle it.
-    const encodedPath = encodeURIComponent('/dev_hdd0/tmp/ld_cellusbd_nids.txt');
-    const encodedData = encodeURIComponent(content);
-    
-    try {
-      await ps3mapiRequest(`/cpursx.ps3?/write_file?path=${encodedPath}&data=${encodedData}`, 3000);
-      log('✓ NID reference file written to /dev_hdd0/tmp/ld_cellusbd_nids.txt');
-    } catch {
-      // Write method not available — that's OK, the SPRX has the NIDs compiled in
-      log('  (PS3MAPI file write not available — SPRX will use compiled-in NIDs)');
-    }
-  } catch (err) {
-    verbose(`Write failed: ${err.message}`);
-  }
-}
-
-// ──────────────────────────────────────────────
-// 5. Inject SPRX via PS3MAPI
+// 3. Inject SPRX via PS3MAPI
 // ──────────────────────────────────────────────
 async function injectSprx(gamePid) {
   log(`Injecting SPRX into game PID=0x${gamePid.toString(16)}...`);
   log(`  SPRX path: ${SPRX_PATH}`);
-  
-  // webMAN MOD injection endpoint:
-  // GET /ps3mapi_process?pid=<PID>&load_prx=<FULL_PATH>
-  
+
+  // Step 3a: Unload previous PRX (if any)
+  //
+  // CRITICAL: The network_init() regression is caused by an orphaned socket
+  // from a previous SPRX injection that never ran module_stop. The old worker
+  // thread still holds g_net.socket_fd open, so bind() fails with EADDRINUSE.
+  //
+  // UDP has no TIME_WAIT state — the port is held by the live thread, not
+  // the kernel. SO_REUSEADDR would force-bind but cause nondeterministic
+  // packet routing between the ghost SPRX and new SPRX (severe packet loss).
+  //
+  // The correct fix: explicitly unload the previous PRX via PS3MAPI before
+  // loading the new one. This triggers module_stop → worker join → socket
+  // close → sys_net_finalize → clean slate.
+  log('  CRITICAL: Unloading previous PRX (clean teardown)...');
+  try {
+    const unloadEndpoint = `/ps3mapi_process?pid=0x${gamePid.toString(16)}&unload_prx=${encodeURIComponent(SPRX_PATH)}`;
+    const unloadResp = await ps3mapiRequest(unloadEndpoint, 5000);
+    verbose(`  Unload response: ${unloadResp ? unloadResp.trim() : '(empty)'}`);
+    await sleep(500);  // Wait for module_stop to complete
+    log('  ✓ Previous PRX unloaded');
+  } catch (err) {
+    // If there was no previous PRX loaded, the unload fails harmlessly
+    verbose(`  No previous PRX to unload: ${err.message}`);
+  }
+
+  // Step 3b: Load new PRX
   const endpoint = `/ps3mapi_process?pid=0x${gamePid.toString(16)}&load_prx=${encodeURIComponent(SPRX_PATH)}`;
   verbose(`Endpoint: ${endpoint}`);
   
@@ -423,23 +270,19 @@ async function injectSprx(gamePid) {
     const resp = await ps3mapiRequest(endpoint, 15000);
     log(`  Response: ${resp ? resp.trim() : '(empty)'}`);
     
-    // Check for success indicators
     if (resp && (resp.includes('success') || resp.includes('loaded') || resp.includes('OK') || resp.includes('0x0'))) {
       log('✓ SPRX injection SUCCESSFUL!');
       return true;
     } else if (resp && resp.length > 0) {
-      // Got a response but unclear — log it
-      log(`⚠ Injection response: "${resp.trim()}" — may be successful`);
+      log(`⚠ Injection response: "${resp.trim()}"`);
       return true;
     } else {
-      // Empty response could mean success on some webMAN versions
       log('⚠ Empty response — injection may have succeeded');
       return true;
     }
   } catch (err) {
     log(`✗ Injection FAILED: ${err.message}`);
     
-    // Retry once
     log('  Retrying once...');
     try {
       await sleep(2000);
@@ -455,26 +298,121 @@ async function injectSprx(gamePid) {
 }
 
 // ──────────────────────────────────────────────
-// 6. Verify injection
+// 4. Wait for SPRX IPC file + Write Preambles
 // ──────────────────────────────────────────────
-async function verifyInjection(gamePid) {
-  log('Verifying injection (checking for 0x01 poll packets from game)...');
-  log('  Check the server.js terminal for incoming USB poll packets.');
-  log('  Expected within 3-5 seconds: RX type=0x01 zone=1 seq=N');
+async function waitForIpcAndInstall(gamePid) {
+  log('Waiting for SPRX to write IPC file (ld_hooks_ready.txt)...');
+  log('  SPRX will NID-scan, allocate trampolines, copy original');
+  log('  instructions, and write IPC file on /dev_hdd0/tmp/.');
+  log('  This should take < 1 second after injection.');
   
-  // We can verify indirectly by checking if the game still responds to PS3MAPI
-  // (if the SPRX crashed the game, PS3MAPI would become unresponsive)
-  try {
-    await sleep(3000);
-    const resp = await ps3mapiRequest(`/ps3mapi_process?pid=0x${gamePid.toString(16)}`, 3000);
-    if (resp && resp.length > 0) {
-      log('✓ Game process still alive after injection');
-      return true;
+  let ipcContent = null;
+  
+  // Poll for IPC file (up to 15 seconds)
+  for (let attempt = 0; attempt < 30; attempt++) {
+    try {
+      const resp = await ps3mapiRequest(
+        `/cpursx.ps3?/read_process?path=/dev_hdd0/tmp/ld_hooks_ready.txt`,
+        3000
+      );
+      
+      if (resp && resp.length > 0 && resp.includes('STATUS=ready')) {
+        ipcContent = resp;
+        log('✓ IPC file found! Parsing addresses...');
+        break;
+      }
+    } catch {
+      // File not ready yet
     }
-  } catch {
-    log('⚠ Could not verify game state after injection');
+    
+    if (attempt % 5 === 0) {
+      log(`  ...waiting for IPC file (attempt ${attempt + 1}/30)`);
+    }
+    await sleep(500);
   }
-  return false;
+  
+  if (!ipcContent) {
+    log('✗ IPC file not found after 15 seconds. SPRX may have crashed.');
+    log('  Check /dev_hdd0/plugins/ldtoypad_boot.log on PS3.');
+    return false;
+  }
+  
+  // Parse IPC content into key-value map
+  const kv = {};
+  for (const line of ipcContent.split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eqIdx = trimmed.indexOf('=');
+    if (eqIdx === -1) continue;
+    const key = trimmed.substring(0, eqIdx).trim();
+    const val = trimmed.substring(eqIdx + 1).trim();
+    kv[key] = val;
+  }
+  
+  verbose(`IPC parsed: ${JSON.stringify(kv, null, 2)}`);
+  
+  // Show discovered addresses
+  log(`  Trampoline base: ${kv.TRAMP_BASE || 'unknown'}`);
+  log(`  Target INIT:     ${kv.INIT_ADDR || 'unknown'} -> wrapper ${kv.INIT_WRAP || 'unknown'}`);
+  log(`  Target OPEN:     ${kv.OPENPIPE_ADDR || 'unknown'} -> wrapper ${kv.OPENPIPE_WRAP || 'unknown'}`);
+  log(`  Target XFER:     ${kv.TRANSFER_ADDR || 'unknown'} -> wrapper ${kv.TRANSFER_WRAP || 'unknown'}`);
+  log(`  Target CLOSE:    ${kv.CLOSEPIPE_ADDR || 'unknown'} -> wrapper ${kv.CLOSEPIPE_WRAP || 'unknown'}`);
+  
+  // Build and install preambles for each target
+  const targets = [
+    { name: 'cellUsbdInit',       target: kv.INIT_ADDR,       wrapper: kv.INIT_WRAP },
+    { name: 'cellUsbdOpenPipe',   target: kv.OPENPIPE_ADDR,   wrapper: kv.OPENPIPE_WRAP },
+    { name: 'cellUsbdTransfer',   target: kv.TRANSFER_ADDR,   wrapper: kv.TRANSFER_WRAP },
+    { name: 'cellUsbdClosePipe',  target: kv.CLOSEPIPE_ADDR,  wrapper: kv.CLOSEPIPE_WRAP },
+  ];
+  
+  for (const t of targets) {
+    if (!t.target || !t.wrapper || t.target === '0x0' || t.wrapper === '0x0') {
+      log(`  ⚠ Skipping ${t.name}: missing address`);
+      continue;
+    }
+    
+    const targetAddr = parseInt(t.target, 16);
+    const wrapperAddr = parseInt(t.wrapper, 16);
+    
+    if (isNaN(targetAddr) || isNaN(wrapperAddr)) {
+      log(`  ⚠ Skipping ${t.name}: invalid address format`);
+      continue;
+    }
+    
+    log(`  Installing preamble on ${t.name} @ 0x${targetAddr.toString(16)} -> wrapper 0x${wrapperAddr.toString(16)}`);
+    
+    // Build 4-instruction preamble:
+    // [0] lis  r11, hi16(wrapper_addr)    0x3D60xxxx
+    // [1] ori  r11, r11, lo16(wrapper)    0x616Bxxxx
+    // [2] mtctr r11                       0x7D6B03A6
+    // [3] bctr                            0x4E800420
+    const preamble = Buffer.alloc(16); // 4 instructions × 4 bytes
+    preamble.writeUInt32BE((0x3D60 << 16) | ((wrapperAddr >> 16) & 0xFFFF), 0);  // lis r11
+    preamble.writeUInt32BE((0x616B << 16) | (wrapperAddr & 0xFFFF), 4);          // ori r11,r11
+    preamble.writeUInt32BE(0x7D6B03A6, 8);  // mtctr r11
+    preamble.writeUInt32BE(0x4E800420, 12); // bctr
+    
+    // Write via PS3MAPI /write_process (Ring 0, bypasses R-X protection)
+    const hexData = preamble.toString('hex').toUpperCase();
+    const writeEndpoint = `/cpursx.ps3?/write_process?pid=0x${gamePid.toString(16)}&addr=0x${targetAddr.toString(16)}&data=${hexData}`;
+    
+    verbose(`  Write endpoint: ${writeEndpoint}`);
+    
+    try {
+      const writeResp = await ps3mapiRequest(writeEndpoint, 5000);
+      verbose(`  Write response: ${writeResp ? writeResp.trim() : '(empty)'}`);
+      log(`  ✓ Preamble installed on ${t.name}`);
+    } catch (err) {
+      log(`  ✗ Failed to write preamble on ${t.name}: ${err.message}`);
+    }
+    
+    await sleep(100); // Small delay between writes
+  }
+  
+  log('✓ All preambles installed!');
+  log('  Game will now route Toy Pad USB traffic via hooks.');
+  return true;
 }
 
 // ──────────────────────────────────────────────
@@ -514,7 +452,6 @@ async function main() {
   console.log('╚══════════════════════════════════════════════════╝');
   console.log('');
   
-  // Validate PS3 IP
   if (!PS3_IP) {
     console.error('✗ PS3 IP not provided. Use --ps3-ip or create ps3-ip.txt');
     printUsage();
@@ -556,54 +493,59 @@ async function main() {
   log('Step 3: Waiting for game initialization...');
   await waitForGame(gamePid);
   
-  // Step 4: Scan for cellUsbd addresses
-  log('');
-  log('Step 4: Scanning for cellUsbd import addresses...');
-  const nidMap = await scanCellUsbdAddresses(gamePid);
-  
-  // Step 5: Write address reference file
-  log('');
-  log('Step 5: Writing NID reference data...');
-  await writeAddressFile(gamePid, nidMap);
-  
-  // Step 6: Inject SPRX
+  // Step 4: Inject SPRX (Phase 1 — SPRX prepares trampolines)
   log('');
   if (NO_INJECT) {
-    log('Step 6: SKIPPING injection (--no-inject flag)');
+    log('Step 4: SKIPPING injection (--no-inject flag)');
     log('');
     log('To inject, run without --no-inject flag');
+    return;
+  }
+  
+  log('Step 4: Injecting SPRX into game process...');
+  const injected = await injectSprx(gamePid);
+  
+  if (!injected) {
+    log('');
+    log('╔══════════════════════════════════════════════════╗');
+    log('║  ✗ INJECTION FAILED                            ║');
+    log('║                                                ║');
+    log('║  Check:                                        ║');
+    log('║  1. SPRX exists at: ' + SPRX_PATH);
+    log('║  2. PS3MAPI is enabled in webMAN MOD settings  ║');
+    log('║  3. Game is at the "Connect Toy Pad" screen    ║');
+    log('╚══════════════════════════════════════════════════╝');
+    return;
+  }
+  
+  // Step 5: Wait for IPC + install preambles (Phase 2 — Node.js writes via PS3MAPI)
+  log('');
+  log('Step 5: Polling for SPRX IPC and installing preambles...');
+  const installed = await waitForIpcAndInstall(gamePid);
+  
+  if (installed) {
+    log('');
+    log('╔══════════════════════════════════════════════════╗');
+    log('║  ✓ FULL INSTALLATION COMPLETE                  ║');
+    log('║                                                ║');
+    log('║  Phase 1: SPRX injected — trampolines ready    ║');
+    log('║  Phase 2: Preambles installed via Ring 0       ║');
+    log('║                                                ║');
+    log('║  CellUsbd hooks now active in game process.    ║');
+    log('║                                                ║');
+    log('║  Check the server terminal for:                ║');
+    log('║    RX type=0x01 zone=1 seq=N  (poll packets)  ║');
+    log('║    RX type=0x04 zone=1 seq=N  (data out)      ║');
+    log('╚══════════════════════════════════════════════════╝');
   } else {
-    log('Step 6: Injecting SPRX into game process...');
-    const injected = await injectSprx(gamePid);
-    
-    if (injected) {
-      // Step 7: Verify
-      log('');
-      log('Step 7: Verifying injection...');
-      await verifyInjection(gamePid);
-      
-      log('');
-      log('╔══════════════════════════════════════════════════╗');
-      log('║  ✓ INJECTION COMPLETE                          ║');
-      log('║                                                ║');
-      log('║  The SPRX is now running inside the game       ║');
-      log('║  process. CellUsbd hooks should be active.     ║');
-      log('║                                                ║');
-      log('║  Check the server terminal for:                ║');
-      log('║    RX type=0x01 zone=1 seq=N  (poll packets)  ║');
-      log('║    RX type=0x04 zone=1 seq=N  (data out)      ║');
-      log('╚══════════════════════════════════════════════════╝');
-    } else {
-      log('');
-      log('╔══════════════════════════════════════════════════╗');
-      log('║  ✗ INJECTION FAILED                            ║');
-      log('║                                                ║');
-      log('║  Check:                                        ║');
-      log('║  1. SPRX exists at: ' + SPRX_PATH);
-      log('║  2. PS3MAPI is enabled in webMAN MOD settings  ║');
-      log('║  3. Game is at the "Connect Toy Pad" screen    ║');
-      log('╚══════════════════════════════════════════════════╝');
-    }
+    log('');
+    log('╔══════════════════════════════════════════════════╗');
+    log('║  ⚠ SPRX INJECTED BUT PREAMBLES FAILED          ║');
+    log('║                                                ║');
+    log('║  The SPRX is loaded but hooks not installed.   ║');
+    log('║  The game should continue normally (no crash). ║');
+    log('║  Check /dev_hdd0/plugins/ldtoypad_boot.log.    ║');
+    log('╚══════════════════════════════════════════════════╝');
   }
 }
 

@@ -46,6 +46,8 @@ int network_init(uint16_t port)
         return 0;
     }
 
+    DEBUG_PRINT("[NET] network_init(port=%u) ENTRY\n", (unsigned)port);
+
     /* Initialize the sys_net network stack before any socket() calls.
      * sys_net_initialize_network() is a convenience macro that allocates
      * 128 KB of static memory and calls sys_net_initialize_network_ex().
@@ -56,7 +58,22 @@ int network_init(uint16_t port)
         /* Continue anyway — the socket() retry below will handle deferral */
     }
 
-    /* Retry socket() + bind() up to 30 times (3 seconds total at 100ms intervals).
+    /* 2-second boot stabilization delay — let network interfaces spin up.
+     * During early boot, the routing tables may not be populated and socket()
+     * returns CELL_NET_ERROR_NET_NOT_INITIALIZED (0x80010010) or
+     * ENETDOWN (0x80010041). Waiting here reduces retry count in the loop. */
+    sys_timer_usleep(2000000);
+
+    /* Retry socket() + bind() up to 120 times (12 seconds total at 100ms intervals).
+     *
+     * CRITICAL: Do NOT use SO_REUSEADDR here. UDP is connectionless and does not
+     * have a TIME_WAIT state. If bind() fails with EADDRINUSE, the port is held
+     * open by an orphaned socket from a previous SPRX injection that never ran
+     * module_stop. SO_REUSEADDR would force-bind, but incoming UDP packets would
+     * be nondeterministically routed between the ghost SPRX and the new SPRX,
+     * causing severe packet loss. The correct fix is to explicitly unload the
+     * previous PRX via Node.js orchestrator before injecting the new build.
+     *
      * During early VSH boot, sys_net may not be fully loaded yet, and the network
      * interface may not have an IP assigned.  socket() returns
      * CELL_NET_ERROR_NET_NOT_INITIALIZED (0x80010010) early on, and bind()
@@ -66,33 +83,38 @@ int network_init(uint16_t port)
         int attempt;
         int last_socket_err = 0;
         int last_bind_err = 0;
-        for (attempt = 0; attempt < 30; attempt++) {
-            /* Create socket */
-            g_net.socket_fd = socket(AF_INET, SOCK_DGRAM, 0);
+        for (attempt = 0; attempt < 120; attempt++) {
+            /* Create socket — use IPPROTO_UDP (17) for clarity */
+            g_net.socket_fd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
             if (g_net.socket_fd < 0) {
                 last_socket_err = g_net.socket_fd;
+                DEBUG_PRINT("[NET] socket() failed attempt %d/%d: 0x%x\n",
+                            attempt + 1, 120, last_socket_err);
                 sys_timer_usleep(100000); /* 100ms */
                 continue;
             }
 
-            /* Bind to port */
+            /* Bind to port — NO SO_REUSEADDR (see comment above) */
             memset(&local_addr, 0, sizeof(local_addr));
             local_addr.sin_family = AF_INET;
             local_addr.sin_port = htons(port);
             local_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-            if (bind(g_net.socket_fd, (struct sockaddr*)&local_addr, sizeof(local_addr)) == 0) {
+            int bind_ret = bind(g_net.socket_fd, (struct sockaddr*)&local_addr, sizeof(local_addr));
+            if (bind_ret == 0) {
                 /* Both socket and bind succeeded */
                 break;
             }
-            last_bind_err = g_net.socket_fd; /* close to retry */
+            last_bind_err = bind_ret; /* FIXED: was g_net.socket_fd (stored fd, not error) */
+            DEBUG_PRINT("[NET] bind() failed attempt %d/%d: %d\n",
+                        attempt + 1, 120, bind_ret);
             socketclose(g_net.socket_fd);
             g_net.socket_fd = -1;
             sys_timer_usleep(100000); /* 100ms */
         }
         if (g_net.socket_fd < 0) {
-            DEBUG_ERROR("[NET] socket+bind failed after %d attempts (socket err: 0x%x, bind err: 0x%x)\n",
-                        30, last_socket_err, last_bind_err);
+            DEBUG_ERROR("[NET] socket+bind failed after %d attempts (socket err: 0x%x, bind err: %d)\n",
+                        120, last_socket_err, last_bind_err);
             return -1;
         }
         DEBUG_PRINT("[NET] socket()+bind() succeeded on attempt %d\n", attempt + 1);
@@ -119,6 +141,21 @@ int network_init(uint16_t port)
             DEBUG_ERROR("[NET] setsockopt SO_NBIO failed\n");
         }
     }
+
+    /* NOTE: SO_RCVTIMEO is NOT used here because CellOS SDK 3.40
+     * lacks struct timeval / POSIX socket timeout support.
+     *
+     * NETWORK MUTEX AVOIDANCE is handled by SO_NBIO (non-blocking)
+     * set above — recvfrom returns immediately with -1/EWOULDBLOCK
+     * when no data is available. The calling thread yields control
+     * back to the OS scheduler between poll cycles, leaving the
+     * sceNet subsystem available for sceNpTrophy synchronization.
+     *
+     * This prevents the deadlock chain:
+     *   Game waits for Trophy sync
+     *     → Trophy sync waits for sceNet
+     *       → sceNet blocked by SPRX recvfrom
+     *           (prevented by non-blocking socket + polling loop) */
 
     /* Keep broadcast probing path enabled */
     g_net.broadcast_enabled = 1;
@@ -154,13 +191,20 @@ int network_init(uint16_t port)
 }
 
 /* Wait for network interface to be ready for I/O.
- * Since the Sony SDK doesn't provide poll()/select(), we use a simple
- * sleep-based wait. The network stack on PS3 typically initializes
- * within ~1.5 seconds after sysmodule load. We wait 3 seconds total
- * (30 * 100ms) to be safe, then send a beacon salvo.
+ * Uses getsockname() to poll for IP address assignment, which is the
+ * most reliable indicator that DHCP has completed and the routing table
+ * is populated. This replaces the previous blind 3-second sleep with
+ * an early-exit poll loop.
  *
- * NOTE: This is a crude heuristic. Real cellNetCtl would be ideal,
- * but SDK 3.40 lacks it. */
+ * NETWORK MUTEX AVOIDANCE:
+ * The PS3's sceNpTrophy background process requires a clear, unblocked
+ * pathway through the CellOS network subsystem (sceNet). If the worker
+ * thread blocks on recvfrom during Trophy synchronization, it can
+ * trigger a network mutex lock. By waiting for IP assignment before
+ * marking g_net.initialized, we ensure the socket is never used while
+ * the network stack is still coming up.
+ *
+ * NOTE: Real cellNetCtl would be ideal, but SDK 3.40 lacks it. */
 void network_wait_ready(void)
 {
     int i;
@@ -169,23 +213,30 @@ void network_wait_ready(void)
         return;
     }
 
-    DEBUG_PRINT("[NET] Waiting 3s for network interface (sleep)...\n");
+    DEBUG_PRINT("[NET] Waiting for network interface (polling getsockname)...\n");
 
-    /* Sleep 3 seconds to let DHCP complete and routing table populate.
-     * Total iterations: 30 * 100ms = 3s */
-    for (i = 0; i < 30; i++) {
-        sys_timer_usleep(100000); /* 100ms per iteration */
-    }
-
-
-    /* Retrieve our own IP via getsockname — needed to reject self-looped
-     * broadcast packets during discovery.  After the 3s wait for interface
-     * readiness, the kernel should have assigned an IP via DHCP. */
     {
         struct sockaddr_in self_addr;
         socklen_t self_len = sizeof(self_addr);
-        if (getsockname(g_net.socket_fd, (struct sockaddr*)&self_addr, &self_len) == 0 &&
-            self_addr.sin_addr.s_addr != htonl(INADDR_ANY)) {
+        int ip_acquired = 0;
+
+        /* Poll for IP assignment — up to 5 seconds at 100ms intervals.
+         * Early exit as soon as getsockname returns a real IP (not INADDR_ANY).
+         * This avoids the previous blind 3-second sleep and minimizes the
+         * window where sceNpTrophy could contend for the network subsystem. */
+        for (i = 0; i < 50; i++) {  /* 50 * 100ms = 5 seconds max */
+            memset(&self_addr, 0, sizeof(self_addr));
+            self_len = sizeof(self_addr);
+            if (getsockname(g_net.socket_fd,
+                            (struct sockaddr*)&self_addr, &self_len) == 0 &&
+                self_addr.sin_addr.s_addr != htonl(INADDR_ANY)) {
+                ip_acquired = 1;
+                break;
+            }
+            sys_timer_usleep(100000);  /* 100ms between polls */
+        }
+
+        if (ip_acquired) {
             g_net.self_ip = self_addr.sin_addr.s_addr;
             {
                 int fd_p;
@@ -196,9 +247,6 @@ void network_wait_ready(void)
                     char ipmsg[32];
                     uint32_t ip = ntohl(g_net.self_ip);
                     int pos = 0;
-                    /* Format: "SELF_IP=192.168.0.47\n"
-                     * NOTE: Must format each octet as a multi-digit decimal.
-                     * The old code used '0'+byte which only works for 0-9. */
                     uint8_t o0 = (ip >> 24) & 0xFF;
                     uint8_t o1 = (ip >> 16) & 0xFF;
                     uint8_t o2 = (ip >> 8) & 0xFF;
@@ -223,9 +271,10 @@ void network_wait_ready(void)
                     cellFsClose(fd_p);
                 }
             }
-            DEBUG_PRINT("[NET] Self IP determined\n");
+            DEBUG_PRINT("[NET] Self IP acquired via getsockname (waited %d polls)\n", i + 1);
         } else {
-            DEBUG_PRINT("[NET] Could not determine self IP via getsockname\n");
+            g_net.self_ip = 0;
+            DEBUG_PRINT("[NET] Could not determine self IP after 50 polls\n");
             /* self_ip stays 0 — self-rejection will be disabled,
              * but discovery may still work via packet-type filtering */
         }

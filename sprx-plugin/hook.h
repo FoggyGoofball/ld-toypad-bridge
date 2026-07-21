@@ -1,23 +1,42 @@
 /**
- * hook.h — PowerPC User-Space Detour Hooking (Sony SDK)
+ * hook.h — PowerPC Opcode Builders for SPRX Detour Hooks
  *
- * FIXED: Replaced ba-only preamble (limited to +-32MB) with lis/ori/mtctr/bctr
- * that can reach any 32-bit address. Added proper TOC (r2) save/restore.
+ * REFACTORED 2026-07-20:
+ *   - Removed hook_install(), hook_remove(), hook_ctx_t, hook_trampoline_t
+ *   - Removed hook_call_original()
+ *   - Removed hook_flush_icache()
+ *   - Retained ONLY the PowerPC opcode builder functions
+ *
+ * WHY:
+ *   Preamble writing to the game's R-X .text segment now happens from
+ *   Ring 0 via PS3MAPI HTTP endpoints (inject-sprx.js). The SPRX no
+ *   longer directly writes to game memory. It allocates executable
+ *   trampoline pages via sys_memory_allocate and communicates the
+ *   addresses to the Node.js orchestrator via HDD IPC files.
+ *
+ * These opcode builders are used BOTH by:
+ *   1. The SPRX (when preparing trampoline branch-back code)
+ *   2. inject-sprx.js (when constructing the preamble via opcode constants)
  *
  * Architecture:
- *   - Overwrites first 4 instructions of target function with a preamble
- *     that saves LR, saves TOC, and loads the hook address into r11.
- *   - Writes mtctr/bctr at target+16 (2 additional instructions beyond
- *     the 4-instruction patch window).
- *   - Saves original instructions in a trampoline to call-through for
- *     non-Toy-Pad USB traffic (controllers, storage, etc.).
- *   - TOC switching is handled via the preamble saving r2 to the stack;
- *     hook functions restore game's r2 before passthrough calls.
+ *   Preamble (4 instructions, written by Node.js to game .text):
+ *     [0] lis  r11, hi16(hook_wrapper_addr)
+ *     [1] ori  r11, lo16(hook_wrapper_addr)
+ *     [2] mtctr r11
+ *     [3] bctr
  *
- * Requires: Sony SDK -mprx, -llv2_stub (for __sync_synchronize etc.)
+ *   Trampoline branch-back (8 instructions in executable page):
+ *     [0-3] Original 4 instructions from target function
+ *     [4]   lis  r11, hi16(target_addr + 16)
+ *     [5]   ori  r11, lo16(target_addr + 16)
+ *     [6]   mtctr r11
+ *     [7]   bctr
+ *
+ * Requires: Sony SDK -mprx, -llv2_stub
  *           Running inside target game process (user-space).
+ *
+ * (c) 2026 LD-ToyPad Bridge Team
  */
-
 #ifndef HOOK_H
 #define HOOK_H
 
@@ -31,109 +50,29 @@ extern "C" {
  * Constants
  * --------------------------------------------------------------- */
 
-/** Number of instructions to patch in the target preamble (4 = 16 bytes) */
+/** Number of instructions in the hook preamble. */
 #define HOOK_NUM_INSTRUCTIONS  4
 
-/**
- * Total size of our patch: 4 preamble instructions + 2 extension
- * (mtctr/bctr at target+16) = 24 bytes.
- * The trampoline saves only the original HOOK_NUM_INSTRUCTIONS = 4.
- * The branch-back from trampoline goes to target+24 (after entire patch).
- */
-#define HOOK_PATCH_TOTAL_SIZE   (6 * 4)
+/** Size of trampoline (4 saved + 4 branch-back = 8 instructions = 32 bytes). */
+#define HOOK_TRAMPOLINE_SIZE   (8 * 4)
 
-/** Size of trampoline in bytes (4 saved + 1 branch-back = 20 bytes) */
-#define HOOK_TRAMPOLINE_SIZE   (5 * 4)
-
-/* ---------------------------------------------------------------
- * Types
- * --------------------------------------------------------------- */
-
-/**
- * Trampoline buffer — holds original instructions + branch-back.
- * Must be executable (allocate in .text or use memalign + mprotect).
- */
-typedef struct {
-    uint32_t instructions[HOOK_NUM_INSTRUCTIONS];  /**< Original first 4 insns */
-    uint32_t branch_back;                           /**< ba opcode back to target+24 */
-} hook_trampoline_t;
-
-/**
- * Hook context passed to the preamble generator.
- * Contains all info needed to build the detour patch.
- */
-typedef struct {
-    void *target_addr;       /**< Address being hooked (game function) */
-    void *hook_fn;           /**< Address of our replacement function */
-    hook_trampoline_t *tramp;/**< Allocated trampoline buffer */
-} hook_ctx_t;
-
-/* ---------------------------------------------------------------
- * Public API
- * --------------------------------------------------------------- */
-
-/**
- * Install a detour hook on a target function.
- *
- * 1. Saves first 4 instructions (16 bytes) of target into trampoline.
- * 2. Builds branch-back at trampoline[4] (ba target+24).
- * 3. Writes 4 NOPs at target (safe window for icache sync).
- * 4. Overwrites target[0..3] with preamble:
- *      [0] mflr r0          (save link register)
- *      [1] stw  r2, 8(r1)   (save game TOC on stack)
- *      [2] lis  r11, hi     (load high 16 bits of hook addr)
- *      [3] ori  r11, lo     (load low 16 bits)
- * 5. Writes mtctr/bctr at target+16 (patch extension).
- * 6. Flushes instruction cache for both target and trampoline.
- *
- * @param ctx     Fully populated hook context (target, hook, tramp).
- * @return        0 on success, negative on error.
- */
-int hook_install(hook_ctx_t *ctx);
-
-/**
- * Remove a detour hook and restore original instructions.
- *
- * @param ctx     Hook context with target and trampoline.
- * @return        0 on success, negative on error.
- */
-int hook_remove(hook_ctx_t *ctx);
-
-/**
- * Flush the instruction cache for a memory range.
- * Required after writing executable code (trampoline or patched function).
- *
- * @param addr   Start address.
- * @param size   Size in bytes.
- */
-void hook_flush_icache(void *addr, uint32_t size);
+/** Offset in trampoline's stack frame where game's TOC (r2) is saved.
+ *  The assembly trampoline (toc_trampoline.s) saves r2 at 0x28(%r1)
+ *  before branching to the C hook. */
+#define HOOK_TOC_SAVE_OFFSET   0x28
 
 /* ---------------------------------------------------------------
  * PowerPC Opcode Builders
+ *
+ * These are used by the SPRX to construct trampoline instructions,
+ * AND their numeric outputs are replicated in inject-sprx.js for
+ * preamble construction.
  * --------------------------------------------------------------- */
 
 /** nop: ori r0, r0, 0 */
 static inline uint32_t hook_build_nop(void)
 {
     return 0x60000000;
-}
-
-/** mflr r0 — move link register to r0 */
-static inline uint32_t hook_build_mflr_r0(void)
-{
-    return 0x7C0802A6;
-}
-
-/** stw r2, 8(r1) — save TOC to stack */
-static inline uint32_t hook_build_stw_r2(void)
-{
-    return 0x90410008;
-}
-
-/** lwz r2, 8(r1) — restore TOC from stack */
-static inline uint32_t hook_build_lwz_r2(void)
-{
-    return 0x80410008;
 }
 
 /**
@@ -169,23 +108,10 @@ static inline uint32_t hook_build_bctr(void)
     return 0x4E800420;
 }
 
-/**
- * Build a PowerPC ba (Branch Absolute) opcode.
- * Used for the trampoline branch-back.
- *
- * ba format:
- *   Bits 0-5:   0x12 (OPCD)
- *   Bits 6-29:  LI  = address >> 2 (24-bit)
- *   Bits 30-31: 0x02 (AA=1, LK=0)
- *
- * @param target  Target address (must be 4-byte aligned).
- * @return        The 32-bit ba opcode.
- */
-static inline uint32_t hook_build_ba(void *target)
+/** bctrl — branch to count register with link (AA=0, LK=1) */
+static inline uint32_t hook_build_bctrl(void)
 {
-    uint32_t addr = (uint32_t)(uintptr_t)target;
-    /* LI field must be addr / 4, masked to 24 bits */
-    return 0x48000002 | ((addr >> 2) & 0x03FFFFFC);
+    return 0x4E800421;
 }
 
 /**
@@ -196,6 +122,40 @@ static inline void hook_build_load_r11(uint32_t val, uint32_t out[2])
 {
     out[0] = hook_build_lis_r11(val >> 16);
     out[1] = hook_build_ori_r11(val & 0xFFFF);
+}
+
+/**
+ * Build a complete trampoline in a buffer: 4 original instructions
+ * followed by a 4-instruction absolute branch-back to target+16.
+ *
+ * @param tramp_buffer  8-word (32-byte) buffer to write into.
+ *                      Must be in executable memory.
+ * @param orig_insns    Pointer to the 4 original instructions at target.
+ * @param target_addr   Address of the hooked function (preamble written
+ *                      by Node.js). target+16 is the branch-back target.
+ */
+static inline void hook_build_trampoline(
+    uint32_t *tramp_buffer,
+    const uint32_t *orig_insns,
+    uint32_t target_addr)
+{
+    int i;
+
+    /* Copy original 4 instructions from target function */
+    for (i = 0; i < 4; i++) {
+        tramp_buffer[i] = orig_insns[i];
+    }
+
+    /* Build absolute branch-back to target+16 using lis/ori/mtctr/bctr.
+     * This guarantees full 32-bit reach (unlike ba which is limited to
+     * 0x00000000-0x01FFFFFF with a 24-bit absolute address). */
+    {
+        uint32_t back_addr = target_addr + 16;  /* past the 4-insn preamble */
+        tramp_buffer[4] = hook_build_lis_r11(back_addr >> 16);
+        tramp_buffer[5] = hook_build_ori_r11(back_addr & 0xFFFF);
+        tramp_buffer[6] = hook_build_mtctr_r11();
+        tramp_buffer[7] = hook_build_bctr();
+    }
 }
 
 #ifdef __cplusplus

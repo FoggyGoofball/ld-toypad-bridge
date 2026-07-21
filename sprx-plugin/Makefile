@@ -17,8 +17,10 @@ TARGET   := ldtoypad
 BUILDDIR := build
 OBJDIR   := obj
 
-C_SRCS   := main.c compat.c network.c debug.c toypad_state.c hook.c usb_hooks.c
+C_SRCS   := main.c compat.c network.c debug.c toypad_state.c usb_hooks.c toc_trampoline_c.c
 C_OBJS   := $(C_SRCS:%.c=$(OBJDIR)/%.o)
+S_SRCS   := toc_trampoline.s
+S_OBJS   := $(S_SRCS:%.s=$(OBJDIR)/%.o)
 
 INCLUDES := -I$(CELL_TARGET)/ppu/include
 
@@ -43,13 +45,17 @@ $(OBJDIR)/%.o: %.c
 	@echo "  CC    $<"
 	$(CC) $(CFLAGS) -c "$<" -o "$@"
 
-$(BUILDDIR)/$(TARGET).prx: $(C_OBJS)
+$(OBJDIR)/%.o: %.s
+	@echo "  AS    $<"
+	$(CC) $(CFLAGS) -c "$<" -o "$@"
+
+$(BUILDDIR)/$(TARGET).prx: $(C_OBJS) $(S_OBJS)
 	@echo "  LD    $@"
-	$(LD) $(C_OBJS) $(LDFLAGS) -o "$@"
+	$(LD) $(C_OBJS) $(S_OBJS) $(LDFLAGS) -o "$@"
 
 $(BUILDDIR)/$(TARGET).sprx: $(BUILDDIR)/$(TARGET).prx
 	@echo "  SPRX  $@ (via oscetool)"
-	$(WSL) bash -c "SRC='$(CURDIR)/$(BUILDDIR)/$(TARGET).prx' && DST='$(CURDIR)/$(BUILDDIR)/$(TARGET).sprx' && cp \"\$$SRC\" /tmp/$(TARGET).prx && cd \$$HOME/oscetool-src && ./oscetool -v -0 SELF -1 TRUE -2 000A -3 1010000001000003 -4 01000002 -A 0001000000000000 -5 APP -8 4000000000000000000000000000000000000000000000000000000000000002 -6 0004009300000000 -e /tmp/$(TARGET).prx /tmp/$(TARGET).sprx && cp /tmp/$(TARGET).sprx \"\$$DST\""
+	$(WSL) bash -c 'cp "$(subst \,/,$(abspath $<))" /tmp/$(TARGET).prx && cd $$HOME/oscetool-src && ./oscetool -v -0 SELF -1 TRUE -2 000A -3 1010000001000003 -4 01000002 -A 0001000000000000 -5 APP -8 4000000000000000000000000000000000000000000000000000000000000002 -6 0004009300000000 -e /tmp/$(TARGET).prx /tmp/$(TARGET).sprx && cp /tmp/$(TARGET).sprx "$(subst \,/,$(abspath $@))"' 2>&1
 	ls -la "$(BUILDDIR)/$(TARGET).sprx"
 	@echo "Build complete: $(BUILDDIR)/$(TARGET).sprx"
 

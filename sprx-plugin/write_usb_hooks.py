@@ -1,4 +1,8 @@
-/**
+#!/usr/bin/env python3
+"""Write refactored usb_hooks.c"""
+import os
+
+content = r'''/**
  * usb_hooks.c — REFACTORED 2026-07-20
  *
  * CRITICAL CHANGES:
@@ -18,13 +22,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <sys/memory.h>
-#include <sys/timer.h>
 #include <cell/cell_fs.h>
-
-/* Sony SDK: sys_memory_allocate is in <sys/memory.h>
- * but SYS_MEMORY_CONTAINER_DEFAULT may not be declared.
- * 0xFFFFFFFF is the default container ID on CellOS. */
-#define SYS_MEMORY_CONTAINER_DEFAULT  ((uint32_t)0xFFFFFFFFu)
 
 #include "usb_hooks.h"
 #include "network.h"
@@ -53,20 +51,20 @@ static const uint32_t g_scan_regions[][2] = {
 };
 #define NUM_SCAN_REGIONS  (sizeof(g_scan_regions) / sizeof(g_scan_regions[0]))
 
-/* OPD-based function pointers from toc_trampoline_c.c */
-extern int (*call_original_OpenPipe)(uint32_t game_toc, void *tramp_addr,
+/* Assembly wrapper declarations from toc_trampoline.s */
+extern void wrapper_my_cellUsbdInit(void);
+extern void wrapper_my_cellUsbdOpenPipe(void);
+extern void wrapper_my_cellUsbdTransfer(void);
+extern void wrapper_my_cellUsbdClosePipe(void);
+
+/* Passthrough stub declarations from toc_trampoline.s */
+extern int call_original_OpenPipe(uint32_t game_toc, void *tramp_addr,
     uint32_t *pipe_handle, uint32_t dev_id, void *ep_descriptor);
-extern int (*call_original_Transfer)(uint32_t game_toc, void *tramp_addr,
+extern int call_original_Transfer(uint32_t game_toc, void *tramp_addr,
     uint32_t pipe_handle, void *buf, uint32_t *len,
     uint32_t arg4, uint32_t arg5);
-extern int (*call_original_ClosePipe)(uint32_t game_toc, void *tramp_addr,
+extern int call_original_ClosePipe(uint32_t game_toc, void *tramp_addr,
     uint32_t pipe_handle);
-
-/* Wrapper address helpers from toc_trampoline_c.c */
-extern uint32_t get_wrapper_init_addr(void);
-extern uint32_t get_wrapper_open_pipe_addr(void);
-extern uint32_t get_wrapper_transfer_addr(void);
-extern uint32_t get_wrapper_close_pipe_addr(void);
 
 /* ================================================================
  * Trampoline Allocation (sys_memory_allocate R-W-X)
@@ -98,14 +96,6 @@ static int allocate_trampolines(void)
     g_usb_hooks.tramp_open_pipe_addr   = base_addr + TRAMPOLINE_BLOCK_SIZE;
     g_usb_hooks.tramp_transfer_addr    = base_addr + 2 * TRAMPOLINE_BLOCK_SIZE;
     g_usb_hooks.tramp_close_pipe_addr  = base_addr + 3 * TRAMPOLINE_BLOCK_SIZE;
-
-    /* Heartbeat counter at offset 128 (after 4 × 32-byte trampolines).
-     * Zero-initialized by sys_memory_allocate (page is zeroed).
-     * Incremented each worker loop iteration at ~20 Hz.
-     * Polled by Node.js orchestrator via PS3MAPI /read_process. */
-    g_usb_hooks.heartbeat = (volatile uint32_t*)(uintptr_t)(base_addr + 128);
-    DEBUG_PRINT("[USB] Heartbeat counter at 0x%08X\n",
-                (unsigned)(base_addr + 128));
 
     DEBUG_PRINT("[USB] Trampoline page at 0x%08X (size=%u)\n",
                 (unsigned)base_addr, (unsigned)TRAMPOLINE_PAGE_SIZE);
@@ -161,47 +151,28 @@ static int write_ipc_file(void)
 } while(0)
 
     WRITE_ADDR_LINE("INIT_ADDR", g_usb_hooks.target_init_addr);
-    WRITE_ADDR_LINE("INIT_WRAP", get_wrapper_init_addr());
+    WRITE_ADDR_LINE("INIT_WRAP", wrapper_my_cellUsbdInit);
     WRITE_ADDR_LINE("OPENPIPE_ADDR", g_usb_hooks.target_open_pipe_addr);
-    WRITE_ADDR_LINE("OPENPIPE_WRAP", get_wrapper_open_pipe_addr());
+    WRITE_ADDR_LINE("OPENPIPE_WRAP", wrapper_my_cellUsbdOpenPipe);
     WRITE_ADDR_LINE("TRANSFER_ADDR", g_usb_hooks.target_transfer_addr);
-    WRITE_ADDR_LINE("TRANSFER_WRAP", get_wrapper_transfer_addr());
+    WRITE_ADDR_LINE("TRANSFER_WRAP", wrapper_my_cellUsbdTransfer);
     WRITE_ADDR_LINE("CLOSEPIPE_ADDR", g_usb_hooks.target_close_pipe_addr);
-    WRITE_ADDR_LINE("CLOSEPIPE_WRAP", get_wrapper_close_pipe_addr());
+    WRITE_ADDR_LINE("CLOSEPIPE_WRAP", wrapper_my_cellUsbdClosePipe);
 
 #undef WRITE_ADDR_LINE
 
     buf[pos] = '\0';
 
-    /* Write to .tmp file first, then atomic rename.
-     *
-     * CRITICAL: CELL_FS_O_TRUNC clears the inode instantaneously.
-     * If Node.js issues an HTTP download.ps3?file=... request during
-     * the write, it will parse a truncated file (partial lines or
-     * missing addresses). By writing to ld_hooks.tmp first and then
-     * calling cellFsRename(), the orchestrator always sees either the
-     * complete old file (if rename hasn't executed) or the complete
-     * new file (if rename has executed) — never a partial write. */
-    if (cellFsOpen("/dev_hdd0/tmp/ld_hooks.tmp",
+    if (cellFsOpen("/dev_hdd0/tmp/ld_hooks_ready.txt",
                    CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
-                   &fd, NULL, 0) != CELL_OK) {
-        DEBUG_ERROR("[USB] Failed to open temp IPC file\n");
-        return -1;
+                   &fd, NULL, 0) == CELL_OK) {
+        cellFsWrite(fd, buf, pos, &written);
+        cellFsClose(fd);
+        DEBUG_PRINT("[USB] IPC file written (%d bytes)\n", pos);
+        return 0;
     }
-    cellFsWrite(fd, buf, pos, &written);
-    cellFsClose(fd);
-
-    /* Atomic rename — if this crashes, Node.js sees a stale file
-     * (still valid format, just out-of-date content), never a
-     * truncated one. */
-    if (cellFsRename("/dev_hdd0/tmp/ld_hooks.tmp",
-                     "/dev_hdd0/tmp/ld_hooks_ready.txt") != CELL_OK) {
-        DEBUG_ERROR("[USB] cellFsRename for ready file failed\n");
-        return -1;
-    }
-
-    DEBUG_PRINT("[USB] IPC file written (%d bytes, atomic rename)\n", pos);
-    return 0;
+    DEBUG_ERROR("[USB] Failed to write IPC file\n");
+    return -1;
 }
 
 /* ---- Pipe tracking (unchanged from original) ---- */
@@ -408,27 +379,7 @@ static int scan_for_nid(void *start, uint32_t size, uint32_t target_nid,
         /* Dereference GOT slot */
         uint32_t *got_slot = (uint32_t*)(uintptr_t)got_ptr;
         uint32_t func_addr = *got_slot;
-
-        /* REJECT PLT STUBS (CellOS lazy binding):
-         *
-         * When the PlayStation 3 game boots, its Global Offset Table (GOT)
-         * entries do not immediately point to the actual OS functions.
-         * Instead, CellOS utilizes lazy binding. The GOT slot initially
-         * contains a pointer to a PLT stub located inside the game's own
-         * .text segment (low memory, e.g. 0x0001xxxx to 0x01FFFFFF).
-         *
-         * The first time the game actually calls cellUsbdTransfer, the
-         * stub invokes the CellOS dynamic linker, which overwrites the
-         * GOT slot with the real function address in high memory.
-         *
-         * System PRXs (like cellUsbd) are always mapped at >= 0x30000000.
-         * If we see an address below 0x30000000, it's a PLT stub — the
-         * lazy binding hasn't fired yet. We must reject it and retry. */
-        if (func_addr == 0 ||
-            func_addr < 0x30000000 ||
-            func_addr > 0x4FFFFFFF) {
-            continue;
-        }
+        if (func_addr == 0 || func_addr < 0x00010000) continue;
 
         *out_addr = (void*)(uintptr_t)func_addr;
         return 0;
@@ -504,33 +455,11 @@ int usb_hook_init(void)
     memset(&g_usb_hooks, 0, sizeof(g_usb_hooks));
     g_usb_hooks.next_pipe_id = 0x1000;
 
-    /* Step 1: Find function addresses via NID scan (with PLT retry).
-     *
-     * CRITICAL: CellOS uses lazy binding for GOT entries. The GOT slot
-     * initially contains a pointer to a PLT stub in the game's .text
-     * (low memory). Only after the game actually calls cellUsbdInit will
-     * the dynamic linker resolve the GOT to the real function address
-     * in high memory (>= 0x30000000). If the scanner finds PLT stubs,
-     * we sleep and retry until the real functions appear.
-     *
-     * See scan_for_nid() for the func_addr >= 0x30000000 rejection. */
-    {
-        int attempt;
-        int max_attempts = 10;  /* 10 * 2s = 20 seconds max */
-        ret = -1;
-        for (attempt = 0; attempt < max_attempts; attempt++) {
-            ret = find_game_cellusbd_functions(&target_init, &target_open_pipe,
-                                                &target_transfer, &target_close_pipe);
-            if (ret == 0) {
-                break;  /* All 4 functions resolved to high memory */
-            }
-            DEBUG_PRINT("[USB] NID scan found PLT stubs (attempt %d/%d), "
-                        "retrying in 2s...\n", attempt + 1, max_attempts);
-            sys_timer_usleep(2000000);  /* 2 seconds */
-        }
-    }
+    /* Step 1: Find function addresses via NID scan */
+    ret = find_game_cellusbd_functions(&target_init, &target_open_pipe,
+                                        &target_transfer, &target_close_pipe);
     if (ret != 0) {
-        DEBUG_ERROR("[USB] NID scan failed after %d attempts\n", 10);
+        DEBUG_ERROR("[USB] NID scan failed\n");
         return -1;
     }
 
@@ -595,14 +524,11 @@ void usb_hook_shutdown(void)
 
     { int fd;
       uint64_t written;
-      /* Atomic rename for shutdown IPC too */
-      if (cellFsOpen("/dev_hdd0/tmp/ld_shutdown.tmp",
+      if (cellFsOpen("/dev_hdd0/tmp/ld_hooks_shutdown.txt",
                      CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
                      &fd, NULL, 0) == CELL_OK) {
           cellFsWrite(fd, "STATUS=shutdown\n", 15, &written);
           cellFsClose(fd);
-          cellFsRename("/dev_hdd0/tmp/ld_shutdown.tmp",
-                       "/dev_hdd0/tmp/ld_hooks_shutdown.txt");
       }
     }
 
@@ -611,3 +537,9 @@ void usb_hook_shutdown(void)
     g_usb_hooks.initialized = 0;
     DEBUG_PRINT("[USB] Shutdown complete\n");
 }
+'''
+
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+with open('usb_hooks.c', 'w') as f:
+    f.write(content)
+print(f"usb_hooks.c written ({len(content)} bytes)")

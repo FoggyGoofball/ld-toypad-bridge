@@ -1,5 +1,6 @@
 # Build script for LD-ToyPad Bridge SPRX
 # Copies sources to temp dir (no spaces), compiles, links, copies back
+# Includes assembly trampoline (toc_trampoline.s)
 
 $Tmp = "c:\temp\ldtoypad-src"
 $CC = "c:\usr\local\cell\host-win32\ppu\ppu-lv2\bin\gcc.exe"
@@ -17,8 +18,8 @@ $LDFLAGS = @(
     "-llv2_stub", "-lfs_stub", "-lnet_stub"
 )
 
-Write-Host "=== Compiling ==="
-$cFiles = @("main.c","compat.c","network.c","debug.c","toypad_state.c","hook.c","usb_hooks.c")
+Write-Host "=== Compiling C sources ==="
+$cFiles = @("main.c","compat.c","network.c","debug.c","toypad_state.c","usb_hooks.c")
 foreach ($f in $cFiles) {
     $o = [System.IO.Path]::GetFileNameWithoutExtension($f) + ".o"
     Write-Host "  CC    $f"
@@ -28,13 +29,22 @@ foreach ($f in $cFiles) {
         exit 1
     }
 }
-Write-Host "OK - all compiled"
+Write-Host "OK - all C files compiled"
+
+Write-Host "=== Assembling toc_trampoline.s ==="
+& $CC @CFLAGS -c "$Tmp\toc_trampoline.s" -o "$Tmp\obj\toc_trampoline.o" 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "FAIL: toc_trampoline.s"
+    exit 1
+}
+Write-Host "OK - assembly assembled"
 
 Write-Host "=== Linking ==="
 $objs = @(
     "$Tmp\obj\main.o","$Tmp\obj\compat.o","$Tmp\obj\network.o",
     "$Tmp\obj\debug.o","$Tmp\obj\toypad_state.o",
-    "$Tmp\obj\hook.o","$Tmp\obj\usb_hooks.o"
+    "$Tmp\obj\usb_hooks.o",
+    "$Tmp\obj\toc_trampoline.o"
 )
 & $CC @objs @LDFLAGS -o "$Tmp\build\ldtoypad.prx" 2>&1
 if ($LASTEXITCODE -ne 0) {

@@ -31,7 +31,6 @@
 
 #include "debug.h"
 #include "network.h"
-#include "hook.h"
 #include "usb_hooks.h"
 #include "toypad_state.h"
 
@@ -159,14 +158,10 @@ static void worker_thread(uint64_t arg)
      *    (via PS3MAPI injection). If running in VSH context,
      *    hook installation will fail gracefully.
      *
-     *    Pass NULL for PRX TOC — usb_hook_init will fail gracefully
-     *    (find_game_cellusbd_functions placeholder always returns -1),
-     *    logging that we're in VSH-only network mode.  In production
-     *    with PS3MAPI injection, the actual TOC address would come
-     *    from the PRX loader.
+     *    usb_hook_init will fail gracefully if not in game process (returns -1).
      * ------------------------------------------------------- */
     {
-        int hooks_ok = usb_hook_init(NULL);
+        int hooks_ok = usb_hook_init();
         if (hooks_ok == 0) {
             papertrail("OK: usb_hook_init() — USB hooks installed for game");
             DEBUG_PRINT("[MAIN] USB hooks installed (game process mode)\n");
@@ -189,17 +184,34 @@ static void worker_thread(uint64_t arg)
      *    Performs:
      *      - Non-blocking recvfrom() for incoming UDP packets from PC server
      *      - Rate-limited server discovery probe broadcasts
-     *      - 10ms sleep each iteration to yield PPU to VSH
+     *      - 50ms sleep each iteration to yield PPU to VSH (20 Hz)
+     *      - Memory-mapped heartbeat counter for deadlock detection
      *
      *    The actual USB interrupt polling will be driven by the
      *    CellOS USB callback system once a device is attached.
      *    Until then, this loop keeps the network path alive.
+     *
+     *    SLEEP TIMING NOTE:
+     *    The sleep was reduced from 10ms (100 Hz) to 50ms (20 Hz) on
+     *    2026-07-21 per expert recommendation. 100 Hz was starving the
+     *    sceNpTrophy background threads of PPU cycles and sceNet mutex
+     *    access, causing the "Loading Trophy" freeze. 20 Hz is the
+     *    standard polling rate for PlayStation peripheral emulation.
      * ------------------------------------------------------- */
     papertrail("=== Entering main loop ===");
     DEBUG_PRINT("[MAIN] Entering background loop\n");
 
     while (!g_shutdown) {
         uint8_t buf[NET_PACKET_MAX_SIZE];
+
+        /* Memory-mapped heartbeat — incremented every iteration.
+         * Stored in the sys_memory_allocate trampoline page (offset 128).
+         * Polled by Node.js orchestrator via PS3MAPI /read_process.
+         * At 50ms sleep, this increments at ~20 Hz.
+         * No HDD writes — avoids I/O contention with game asset streaming. */
+        if (g_usb_hooks.heartbeat) {
+            (*g_usb_hooks.heartbeat)++;
+        }
 
         /* Non-blocking receive from PC server */
         int n = network_recv(buf, sizeof(buf));
@@ -218,8 +230,9 @@ static void worker_thread(uint64_t arg)
          * Rate-limited internally to once per 3 seconds. */
         network_send_keepalive();
 
-        /* Yield PPU — critical: without this, VSH will freeze */
-        sys_timer_usleep(10000); /* 10ms */
+        /* Yield PPU — critical: without this, VSH will freeze.
+         * 50ms (20 Hz) — prevents sceNpTrophy deadlock. */
+        sys_timer_usleep(50000); /* 50ms */
     }
 
     /* -------------------------------------------------------
