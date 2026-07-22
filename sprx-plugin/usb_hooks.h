@@ -110,12 +110,12 @@ int my_cellUsbdOpenPipe(uint32_t *pipe_handle, uint32_t dev_id,
                          void *ep_descriptor, uint32_t game_toc);
 
 /**
- * Hook for cellUsbdTransfer(pipe_handle, buf, len, arg4, arg5, game_toc).
+ * Hook for cellUsbdInterruptTransfer(pipe_handle, buf, len, done_cb, arg, game_toc).
  * game_toc in r8 (5 original args in r3-r7).
  */
-int my_cellUsbdTransfer(uint32_t pipe_handle, void *buf,
-                         uint32_t *len, uint32_t arg4, uint32_t arg5,
-                         uint32_t game_toc);
+int my_cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf,
+                                  uint32_t *len, void *done_cb, void *arg,
+                                  uint32_t game_toc);
 
 /**
  * Hook for cellUsbdClosePipe(pipe_handle, game_toc).

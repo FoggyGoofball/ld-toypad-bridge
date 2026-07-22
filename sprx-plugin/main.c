@@ -16,8 +16,10 @@
  * -llv2_stub resolves sys_ppu_thread_create/join/exit, sys_time_get_system_time.
  * -lfs_stub resolves cellFsOpen/Write/Close (papertrail boot logging).
  * -lnet_stub resolves socket/bind/sendto/recvfrom/close.
- * -lusbd_stub NOT linked — cellUsbd calls are intercepted via hooks,
- *   not called directly.
+ * -lusbd_stub linked — SPRX imports cellUsbd for OPD trick.
+ *   The OPD trick extracts the resolved code addresses from our own
+ *   imports (CellOS resolves them when the SPRX loads), bypassing
+ *   the game's lazy-binding chicken-and-egg problem entirely.
  */
  
 #include <sys/prx.h>
@@ -28,6 +30,7 @@
 #include <sys/sys_time.h>
 #include <string.h>
 #include <stddef.h>
+#include <sys/prx.h>
 
 #include "debug.h"
 #include "network.h"
@@ -44,7 +47,7 @@ static volatile int g_shutdown = 0;
 static sys_ppu_thread_t g_worker_tid = SYS_PPU_THREAD_ID_INVALID;
 
 /** Write a line to /dev_hdd0/plugins/ldtoypad_boot.log */
-static int papertrail(const char *msg)
+int papertrail(const char *msg)
 {
     int fd;
     uint64_t written;
@@ -66,7 +69,57 @@ int module_start(size_t args, void *argp)
 
     papertrail("=== ldtoypad Full Integration: module_start ===");
 
-    papertrail("Creating worker thread...");
+    /* ── VSH SAFETY GUARD ──────────────────────────────────────────
+     * If this SPRX was accidentally loaded into the XMB (VSH) process
+     * via boot_plugins.txt, bail out immediately. The SPRX is designed
+     * for hot-injection into the LEGO Dimensions game process via
+     * PS3MAPI. Running in VSH would attempt NID scans and memory
+     * operations that can corrupt the dashboard and freeze the console.
+     *
+     * Detection: Try to open a file unique to the game process.
+     * If it doesn't exist, we're in VSH and abort module load.
+     *
+     * NOTE: returning non-zero from module_start = "unload me".
+     * The system will remove the module from memory immediately.
+     * This is the safest behavior in VSH context. */
+    {
+        int scratch_fd;
+        uint64_t dummy_written;
+
+        /* If /dev_hdd0/tmp/ld_vsh_guard.txt exists, boot_plugins.txt
+         * contained ldtoypad.sprx — this is an error condition.
+         * Remove it and abort. */
+        int exists_check = cellFsOpen("/dev_hdd0/tmp/ld_vsh_guard.txt",
+                                      CELL_FS_O_RDONLY,
+                                      &scratch_fd, NULL, 0);
+        if (exists_check == CELL_OK) {
+            cellFsClose(scratch_fd);
+            papertrail("VSH GUARD: detected VSH context — unloading immediately");
+            papertrail("VSH GUARD: remove ldtoypad.sprx from /dev_hdd0/boot_plugins.txt");
+            /* Write the guard file so user knows what happened */
+            int guard_fd;
+            if (cellFsOpen("/dev_hdd0/tmp/ld_vsh_detected.txt",
+                           CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
+                           &guard_fd, NULL, 0) == CELL_OK) {
+                char msg[] = "VSH_DETECTED=1\nLoaded from boot_plugins.txt\nRemove from boot_plugins.txt\n";
+                cellFsWrite(guard_fd, msg, strlen(msg), &dummy_written);
+                cellFsClose(guard_fd);
+            }
+            return SYS_PRX_NO_RESIDENT;  /* Tell kernel to unload us immediately */
+        }
+
+        /* Write the VSH guard token — next boot will detect it
+         * and refuse to load. This prevents infinite crash loops. */
+        if (cellFsOpen("/dev_hdd0/tmp/ld_vsh_guard.txt",
+                       CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
+                       &scratch_fd, NULL, 0) == CELL_OK) {
+            char msg[] = "VSH_GUARD=1\n";
+            cellFsWrite(scratch_fd, msg, strlen(msg), &dummy_written);
+            cellFsClose(scratch_fd);
+        }
+    }
+
+    papertrail("Game process confirmed — creating worker thread...");
     ret = sys_ppu_thread_create(&g_worker_tid,
                                 (void(*)(uint64_t))worker_thread,
                                 0, 1000, 16*1024,
@@ -74,7 +127,7 @@ int module_start(size_t args, void *argp)
                                 "ldtoypad_worker");
     if (ret != CELL_OK) {
         papertrail("FAIL: thread create");
-        return 1;
+        return SYS_PRX_NO_RESIDENT;
     }
     papertrail("OK: thread created");
     return 0;
@@ -151,7 +204,7 @@ static void worker_thread(uint64_t arg)
      * 4. Install USB detour hooks for Toy Pad emulation.
      *
      *    Intercepts the game's cellUsbdInit, cellUsbdOpenPipe,
-     *    cellUsbdTransfer, and cellUsbdClosePipe functions.
+     *    cellUsbdTransfer, cellUsbdClosePipe, and cellUsbdRegisterLdd.
      *    Routes Toy Pad USB traffic to the Node.js server via UDP.
      *
      *    This requires the SPRX to be loaded into the game process
@@ -208,9 +261,17 @@ static void worker_thread(uint64_t arg)
          * Stored in the sys_memory_allocate trampoline page (offset 128).
          * Polled by Node.js orchestrator via PS3MAPI /read_process.
          * At 50ms sleep, this increments at ~20 Hz.
-         * No HDD writes — avoids I/O contention with game asset streaming. */
+         * No HDD writes — avoids I/O contention with game asset streaming.
+         *
+         * CACHE COHERENCY: dcbst flushes the PPU L1 data cache line
+         * containing the heartbeat value out to physical RAM. Without
+         * this, PS3MAPI's kernel-level /read_process may read stale
+         * data from physical memory since the kernel bypasses the PPU
+         * L1 cache. sync ensures the dcbst completes before proceeding. */
         if (g_usb_hooks.heartbeat) {
             (*g_usb_hooks.heartbeat)++;
+            __asm__ __volatile__ ("dcbst 0, %0" :: "r"((uint32_t)(uintptr_t)g_usb_hooks.heartbeat));
+            __asm__ __volatile__ ("sync" ::: "memory");
         }
 
         /* Non-blocking receive from PC server */

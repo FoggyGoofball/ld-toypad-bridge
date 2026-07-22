@@ -130,14 +130,17 @@ int network_init(uint16_t port)
         }
     }
 
-    /* Set non-blocking mode on socket using SO_NBIO (CellOS SDK).
-     * On CellOS -lnet_stub, MSG_DONTWAIT flag in recvfrom() is unreliable.
-     * Setting SO_NBIO via setsockopt ensures the socket descriptor itself
-     * is non-blocking. recvfrom then uses flags=0. */
+    /* Set non-blocking mode using setsockopt SO_NBIO.
+     * CellOS SDK 3.40 -lnet_stub does not export SYS_NET_F_SETFL /
+     * SYS_NET_O_NONBLOCK constants. setsockopt(SO_NBIO, &on) is the
+     * correct PS3 SDK API for non-blocking sockets. SO_NBIO is
+     * functionally identical to POSIX O_NONBLOCK on the LV2 network
+     * stack — recvfrom returns -1 / SYS_NET_EWOULDBLOCK immediately
+     * when no data is available. */
     {
-        int optval = 1;  /* SO_NBIO: 0 = blocking, 1 = non-blocking */
+        int on = 1;
         if (setsockopt(g_net.socket_fd, SOL_SOCKET, SO_NBIO,
-                       (void*)&optval, sizeof(optval)) < 0) {
+                       (void*)&on, sizeof(on)) < 0) {
             DEBUG_ERROR("[NET] setsockopt SO_NBIO failed\n");
         }
     }

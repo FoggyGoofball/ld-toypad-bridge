@@ -1,3 +1,4 @@
+# Only webftp_server.sprx belongs in boot_plugins.txt!
+# ld-toypad SPRX is hot-injected via PS3MAPI after game is running.
+# See inject-sprx.js in ld-toypad-server/scripts/
 /dev_hdd0/plugins/webftp_server.sprx
-/dev_hdd0/plugins/helloworld.sprx
-/dev_hdd0/plugins/ldtoypad.sprx

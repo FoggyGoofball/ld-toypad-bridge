@@ -36,29 +36,31 @@ usb_hook_state_t g_usb_hooks;
 #define CELL_OK                  0
 #define CELL_USBD_ERROR_FAILED  -1
 
-/* NID values for cellUsbd functions */
-#define NID_CELL_USBD_INIT          0x7F5F00D3U
-#define NID_CELL_USBD_OPEN_PIPE     0x1AB6D80BU
-#define NID_CELL_USBD_TRANSFER      0x7B4436CEU
-#define NID_CELL_USBD_CLOSE_PIPE    0x2F82F1A5U
+/* cellUsbd function imports from -lusbd_stub.
+ * We only take addresses for OPD extraction — never called directly. */
+extern int cellUsbdInit(void);
+extern int cellUsbdOpenPipe(void *pipe_handle, uint32_t dev_id, void *ep_descriptor);
+extern int cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf, uint32_t *len,
+                                     void *done_cb, void *arg);
+extern int cellUsbdClosePipe(uint32_t pipe_handle);
 
-#define NID_SCAN_CHUNK_SIZE  0x10000
-
-static const uint32_t g_scan_regions[][2] = {
-    { 0x00100000, 0x00800000 },
-    { 0x01000000, 0x01000000 },
-    { 0x02000000, 0x01000000 },
-    { 0x30000000, 0x00800000 },
-    { 0x40000000, 0x01000000 },
-};
-#define NUM_SCAN_REGIONS  (sizeof(g_scan_regions) / sizeof(g_scan_regions[0]))
+/* CellOS OPD (Official Procedure Descriptor) structure.
+ * On PowerPC 32-bit CellOS, function pointers point to a 12-byte OPD
+ * struct containing: code address, TOC address, environment pointer.
+ * We extract the code_addr from our own SPRX's resolved imports to
+ * get the real function addresses without scanning the game's memory. */
+typedef struct {
+    uint32_t code_addr;    /* Ptr to .text code */
+    uint32_t toc_addr;     /* TOC base value (loaded into r2 on call) */
+    uint32_t env_ptr;      /* Environment pointer (unused, set to 0) */
+} ppc_opd_t;
 
 /* OPD-based function pointers from toc_trampoline_c.c */
 extern int (*call_original_OpenPipe)(uint32_t game_toc, void *tramp_addr,
     uint32_t *pipe_handle, uint32_t dev_id, void *ep_descriptor);
 extern int (*call_original_Transfer)(uint32_t game_toc, void *tramp_addr,
     uint32_t pipe_handle, void *buf, uint32_t *len,
-    uint32_t arg4, uint32_t arg5);
+    void *done_cb, void *arg);
 extern int (*call_original_ClosePipe)(uint32_t game_toc, void *tramp_addr,
     uint32_t pipe_handle);
 
@@ -306,20 +308,20 @@ int my_cellUsbdOpenPipe(uint32_t *pipe_handle, uint32_t dev_id,
 }
 
 /* ================================================================
- * HOOK: my_cellUsbdTransfer
+ * HOOK: my_cellUsbdInterruptTransfer
  * ================================================================ */
-int my_cellUsbdTransfer(uint32_t pipe_handle, void *buf,
-                         uint32_t *len, uint32_t arg4, uint32_t arg5,
-                         uint32_t game_toc)
+int my_cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf,
+                                  uint32_t *len, void *done_cb, void *arg,
+                                  uint32_t game_toc)
 {
     int toypad_type;
-    (void)arg4; (void)arg5; (void)game_toc;
+    (void)done_cb; (void)arg; (void)game_toc;
 
     toypad_type = usb_hook_is_toypad_pipe(pipe_handle);
     if (toypad_type == 0) {
         return call_original_Transfer(game_toc,
             (void*)(uintptr_t)g_usb_hooks.tramp_transfer_addr,
-            pipe_handle, buf, len, arg4, arg5);
+            pipe_handle, buf, len, done_cb, arg);
     }
 
     if (toypad_type == 1) {
@@ -380,112 +382,84 @@ int my_cellUsbdClosePipe(uint32_t pipe_handle, uint32_t game_toc)
 }
 
 /* ================================================================
- * NID Scanner (unchanged logic from original)
+ * OPD Extraction (Replaces NID Scanner)
+ *
+ * Instead of scanning the game's memory for NID stubs — which fails
+ * because CellOS lazy binding means GOT entries are PLT stubs until
+ * the game actually calls cellUsbd — we use the OPD trick.
+ *
+ * When the SPRX is loaded with -lusbd_stub, the CellOS PRX loader
+ * resolves the cellUsbd imports for OUR module. By casting each
+ * imported function pointer to a ppc_opd_t* and reading the code_addr
+ * field, we get the real resolved address in the system PRX region
+ * (≥ 0x30000000). No scanning, no retries, no chicken-and-egg.
+ *
+ * EXPERT REFERENCE:
+ *   "In PowerPC64 (and CellOS 32-bit pointers acting under similar ABI),
+ *    a C function pointer is actually a pointer to an Official Procedure
+ *    Descriptor (OPD). You can extract the resolved code address directly
+ *    from your own SPRX's runtime environment."
  * ================================================================ */
 
-typedef struct {
-    uint32_t nid;
-    void     *func_addr;
-    int      found;
-} nid_match_t;
-
-static int scan_for_nid(void *start, uint32_t size, uint32_t target_nid,
-                         void **out_addr)
+static int find_cellusbd_functions_via_opd(
+    void **out_init, void **out_open_pipe,
+    void **out_transfer, void **out_close_pipe)
 {
-    uint32_t *words = (uint32_t*)start;
-    uint32_t nwords = size / sizeof(uint32_t);
-    uint32_t i;
+    const ppc_opd_t *opd;
+    uint32_t code_addr;
 
-    for (i = 0; i <= nwords - 3; i += 3) {
-        uint32_t nid      = words[i + 0];
-        uint32_t reserved = words[i + 1];
-        uint32_t got_ptr  = words[i + 2];
-
-        if (nid != target_nid) continue;
-        if (reserved != 0 && reserved > 0x1000) continue;
-        if (got_ptr == 0 || got_ptr < 0x00010000 || got_ptr > 0x4FFFFFFF) continue;
-
-        /* Dereference GOT slot */
-        uint32_t *got_slot = (uint32_t*)(uintptr_t)got_ptr;
-        uint32_t func_addr = *got_slot;
-
-        /* REJECT PLT STUBS (CellOS lazy binding):
-         *
-         * When the PlayStation 3 game boots, its Global Offset Table (GOT)
-         * entries do not immediately point to the actual OS functions.
-         * Instead, CellOS utilizes lazy binding. The GOT slot initially
-         * contains a pointer to a PLT stub located inside the game's own
-         * .text segment (low memory, e.g. 0x0001xxxx to 0x01FFFFFF).
-         *
-         * The first time the game actually calls cellUsbdTransfer, the
-         * stub invokes the CellOS dynamic linker, which overwrites the
-         * GOT slot with the real function address in high memory.
-         *
-         * System PRXs (like cellUsbd) are always mapped at >= 0x30000000.
-         * If we see an address below 0x30000000, it's a PLT stub — the
-         * lazy binding hasn't fired yet. We must reject it and retry. */
-        if (func_addr == 0 ||
-            func_addr < 0x30000000 ||
-            func_addr > 0x4FFFFFFF) {
-            continue;
-        }
-
-        *out_addr = (void*)(uintptr_t)func_addr;
-        return 0;
-    }
-    return -1;
-}
-
-static int find_game_cellusbd_functions(void **out_init,
-    void **out_open_pipe, void **out_transfer, void **out_close_pipe)
-{
-    nid_match_t targets[4];
-    unsigned int r;
-    int all_found;
-    uint32_t nids[4];
-    void **out_ptrs[4];
-    int i;
-
-    nids[0] = NID_CELL_USBD_INIT;
-    nids[1] = NID_CELL_USBD_OPEN_PIPE;
-    nids[2] = NID_CELL_USBD_TRANSFER;
-    nids[3] = NID_CELL_USBD_CLOSE_PIPE;
-    out_ptrs[0] = out_init;
-    out_ptrs[1] = out_open_pipe;
-    out_ptrs[2] = out_transfer;
-    out_ptrs[3] = out_close_pipe;
-
-    for (i = 0; i < 4; i++) {
-        targets[i].nid = nids[i];
-        targets[i].func_addr = NULL;
-        targets[i].found = 0;
+    if (out_init == NULL || out_open_pipe == NULL ||
+        out_transfer == NULL || out_close_pipe == NULL) {
+        return -1;
     }
 
-    for (r = 0; r < NUM_SCAN_REGIONS; r++) {
-        uint32_t region_start = g_scan_regions[r][0];
-        uint32_t region_size  = g_scan_regions[r][1];
-        void    *region_ptr   = (void*)(uintptr_t)region_start;
-        if (region_ptr == NULL) continue;
-        for (i = 0; i < 4; i++) {
-            if (targets[i].found) continue;
-            if (scan_for_nid(region_ptr, region_size,
-                             targets[i].nid, &targets[i].func_addr) == 0)
-                targets[i].found = 1;
-        }
-        all_found = 1;
-        for (i = 0; i < 4; i++) { if (!targets[i].found) { all_found = 0; break; } }
-        if (all_found) break;
+    /* cellUsbdInit */
+    opd = (const ppc_opd_t*)(uintptr_t)cellUsbdInit;
+    code_addr = opd->code_addr;
+    DEBUG_PRINT("[USB] OPD: cellUsbdInit => code=0x%08X (opd at 0x%08X)\n",
+                (unsigned)code_addr, (unsigned)(uintptr_t)opd);
+    if (code_addr < 0x30000000 || code_addr > 0x4FFFFFFF) {
+        DEBUG_ERROR("[USB] OPD: cellUsbdInit code_addr out of range (0x%08X)\n",
+                    (unsigned)code_addr);
+        return -1;
     }
+    *out_init = (void*)(uintptr_t)code_addr;
 
-    all_found = 1;
-    for (i = 0; i < 4; i++) {
-        if (targets[i].found) {
-            if (out_ptrs[i]) *out_ptrs[i] = targets[i].func_addr;
-        } else {
-            all_found = 0;
-        }
+    /* cellUsbdOpenPipe */
+    opd = (const ppc_opd_t*)(uintptr_t)cellUsbdOpenPipe;
+    code_addr = opd->code_addr;
+    DEBUG_PRINT("[USB] OPD: cellUsbdOpenPipe => code=0x%08X\n", (unsigned)code_addr);
+    if (code_addr < 0x30000000 || code_addr > 0x4FFFFFFF) {
+        DEBUG_ERROR("[USB] OPD: cellUsbdOpenPipe code_addr out of range (0x%08X)\n",
+                    (unsigned)code_addr);
+        return -1;
     }
-    return all_found ? 0 : -1;
+    *out_open_pipe = (void*)(uintptr_t)code_addr;
+
+    /* cellUsbdInterruptTransfer */
+    opd = (const ppc_opd_t*)(uintptr_t)cellUsbdInterruptTransfer;
+    code_addr = opd->code_addr;
+    DEBUG_PRINT("[USB] OPD: cellUsbdTransfer => code=0x%08X\n", (unsigned)code_addr);
+    if (code_addr < 0x30000000 || code_addr > 0x4FFFFFFF) {
+        DEBUG_ERROR("[USB] OPD: cellUsbdTransfer code_addr out of range (0x%08X)\n",
+                    (unsigned)code_addr);
+        return -1;
+    }
+    *out_transfer = (void*)(uintptr_t)code_addr;
+
+    /* cellUsbdClosePipe */
+    opd = (const ppc_opd_t*)(uintptr_t)cellUsbdClosePipe;
+    code_addr = opd->code_addr;
+    DEBUG_PRINT("[USB] OPD: cellUsbdClosePipe => code=0x%08X\n", (unsigned)code_addr);
+    if (code_addr < 0x30000000 || code_addr > 0x4FFFFFFF) {
+        DEBUG_ERROR("[USB] OPD: cellUsbdClosePipe code_addr out of range (0x%08X)\n",
+                    (unsigned)code_addr);
+        return -1;
+    }
+    *out_close_pipe = (void*)(uintptr_t)code_addr;
+
+    DEBUG_PRINT("[USB] All 4 cellUsbd functions resolved via OPD\n");
+    return 0;
 }
 
 /* ================================================================
@@ -504,33 +478,21 @@ int usb_hook_init(void)
     memset(&g_usb_hooks, 0, sizeof(g_usb_hooks));
     g_usb_hooks.next_pipe_id = 0x1000;
 
-    /* Step 1: Find function addresses via NID scan (with PLT retry).
+    /* Step 1: Resolve target function addresses via OPD trick.
      *
-     * CRITICAL: CellOS uses lazy binding for GOT entries. The GOT slot
-     * initially contains a pointer to a PLT stub in the game's .text
-     * (low memory). Only after the game actually calls cellUsbdInit will
-     * the dynamic linker resolve the GOT to the real function address
-     * in high memory (>= 0x30000000). If the scanner finds PLT stubs,
-     * we sleep and retry until the real functions appear.
+     * Instead of scanning the game's memory for NID stubs (which fails
+     * because CellOS lazy binding means GOT entries are PLT stubs until
+     * the game actually calls cellUsbd), we extract the resolved code
+     * addresses from our own SPRX's OPD import entries.
      *
-     * See scan_for_nid() for the func_addr >= 0x30000000 rejection. */
-    {
-        int attempt;
-        int max_attempts = 10;  /* 10 * 2s = 20 seconds max */
-        ret = -1;
-        for (attempt = 0; attempt < max_attempts; attempt++) {
-            ret = find_game_cellusbd_functions(&target_init, &target_open_pipe,
-                                                &target_transfer, &target_close_pipe);
-            if (ret == 0) {
-                break;  /* All 4 functions resolved to high memory */
-            }
-            DEBUG_PRINT("[USB] NID scan found PLT stubs (attempt %d/%d), "
-                        "retrying in 2s...\n", attempt + 1, max_attempts);
-            sys_timer_usleep(2000000);  /* 2 seconds */
-        }
-    }
+     * The SPRX is linked with -lusbd_stub, so CellOS resolves cellUsbd
+     * imports when our module is loaded. Casting the imported function
+     * symbol to a ppc_opd_t* gives us the real code address directly.
+     * No scanning, no retries, no chicken-and-egg problem. */
+    ret = find_cellusbd_functions_via_opd(&target_init, &target_open_pipe,
+                                           &target_transfer, &target_close_pipe);
     if (ret != 0) {
-        DEBUG_ERROR("[USB] NID scan failed after %d attempts\n", 10);
+        DEBUG_ERROR("[USB] OPD extraction failed — SPRX imports not resolved\n");
         return -1;
     }
 

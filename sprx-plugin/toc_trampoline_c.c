@@ -39,9 +39,8 @@ extern "C" {
 /* Hook wrapper symbols (called directly from preamble via bctr) */
 extern uint32_t asm_wrapper_my_cellUsbdInit;
 extern uint32_t asm_wrapper_my_cellUsbdOpenPipe;
-extern uint32_t asm_wrapper_my_cellUsbdTransfer;
+extern uint32_t asm_wrapper_my_cellUsbdInterruptTransfer;
 extern uint32_t asm_wrapper_my_cellUsbdClosePipe;
-
 /* Passthrough stub symbols (OPDs constructed below) */
 extern uint32_t asm_passthrough_OpenPipe;
 extern uint32_t asm_passthrough_Transfer;
@@ -108,8 +107,8 @@ typedef int (*passthrough_transfer_fn)(
     uint32_t pipe_handle,
     void    *buf,
     uint32_t *len,
-    uint32_t arg4,
-    uint32_t arg5
+    void    *done_cb,
+    void    *arg
 );
 
 typedef int (*passthrough_close_fn)(
@@ -155,7 +154,7 @@ uint32_t get_wrapper_open_pipe_addr(void)
 
 uint32_t get_wrapper_transfer_addr(void)
 {
-    return (uint32_t)&asm_wrapper_my_cellUsbdTransfer;
+    return (uint32_t)&asm_wrapper_my_cellUsbdInterruptTransfer;
 }
 
 uint32_t get_wrapper_close_pipe_addr(void)

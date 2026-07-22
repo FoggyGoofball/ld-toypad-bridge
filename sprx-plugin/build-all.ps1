@@ -15,7 +15,7 @@ $CFLAGS = @(
 
 $LDFLAGS = @(
     "-mprx", "-nodefaultlibs",
-    "-llv2_stub", "-lfs_stub", "-lnet_stub"
+    "-llv2_stub", "-lfs_stub", "-lnet_stub", "-lusbd_stub"
 )
 
 Write-Host "=== Compiling C sources ==="

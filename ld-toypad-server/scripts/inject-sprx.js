@@ -9,7 +9,8 @@
  *
  * PHASE 1 (SPRX-side):
  *   - SPRX injected into game process via /ps3mapi.ps3?MODULE%20LOAD...
- *   - NID scan finds cellUsbd function addresses
+ *   - OPD trick: extracts cellUsbd function addresses from SPRX's own
+ *     resolved imports (avoids game memory NID scan chicken-and-egg)
  *   - sys_memory_allocate allocates R-W-X trampoline pages
  *   - Original 4 instructions copied + branch-back written
  *   - IPC file written to /dev_hdd0/tmp/ld_hooks_ready.txt
@@ -324,16 +325,18 @@ async function injectSprx(gamePid) {
 //   MEM WRITE: GET /ps3mapi.ps3?MEMORY%20SET%200x{PID}%200x{ADDR}%20{HEX}
 async function waitForIpcAndInstall(gamePid) {
   log('Waiting for SPRX to write IPC file (ld_hooks_ready.txt)...');
-  log('  SPRX will NID-scan, allocate trampolines, copy original');
-  log('  instructions, and write IPC file on /dev_hdd0/tmp/.');
-  log('  This should take < 1 second after injection.');
+  log('  SPRX will resolve cellUsbd via OPD trick (instant), allocate');
+  log('  trampolines, copy original instructions, and write IPC file');
+  log('  on /dev_hdd0/tmp/. This should take < 1 second after injection.');
   log('  Using direct HTTP GET: /dev_hdd0/tmp/ld_hooks_ready.txt');
   
   let ipcContent = null;
   
-  // Poll for IPC file (up to 15 seconds)
+  // Poll for IPC file (up to 80 seconds)
+  // SPRX Phase 1 NID scan can take up to 20 seconds (10 attempts × 2s).
+  // Add extra time for HDD I/O and game responsiveness.
   // Uses direct filesystem access via webMAN HTTP server
-  for (let attempt = 0; attempt < 30; attempt++) {
+  for (let attempt = 0; attempt < 80; attempt++) {
     try {
       const resp = await ps3mapiRequest(
         `/dev_hdd0/tmp/ld_hooks_ready.txt`,
@@ -349,14 +352,14 @@ async function waitForIpcAndInstall(gamePid) {
       // File not ready yet
     }
     
-    if (attempt % 5 === 0) {
-      log(`  ...waiting for IPC file (attempt ${attempt + 1}/30)`);
+    if (attempt % 10 === 0) {
+      log(`  ...waiting for IPC file (attempt ${attempt + 1}/80)`);
     }
-    await sleep(500);
+    await sleep(1000);
   }
   
   if (!ipcContent) {
-    log('✗ IPC file not found after 15 seconds. SPRX may have crashed.');
+    log('✗ IPC file not found after 80 seconds. SPRX may have crashed.');
     log('  Check /dev_hdd0/plugins/ldtoypad_boot.log on PS3.');
     return false;
   }
@@ -381,13 +384,15 @@ async function waitForIpcAndInstall(gamePid) {
   log(`  Target OPEN:     ${kv.OPENPIPE_ADDR || 'unknown'} -> wrapper ${kv.OPENPIPE_WRAP || 'unknown'}`);
   log(`  Target XFER:     ${kv.TRANSFER_ADDR || 'unknown'} -> wrapper ${kv.TRANSFER_WRAP || 'unknown'}`);
   log(`  Target CLOSE:    ${kv.CLOSEPIPE_ADDR || 'unknown'} -> wrapper ${kv.CLOSEPIPE_WRAP || 'unknown'}`);
+  log(`  Target REGLDD:   ${kv.REGISTERLDD_ADDR || 'unknown'} -> wrapper ${kv.REGISTERLDD_WRAP || 'unknown'}`);
   
   // Build and install preambles for each target
   const targets = [
-    { name: 'cellUsbdInit',       target: kv.INIT_ADDR,       wrapper: kv.INIT_WRAP },
-    { name: 'cellUsbdOpenPipe',   target: kv.OPENPIPE_ADDR,   wrapper: kv.OPENPIPE_WRAP },
-    { name: 'cellUsbdTransfer',   target: kv.TRANSFER_ADDR,   wrapper: kv.TRANSFER_WRAP },
-    { name: 'cellUsbdClosePipe',  target: kv.CLOSEPIPE_ADDR,  wrapper: kv.CLOSEPIPE_WRAP },
+    { name: 'cellUsbdInit',         target: kv.INIT_ADDR,         wrapper: kv.INIT_WRAP },
+    { name: 'cellUsbdOpenPipe',     target: kv.OPENPIPE_ADDR,     wrapper: kv.OPENPIPE_WRAP },
+    { name: 'cellUsbdTransfer',     target: kv.TRANSFER_ADDR,     wrapper: kv.TRANSFER_WRAP },
+    { name: 'cellUsbdClosePipe',    target: kv.CLOSEPIPE_ADDR,    wrapper: kv.CLOSEPIPE_WRAP },
+    { name: 'cellUsbdRegisterLdd',  target: kv.REGISTERLDD_ADDR,  wrapper: kv.REGISTERLDD_WRAP },
   ];
   
   for (const t of targets) {

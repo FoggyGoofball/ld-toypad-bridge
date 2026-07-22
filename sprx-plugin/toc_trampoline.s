@@ -1,10 +1,11 @@
-/* toc_trampoline.s — REFACTORED 2026-07-20 (Expert OPD Fix)
+/* toc_trampoline.s — REFACTORED 2026-07-21 (5 hooks: +RegisterLdd)
  * Architecture: PowerPC (CellOS Sony SDK -mprx)
  *
  * PURPOSE:
  *   Safe stack frame allocation, r2 (TOC) preservation, and TOC passing
  *   for userland hooks. Called from the 4-instruction preamble at each
- *   target function (cellUsbdInit, OpenPipe, Transfer, ClosePipe).
+ *   target function (cellUsbdInit, OpenPipe, Transfer, ClosePipe,
+ *   RegisterLdd).
  *
  * OPD COMPLIANCE (via C):
  *   This file contains ONLY .text code. NO .opd sections.
@@ -130,7 +131,7 @@
 
 
 /* ================================================================
- * HOOK WRAPPER INSTANTIATIONS (4 targets)
+ * HOOK WRAPPER INSTANTIATIONS (5 targets)
  * Called from 4-insn preamble via bctr (raw .text address)
  * ================================================================ */
 
@@ -140,12 +141,15 @@ HOOK_WRAPPER asm_wrapper_my_cellUsbdInit,      my_cellUsbdInit,      %r3
 /* cellUsbdOpenPipe has 3 args (r3,r4,r5) -> TOC in r6 */
 HOOK_WRAPPER asm_wrapper_my_cellUsbdOpenPipe,  my_cellUsbdOpenPipe,  %r6
 
-/* cellUsbdTransfer has 5 args (r3,r4,r5,r6,r7) -> TOC in r8 */
-HOOK_WRAPPER asm_wrapper_my_cellUsbdTransfer,  my_cellUsbdTransfer,  %r8
+/* cellUsbdInterruptTransfer has 5 args (r3,r4,r5,r6,r7) -> TOC in r8 */
+HOOK_WRAPPER asm_wrapper_my_cellUsbdInterruptTransfer,  my_cellUsbdInterruptTransfer,  %r8
 
 /* cellUsbdClosePipe has 1 arg (r3) -> TOC in r4 */
 HOOK_WRAPPER asm_wrapper_my_cellUsbdClosePipe, my_cellUsbdClosePipe, %r4
 
+/* RegisterLdd NOT hooked — per expert LDD is not needed for Toy Pad emulation.
+ * cellUsbdRegisterLdd is used for kernel-level LDD registration; we only
+ * need cellUsbdInit/OpenPipe/Transfer/ClosePipe hooks. */
 /* ================================================================
  * PASSTHROUGH STUB INSTANTIATIONS (3 targets)
  * Called from C hooks through OPD function pointers
