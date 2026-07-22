@@ -1,17 +1,37 @@
 /**
- * usb_hooks.c — REFACTORED 2026-07-20
+ * usb_hooks.c — REFACTORED 2026-07-22 (Dynamic Trampoline Generation)
  *
  * CRITICAL CHANGES:
- *   1. Removed #include "hook.h" — hook_install/remove are gone
- *   2. Added sys_memory_allocate for executable trampoline pages
- *   3. Updated function signatures: game_toc is LAST argument
- *   4. Passthrough uses call_original_* assembly stubs (from toc_trampoline.s)
- *   5. No more inline asm mr r2 switching (ABI violation fix)
- *   6. usb_hook_init writes IPC file for Node.js orchestrator
+ *   1. Removed all assembly wrapper/passthrough references
+ *   2. Removed call_original_* extern function pointers
+ *   3. Removed get_wrapper_*_addr() helpers
+ *   4. allocate_trampolines() -> install_hooks() using create_hook_trampoline()
+ *   5. IPC file simplified: only TRAMP_* addresses, no WRAPPER_* fields
+ *   6. Passthrough: calls real cellUsbd* functions directly (SPRX's own
+ *      resolved imports), never touches game's GOT
+ *   7. OPD extraction kept for validation, results stored locally
+ *
+ * WHY DYNAMIC TRAMPOLINES:
+ *   The PS3's 16-byte PLT stub (lis/lwz/mtctr/bctr) does NOT dereference
+ *   OPDs. Writing an OPD address into the game's GOT causes bctr to jump
+ *   to the OPD's data bytes as instructions -> ISI crash.
+ *
+ *   Dynamic trampolines are real executable code that save the game's TOC,
+ *   load the SPRX's TOC, call the C hook, restore the game's TOC, and
+ *   return. They're generated at runtime in an R-W-X page.
+ *
+ * WHY DIRECT CALLS FOR PASSTHROUGH:
+ *   The SPRX is linked with -lusbd_stub. CellOS resolves these imports
+ *   when the SPRX loads. Calling cellUsbdOpenPipe() from C uses the
+ *   SPRX's own GOT/TOC - the game's memory is never touched. This
+ *   avoids the lazy-binding trap where the dynamic linker would overwrite
+ *   our trampoline address in the game's GOT.
  *
  * Architecture:
- *   wrapper_* (asm) -> my_cellUsbd* (C) -> return or call_original_* (asm)
- *   TOC management entirely in toc_trampoline.s assembly
+ *   preamble (4 insns in game .text) -> trampoline (64 bytes R-W-X)
+ *   -> C hook -> return or call real cellUsbd directly
+ *
+ *   TOC management entirely in trampoline_gen.c
  */
 
 #include <string.h>
@@ -29,6 +49,7 @@
 #include "usb_hooks.h"
 #include "network.h"
 #include "debug.h"
+#include "trampoline_gen.h"
 
 /* Global state */
 usb_hook_state_t g_usb_hooks;
@@ -37,7 +58,13 @@ usb_hook_state_t g_usb_hooks;
 #define CELL_USBD_ERROR_FAILED  -1
 
 /* cellUsbd function imports from -lusbd_stub.
- * We only take addresses for OPD extraction — never called directly. */
+ * We declare these as extern functions - they're resolved by the CellOS
+ * PRX loader when the SPRX is loaded. We use them for:
+ *   1. OPD extraction (get resolved code addresses)
+ *   2. Direct passthrough calls (non-ToyPad USB traffic)
+ *
+ * IMPORTANT: When calling these functions from C, the compiler uses the
+ * SPRX's own GOT/TOC. The game's GOT is never touched. This is safe. */
 extern int cellUsbdInit(void);
 extern int cellUsbdOpenPipe(void *pipe_handle, uint32_t dev_id, void *ep_descriptor);
 extern int cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf, uint32_t *len,
@@ -48,39 +75,34 @@ extern int cellUsbdClosePipe(uint32_t pipe_handle);
  * On PowerPC 32-bit CellOS, function pointers point to a 12-byte OPD
  * struct containing: code address, TOC address, environment pointer.
  * We extract the code_addr from our own SPRX's resolved imports to
- * get the real function addresses without scanning the game's memory. */
+ * get the real function addresses for OPD extraction in trampoline_gen.c. */
 typedef struct {
     uint32_t code_addr;    /* Ptr to .text code */
     uint32_t toc_addr;     /* TOC base value (loaded into r2 on call) */
     uint32_t env_ptr;      /* Environment pointer (unused, set to 0) */
 } ppc_opd_t;
 
-/* OPD-based function pointers from toc_trampoline_c.c */
-extern int (*call_original_OpenPipe)(uint32_t game_toc, void *tramp_addr,
-    uint32_t *pipe_handle, uint32_t dev_id, void *ep_descriptor);
-extern int (*call_original_Transfer)(uint32_t game_toc, void *tramp_addr,
-    uint32_t pipe_handle, void *buf, uint32_t *len,
-    void *done_cb, void *arg);
-extern int (*call_original_ClosePipe)(uint32_t game_toc, void *tramp_addr,
-    uint32_t pipe_handle);
-
-/* Wrapper address helpers from toc_trampoline_c.c */
-extern uint32_t get_wrapper_init_addr(void);
-extern uint32_t get_wrapper_open_pipe_addr(void);
-extern uint32_t get_wrapper_transfer_addr(void);
-extern uint32_t get_wrapper_close_pipe_addr(void);
-
 /* ================================================================
- * Trampoline Allocation (sys_memory_allocate R-W-X)
+ * Hook Installation (replaces allocate_trampolines + toc_trampoline.s)
  * ================================================================
- * We allocate 64KB executable page. Each trampoline = 32 bytes (8 insns).
- * Four trampolines fit easily in 64KB. We use sys_memory_allocate
- * which returns R-W-X pages suitable for executable code.
+ * We allocate a single 64KB R-W-X page via sys_memory_allocate.
+ * Within this page, we generate 4 trampolines at 64-byte offsets:
+ *   Offset 0:   Init trampoline     (toc_arg_reg=3)
+ *   Offset 64:  OpenPipe trampoline (toc_arg_reg=6)
+ *   Offset 128: Transfer trampoline (toc_arg_reg=8)
+ *   Offset 192: ClosePipe trampoline (toc_arg_reg=4)
+ *   Offset 256: Heartbeat counter (uint32_t)
  * ================================================================ */
-#define TRAMPOLINE_PAGE_SIZE  (64 * 1024)
-#define TRAMPOLINE_BLOCK_SIZE 32
+#define TRAMPOLINE_PAGE_SIZE    (64 * 1024)
+#define TRAMPOLINE_BLOCK_SIZE   64  /* 16 instructions */
 
-static int allocate_trampolines(void)
+/* TOC argument register for each hook based on number of original args */
+#define TOC_REG_INIT       3   /* 0 args -> TOC goes in r3 */
+#define TOC_REG_OPENPIPE   6   /* 3 args -> TOC goes in r6 */
+#define TOC_REG_TRANSFER   8   /* 5 args -> TOC goes in r8 */
+#define TOC_REG_CLOSEPIPE  4   /* 1 arg  -> TOC goes in r4 */
+
+static int install_hooks(void)
 {
     sys_memory_container_t container;
     uint32_t base_addr;
@@ -88,6 +110,7 @@ static int allocate_trampolines(void)
 
     container = SYS_MEMORY_CONTAINER_DEFAULT;
 
+    /* Step 1: Allocate R-W-X page */
     ret = sys_memory_allocate(TRAMPOLINE_PAGE_SIZE,
                                SYS_MEMORY_PAGE_SIZE_64K,
                                &base_addr);
@@ -96,18 +119,58 @@ static int allocate_trampolines(void)
         return -1;
     }
 
-    g_usb_hooks.tramp_init_addr        = base_addr;
-    g_usb_hooks.tramp_open_pipe_addr   = base_addr + TRAMPOLINE_BLOCK_SIZE;
-    g_usb_hooks.tramp_transfer_addr    = base_addr + 2 * TRAMPOLINE_BLOCK_SIZE;
-    g_usb_hooks.tramp_close_pipe_addr  = base_addr + 3 * TRAMPOLINE_BLOCK_SIZE;
+    g_usb_hooks.trampoline_base = base_addr;
+    g_usb_hooks.tramp_init_offset = 0;
+    g_usb_hooks.tramp_open_pipe_offset = TRAMPOLINE_BLOCK_SIZE;
+    g_usb_hooks.tramp_transfer_offset = 2 * TRAMPOLINE_BLOCK_SIZE;
+    g_usb_hooks.tramp_close_pipe_offset = 3 * TRAMPOLINE_BLOCK_SIZE;
 
-    /* Heartbeat counter at offset 128 (after 4 × 32-byte trampolines).
+    /* Heartbeat counter at offset 256 (after 4 x 64-byte trampolines).
      * Zero-initialized by sys_memory_allocate (page is zeroed).
      * Incremented each worker loop iteration at ~20 Hz.
      * Polled by Node.js orchestrator via PS3MAPI /read_process. */
-    g_usb_hooks.heartbeat = (volatile uint32_t*)(uintptr_t)(base_addr + 128);
+    g_usb_hooks.heartbeat = (volatile uint32_t*)(uintptr_t)(base_addr + 256);
     DEBUG_PRINT("[USB] Heartbeat counter at 0x%08X\n",
-                (unsigned)(base_addr + 128));
+                (unsigned)(base_addr + 256));
+
+    /* Step 2: Generate trampolines using create_hook_trampoline().
+     *
+     * Each trampoline is 64 bytes (16 instructions) of dynamically
+     * generated PowerPC code that:
+     *   - Saves game's TOC and LR
+     *   - Passes game's TOC as an argument to our C hook
+     *   - Loads the SPRX's TOC
+     *   - Calls the C hook via bctrl
+     *   - Restores game's TOC and LR
+     *   - Returns to game caller
+     *
+     * The c_func parameter is a pointer to our C hook function.
+     * The C function pointer is actually an OPD on CellOS.
+     * create_hook_trampoline extracts code_addr and toc_addr from
+     * the OPD and embeds them into the trampoline instructions. */
+    create_hook_trampoline(
+        (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_init_offset),
+        (void*)my_cellUsbdInit, TOC_REG_INIT);
+    DEBUG_PRINT("[USB] Init trampoline at 0x%08X\n",
+                (unsigned)(base_addr + g_usb_hooks.tramp_init_offset));
+
+    create_hook_trampoline(
+        (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_open_pipe_offset),
+        (void*)my_cellUsbdOpenPipe, TOC_REG_OPENPIPE);
+    DEBUG_PRINT("[USB] OpenPipe trampoline at 0x%08X\n",
+                (unsigned)(base_addr + g_usb_hooks.tramp_open_pipe_offset));
+
+    create_hook_trampoline(
+        (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_transfer_offset),
+        (void*)my_cellUsbdInterruptTransfer, TOC_REG_TRANSFER);
+    DEBUG_PRINT("[USB] Transfer trampoline at 0x%08X\n",
+                (unsigned)(base_addr + g_usb_hooks.tramp_transfer_offset));
+
+    create_hook_trampoline(
+        (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_close_pipe_offset),
+        (void*)my_cellUsbdClosePipe, TOC_REG_CLOSEPIPE);
+    DEBUG_PRINT("[USB] ClosePipe trampoline at 0x%08X\n",
+                (unsigned)(base_addr + g_usb_hooks.tramp_close_pipe_offset));
 
     DEBUG_PRINT("[USB] Trampoline page at 0x%08X (size=%u)\n",
                 (unsigned)base_addr, (unsigned)TRAMPOLINE_PAGE_SIZE);
@@ -117,9 +180,14 @@ static int allocate_trampolines(void)
 /* ================================================================
  * IPC File Helpers (HDD-based, for Node.js orchestrator)
  *
- * The SPRX writes resolved addresses to /dev_hdd0/tmp/ld_hooks_ready.txt.
- * Node.js polls via HTTP GET download.ps3?file=...,
- * then writes preamble via /write_process (Ring 0).
+ * The SPRX writes resolved trampoline addresses to
+ * /dev_hdd0/tmp/ld_hooks_ready.txt. Node.js polls via HTTP GET
+ * download.ps3?file=..., then writes 4-instruction preambles
+ * (lis/ori/mtctr/bctr) into the game's .text via PS3MAPI /write_process.
+ *
+ * REFACTORED 2026-07-22: Removed WRAPPER_* and TARGET_* fields.
+ * Only TRAMPOLINE addresses needed - Node.js computes direct addresses
+ * from TRAMP_BASE + fixed offsets, or reads individual TRAMP_* fields.
  * ================================================================ */
 
 static int write_ipc_file(void)
@@ -132,9 +200,12 @@ static int write_ipc_file(void)
     uint32_t v;
     const char* s;
 
+    /* STATUS line */
     s = "STATUS=ready\n"; while (*s) buf[pos++] = *s++;
+
+    /* Trampoline base address */
     s = "TRAMP_BASE=0x"; while (*s) buf[pos++] = *s++;
-    v = g_usb_hooks.tramp_init_addr;
+    v = g_usb_hooks.trampoline_base;
     started = 0;
     for (shift = 28; shift >= 0; shift -= 4) {
         nib = (v >> shift) & 0xF;
@@ -162,14 +233,15 @@ static int write_ipc_file(void)
     buf[pos++] = '\n'; \
 } while(0)
 
-    WRITE_ADDR_LINE("INIT_ADDR", g_usb_hooks.target_init_addr);
-    WRITE_ADDR_LINE("INIT_WRAP", get_wrapper_init_addr());
-    WRITE_ADDR_LINE("OPENPIPE_ADDR", g_usb_hooks.target_open_pipe_addr);
-    WRITE_ADDR_LINE("OPENPIPE_WRAP", get_wrapper_open_pipe_addr());
-    WRITE_ADDR_LINE("TRANSFER_ADDR", g_usb_hooks.target_transfer_addr);
-    WRITE_ADDR_LINE("TRANSFER_WRAP", get_wrapper_transfer_addr());
-    WRITE_ADDR_LINE("CLOSEPIPE_ADDR", g_usb_hooks.target_close_pipe_addr);
-    WRITE_ADDR_LINE("CLOSEPIPE_WRAP", get_wrapper_close_pipe_addr());
+    /* Individual trampoline addresses (absolute, for Node.js convenience) */
+    WRITE_ADDR_LINE("TRAMP_INIT",
+        g_usb_hooks.trampoline_base + g_usb_hooks.tramp_init_offset);
+    WRITE_ADDR_LINE("TRAMP_OPENPIPE",
+        g_usb_hooks.trampoline_base + g_usb_hooks.tramp_open_pipe_offset);
+    WRITE_ADDR_LINE("TRAMP_TRANSFER",
+        g_usb_hooks.trampoline_base + g_usb_hooks.tramp_transfer_offset);
+    WRITE_ADDR_LINE("TRAMP_CLOSEPIPE",
+        g_usb_hooks.trampoline_base + g_usb_hooks.tramp_close_pipe_offset);
 
 #undef WRITE_ADDR_LINE
 
@@ -183,7 +255,7 @@ static int write_ipc_file(void)
      * missing addresses). By writing to ld_hooks.tmp first and then
      * calling cellFsRename(), the orchestrator always sees either the
      * complete old file (if rename hasn't executed) or the complete
-     * new file (if rename has executed) — never a partial write. */
+     * new file (if rename has executed) - never a partial write. */
     if (cellFsOpen("/dev_hdd0/tmp/ld_hooks.tmp",
                    CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
                    &fd, NULL, 0) != CELL_OK) {
@@ -193,7 +265,7 @@ static int write_ipc_file(void)
     cellFsWrite(fd, buf, pos, &written);
     cellFsClose(fd);
 
-    /* Atomic rename — if this crashes, Node.js sees a stale file
+    /* Atomic rename - if this crashes, Node.js sees a stale file
      * (still valid format, just out-of-date content), never a
      * truncated one. */
     if (cellFsRename("/dev_hdd0/tmp/ld_hooks.tmp",
@@ -268,6 +340,9 @@ static uint8_t extract_ep_addr(const void *ep_descriptor)
 
 /* ================================================================
  * HOOK: my_cellUsbdInit
+ *
+ * Simply returns CELL_OK - we don't need USB initialization because
+ * we handle Toy Pad traffic entirely in user-space via UDP.
  * ================================================================ */
 int my_cellUsbdInit(uint32_t game_toc)
 {
@@ -278,12 +353,24 @@ int my_cellUsbdInit(uint32_t game_toc)
 
 /* ================================================================
  * HOOK: my_cellUsbdOpenPipe
+ *
+ * If the device is a Toy Pad (matching endpoints), we allocate a
+ * fake pipe and return success. Otherwise, we pass through to the
+ * real cellUsbdOpenPipe via direct call (SPRX's own import).
+ *
+ * CRITICAL: We call cellUsbdOpenPipe() directly - NOT through any
+ * assembly passthrough stub. The C compiler uses the SPRX's own
+ * GOT/TOC. The game's GOT (containing our trampoline address)
+ * is never touched. This avoids the lazy-binding trap where the
+ * dynamic linker would overwrite our GOT slot.
  * ================================================================ */
 int my_cellUsbdOpenPipe(uint32_t *pipe_handle, uint32_t dev_id,
                          void *ep_descriptor, uint32_t game_toc)
 {
     uint8_t ep_addr;
     usb_hook_pipe_t *pipe;
+
+    (void)game_toc;
 
     if (pipe_handle == NULL) {
         return CELL_USBD_ERROR_FAILED;
@@ -298,17 +385,22 @@ int my_cellUsbdOpenPipe(uint32_t *pipe_handle, uint32_t dev_id,
         pipe->ep_addr = ep_addr;
         *pipe_handle = pipe->pipe_handle;
         g_usb_hooks.toypad_claimed = 1;
+        DEBUG_PRINT("[USB] ToyPad pipe opened: handle=0x%08X ep=0x%02X\n",
+                    (unsigned)pipe->pipe_handle, (unsigned)ep_addr);
         return CELL_OK;
     }
 
-    /* Non-ToyPad: passthrough via assembly stub (handles TOC restore) */
-    return call_original_OpenPipe(game_toc,
-        (void*)(uintptr_t)g_usb_hooks.tramp_open_pipe_addr,
-        pipe_handle, dev_id, ep_descriptor);
+    /* Non-ToyPad: pass through to real cellUsbdOpenPipe.
+     * Direct call - SPRX's own import, game's memory untouched. */
+    return cellUsbdOpenPipe(pipe_handle, dev_id, ep_descriptor);
 }
 
 /* ================================================================
  * HOOK: my_cellUsbdInterruptTransfer
+ *
+ * If pipe is a Toy Pad IN endpoint: poll network for response.
+ * If pipe is a Toy Pad OUT endpoint: send data to network.
+ * Otherwise: pass through to real cellUsbdInterruptTransfer.
  * ================================================================ */
 int my_cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf,
                                   uint32_t *len, void *done_cb, void *arg,
@@ -319,12 +411,13 @@ int my_cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf,
 
     toypad_type = usb_hook_is_toypad_pipe(pipe_handle);
     if (toypad_type == 0) {
-        return call_original_Transfer(game_toc,
-            (void*)(uintptr_t)g_usb_hooks.tramp_transfer_addr,
-            pipe_handle, buf, len, done_cb, arg);
+        /* Non-ToyPad: pass through to real cellUsbdInterruptTransfer.
+         * Direct call - SPRX's own import, game's memory untouched. */
+        return cellUsbdInterruptTransfer(pipe_handle, buf, len, done_cb, arg);
     }
 
     if (toypad_type == 1) {
+        /* Toy Pad IN endpoint: Poll network for data to send to game */
         uint32_t max_len;
         uint8_t response[512];
         uint8_t zone = 1;
@@ -356,6 +449,7 @@ int my_cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf,
     }
 
     if (toypad_type == 2) {
+        /* Toy Pad OUT endpoint: Send data from game to network server */
         uint8_t zone = 1;
         uint8_t seq = (uint8_t)(g_usb_hooks.next_pipe_id++);
         if (buf == NULL || len == NULL) return CELL_USBD_ERROR_FAILED;
@@ -368,50 +462,46 @@ int my_cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf,
 
 /* ================================================================
  * HOOK: my_cellUsbdClosePipe
+ *
+ * If pipe is a Toy Pad pipe: free the slot and return success.
+ * Otherwise: pass through to real cellUsbdClosePipe.
  * ================================================================ */
 int my_cellUsbdClosePipe(uint32_t pipe_handle, uint32_t game_toc)
 {
-    int toypad_type = usb_hook_is_toypad_pipe(pipe_handle);
+    int toypad_type;
+    (void)game_toc;
+
+    toypad_type = usb_hook_is_toypad_pipe(pipe_handle);
     if (toypad_type == 0) {
-        return call_original_ClosePipe(game_toc,
-            (void*)(uintptr_t)g_usb_hooks.tramp_close_pipe_addr,
-            pipe_handle);
+        /* Non-ToyPad: pass through to real cellUsbdClosePipe.
+         * Direct call - SPRX's own import, game's memory untouched. */
+        return cellUsbdClosePipe(pipe_handle);
     }
+
     free_pipe(pipe_handle);
+    DEBUG_PRINT("[USB] ToyPad pipe closed: handle=0x%08X\n",
+                (unsigned)pipe_handle);
     return CELL_OK;
 }
 
 /* ================================================================
- * OPD Extraction (Replaces NID Scanner)
+ * OPD Extraction (Kept for import validation)
  *
- * Instead of scanning the game's memory for NID stubs — which fails
- * because CellOS lazy binding means GOT entries are PLT stubs until
- * the game actually calls cellUsbd — we use the OPD trick.
+ * We call find_cellusbd_functions_via_opd() to verify that our
+ * SPRX's cellUsbd imports are properly resolved. After extraction,
+ * the code_addr and toc_addr values are used internally by
+ * create_hook_trampoline() when we pass our C hook function pointers
+ * (my_cellUsbdOpenPipe, etc.) - those are the SPRX's own OPDs.
  *
- * When the SPRX is loaded with -lusbd_stub, the CellOS PRX loader
- * resolves the cellUsbd imports for OUR module. By casting each
- * imported function pointer to a ppc_opd_t* and reading the code_addr
- * field, we get the real resolved address in the system PRX region
- * (≥ 0x30000000). No scanning, no retries, no chicken-and-egg.
- *
- * EXPERT REFERENCE:
- *   "In PowerPC64 (and CellOS 32-bit pointers acting under similar ABI),
- *    a C function pointer is actually a pointer to an Official Procedure
- *    Descriptor (OPD). You can extract the resolved code address directly
- *    from your own SPRX's runtime environment."
+ * The resolved import addresses are NOT stored - they're only
+ * validated for range checking. The actual hook mechanism uses
+ * our own functions' OPDs, not the cellUsbd imports' OPDs.
  * ================================================================ */
 
-static int find_cellusbd_functions_via_opd(
-    void **out_init, void **out_open_pipe,
-    void **out_transfer, void **out_close_pipe)
+static int find_cellusbd_functions_via_opd(void)
 {
     const ppc_opd_t *opd;
     uint32_t code_addr;
-
-    if (out_init == NULL || out_open_pipe == NULL ||
-        out_transfer == NULL || out_close_pipe == NULL) {
-        return -1;
-    }
 
     /* cellUsbdInit */
     opd = (const ppc_opd_t*)(uintptr_t)cellUsbdInit;
@@ -423,7 +513,6 @@ static int find_cellusbd_functions_via_opd(
                     (unsigned)code_addr);
         return -1;
     }
-    *out_init = (void*)(uintptr_t)code_addr;
 
     /* cellUsbdOpenPipe */
     opd = (const ppc_opd_t*)(uintptr_t)cellUsbdOpenPipe;
@@ -434,7 +523,6 @@ static int find_cellusbd_functions_via_opd(
                     (unsigned)code_addr);
         return -1;
     }
-    *out_open_pipe = (void*)(uintptr_t)code_addr;
 
     /* cellUsbdInterruptTransfer */
     opd = (const ppc_opd_t*)(uintptr_t)cellUsbdInterruptTransfer;
@@ -445,7 +533,6 @@ static int find_cellusbd_functions_via_opd(
                     (unsigned)code_addr);
         return -1;
     }
-    *out_transfer = (void*)(uintptr_t)code_addr;
 
     /* cellUsbdClosePipe */
     opd = (const ppc_opd_t*)(uintptr_t)cellUsbdClosePipe;
@@ -456,100 +543,87 @@ static int find_cellusbd_functions_via_opd(
                     (unsigned)code_addr);
         return -1;
     }
-    *out_close_pipe = (void*)(uintptr_t)code_addr;
 
     DEBUG_PRINT("[USB] All 4 cellUsbd functions resolved via OPD\n");
     return 0;
 }
 
 /* ================================================================
- * usb_hook_init — REFACTORED
+ * usb_hook_init - REFACTORED 2026-07-22
+ *
+ * Init sequence:
+ *   1. OPD validation of cellUsbd imports
+ *   2. Allocate R-W-X page + install dynamic trampolines
+ *   3. Write IPC file for Node.js orchestrator
  * ================================================================ */
 
 int usb_hook_init(void)
 {
-    void *target_init;
-    void *target_open_pipe;
-    void *target_transfer;
-    void *target_close_pipe;
     int ret;
 
     if (g_usb_hooks.initialized) return 0;
     memset(&g_usb_hooks, 0, sizeof(g_usb_hooks));
     g_usb_hooks.next_pipe_id = 0x1000;
 
-    /* Step 1: Resolve target function addresses via OPD trick.
+    /* Step 1: Validate cellUsbd imports via OPD extraction (SOFT fail).
      *
-     * Instead of scanning the game's memory for NID stubs (which fails
-     * because CellOS lazy binding means GOT entries are PLT stubs until
-     * the game actually calls cellUsbd), we extract the resolved code
-     * addresses from our own SPRX's OPD import entries.
+     * We extract the resolved code addresses from our own SPRX's OPD
+     * import entries. The SPRX is linked with -lusbd_stub, so CellOS
+     * resolves cellUsbd imports when our module is loaded. Casting
+     * the imported function symbol to a ppc_opd_t* gives us the real
+     * code address and TOC pointer.
      *
-     * The SPRX is linked with -lusbd_stub, so CellOS resolves cellUsbd
-     * imports when our module is loaded. Casting the imported function
-     * symbol to a ppc_opd_t* gives us the real code address directly.
-     * No scanning, no retries, no chicken-and-egg problem. */
-    ret = find_cellusbd_functions_via_opd(&target_init, &target_open_pipe,
-                                           &target_transfer, &target_close_pipe);
+     * IMPORTANT: On some CellOS PRX link setups, the extern imported
+     * symbols (cellUsbdInit, etc.) may point to import stub code in
+     * the SPRX's .text section rather than to OPD entries. In that
+     * case, casting to ppc_opd_t* and dereferencing code_addr reads
+     * the first instruction opcode as an address — which fails the
+     * range check and returns -1. This is NOT fatal because:
+     *
+     *   1. create_hook_trampoline() uses the OPDs of OUR OWN C hook
+     *      functions (my_cellUsbdInit, my_cellUsbdOpenPipe, etc.),
+     *      NOT the cellUsbd import OPDs. Our functions always have
+     *      valid OPDs in the SPRX's data section.
+     *
+     *   2. Passthrough calls (non-ToyPad USB traffic) just call
+     *      cellUsbdOpenPipe() directly from C. The compiler uses our
+     *      own GOT/TOC via the import stub — it doesn't read the OPD
+     *      manually. The import stub works fine even when the OPD
+     *      trick fails.
+     *
+     * So: if OPD extraction fails, log a warning and continue. The
+     * trampolines and passthrough calls will still work correctly. */
+    ret = find_cellusbd_functions_via_opd();
     if (ret != 0) {
-        DEBUG_ERROR("[USB] OPD extraction failed — SPRX imports not resolved\n");
+        DEBUG_ERROR("[USB] OPD extraction soft-fail - continuing (trampolines use own OPDs)\n");
+        /* NOT returning -1 here! The hook mechanism works fine without
+         * cellUsbd import OPDs. Only the validation is skipped. */
+    }
+
+    /* Step 2: Allocate executable trampoline page and install hooks */
+    if (install_hooks() != 0) {
+        DEBUG_ERROR("[USB] Hook installation failed\n");
         return -1;
     }
 
-    g_usb_hooks.target_init_addr       = (uint32_t)(uintptr_t)target_init;
-    g_usb_hooks.target_open_pipe_addr  = (uint32_t)(uintptr_t)target_open_pipe;
-    g_usb_hooks.target_transfer_addr   = (uint32_t)(uintptr_t)target_transfer;
-    g_usb_hooks.target_close_pipe_addr = (uint32_t)(uintptr_t)target_close_pipe;
-
-    DEBUG_PRINT("[USB] Targets: init=0x%08X open=0x%08X transfer=0x%08X close=0x%08X\n",
-        g_usb_hooks.target_init_addr, g_usb_hooks.target_open_pipe_addr,
-        g_usb_hooks.target_transfer_addr, g_usb_hooks.target_close_pipe_addr);
-
-    /* Step 2: Allocate executable trampoline pages */
-    if (allocate_trampolines() != 0) {
-        DEBUG_ERROR("[USB] Trampoline allocation failed\n");
-        return -1;
-    }
-
-    /* Step 3: Copy original instructions + build branch-back in trampolines */
-    { int ti;
-      for (ti = 0; ti < 4; ti++) {
-        uint32_t target_addr, tramp_addr;
-        switch (ti) {
-            case 0: target_addr = g_usb_hooks.target_init_addr;
-                    tramp_addr = g_usb_hooks.tramp_init_addr; break;
-            case 1: target_addr = g_usb_hooks.target_open_pipe_addr;
-                    tramp_addr = g_usb_hooks.tramp_open_pipe_addr; break;
-            case 2: target_addr = g_usb_hooks.target_transfer_addr;
-                    tramp_addr = g_usb_hooks.tramp_transfer_addr; break;
-            case 3: target_addr = g_usb_hooks.target_close_pipe_addr;
-                    tramp_addr = g_usb_hooks.tramp_close_pipe_addr; break;
-            default: continue;
-        }
-        uint32_t *tramp = (uint32_t*)(uintptr_t)tramp_addr;
-        uint32_t *target = (uint32_t*)(uintptr_t)target_addr;
-        int j;
-        /* Copy 4 original instructions */
-        for (j = 0; j < 4; j++) tramp[j] = target[j];
-        /* Build branch-back to target+16: lis/ori/mtctr/bctr */
-        uint32_t back_addr = target_addr + 16;
-        tramp[4] = 0x3D600000 | ((back_addr >> 16) & 0xFFFF);
-        tramp[5] = 0x616B0000 | (back_addr & 0xFFFF);
-        tramp[6] = 0x7D6B03A6;
-        tramp[7] = 0x4E800420;
-      }
-    }
-
-    /* Step 4: Write IPC file for Node.js */
+    /* Step 3: Write IPC file for Node.js orchestrator.
+     *
+     * The IPC file contains TRAMP_BASE and individual TRAMP_* addresses.
+     * Node.js reads these, computes the absolute addresses, and writes
+     * 4-instruction preambles (lis/ori/mtctr/bctr) into the game's
+     * .text segment via PS3MAPI /write_process.
+     *
+     * Each preamble branches to the corresponding trampoline, which
+     * handles TOC save/restore and calls our C hook. */
     write_ipc_file();
 
     g_usb_hooks.initialized = 1;
-    DEBUG_PRINT("[USB] All 4 hooks prepared, awaiting Node.js preamble\n");
+    DEBUG_PRINT("[USB] All 4 hooks installed, awaiting Node.js preamble\n");
     return 0;
 }
 
 /* ================================================================
- * usb_hook_shutdown — REFACTORED
+ * usb_hook_shutdown - REFACTORED
  * ================================================================ */
 void usb_hook_shutdown(void)
 {

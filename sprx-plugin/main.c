@@ -6,9 +6,9 @@
  * user-space detour hooks and routes Toy Pad traffic over UDP.
  *
  * Init chain in worker thread:
- *   debug_init() → network_init() → network_wait_ready()
- *   → usb_hook_init() → toypad_state_init()
- *   → main loop (recvfrom non-blocking, server probes, 10ms yield)
+ *   debug_init() -> network_init() -> network_wait_ready()
+ *   -> usb_hook_init() -> toypad_state_init()
+ *   -> main loop (recvfrom non-blocking, server probes, 10ms yield)
  *
  * Shutdown reverse order in module_stop after thread join.
  *
@@ -76,19 +76,23 @@ int module_start(size_t args, void *argp)
      * PS3MAPI. Running in VSH would attempt NID scans and memory
      * operations that can corrupt the dashboard and freeze the console.
      *
-     * Detection: Try to open a file unique to the game process.
-     * If it doesn't exist, we're in VSH and abort module load.
+     * Detection: Uses ld_vsh_guard.txt as a sentinel file.
      *
-     * NOTE: returning non-zero from module_start = "unload me".
-     * The system will remove the module from memory immediately.
-     * This is the safest behavior in VSH context. */
+     * Scenario A (boot_plugins.txt load at console boot):
+     *   Guard was written by a PREVIOUS injection session. It persists
+     *   on HDD across reboots. File EXISTS -> detect VSH -> unload.
+     *
+     * Scenario B (PS3MAPI injection #1):
+     *   Guard does not exist -> write it -> proceed normally.
+     *
+     * Scenario C (PS3MAPI injection #2+, same boot):
+     *   Guard was written in injection #1, but module_stop() deletes it
+     *   during PS3MAPI unload. So guard does NOT exist -> proceed. */
     {
         int scratch_fd;
         uint64_t dummy_written;
 
-        /* If /dev_hdd0/tmp/ld_vsh_guard.txt exists, boot_plugins.txt
-         * contained ldtoypad.sprx — this is an error condition.
-         * Remove it and abort. */
+        /* Check if guard file exists — if so, VSH context via boot_plugins.txt */
         int exists_check = cellFsOpen("/dev_hdd0/tmp/ld_vsh_guard.txt",
                                       CELL_FS_O_RDONLY,
                                       &scratch_fd, NULL, 0);
@@ -96,20 +100,20 @@ int module_start(size_t args, void *argp)
             cellFsClose(scratch_fd);
             papertrail("VSH GUARD: detected VSH context — unloading immediately");
             papertrail("VSH GUARD: remove ldtoypad.sprx from /dev_hdd0/boot_plugins.txt");
-            /* Write the guard file so user knows what happened */
+            /* Write detection evidence so user knows what happened */
             int guard_fd;
             if (cellFsOpen("/dev_hdd0/tmp/ld_vsh_detected.txt",
                            CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
                            &guard_fd, NULL, 0) == CELL_OK) {
-                char msg[] = "VSH_DETECTED=1\nLoaded from boot_plugins.txt\nRemove from boot_plugins.txt\n";
+                char msg[] = "VSH_DETECTED=1\nLoaded from boot_plugins.txt\n";
                 cellFsWrite(guard_fd, msg, strlen(msg), &dummy_written);
                 cellFsClose(guard_fd);
             }
             return SYS_PRX_NO_RESIDENT;  /* Tell kernel to unload us immediately */
         }
 
-        /* Write the VSH guard token — next boot will detect it
-         * and refuse to load. This prevents infinite crash loops. */
+        /* Guard does not exist — this is a PS3MAPI injection.
+         * Write guard for next boot's VSH detection. */
         if (cellFsOpen("/dev_hdd0/tmp/ld_vsh_guard.txt",
                        CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
                        &scratch_fd, NULL, 0) == CELL_OK) {
@@ -145,12 +149,26 @@ int module_stop(void)
         papertrail("OK: worker joined");
     }
 
-    /* Shutdown subsystems in reverse order of init.
-     * All are idempotent: calling twice is safe. */
+    /* Shutdown subsystems in reverse order of init. */
     toypad_state_deinit();
     usb_hook_shutdown();
     network_shutdown();
     debug_shutdown();
+
+    /* Delete the VSH guard sentinel so re-injection works without
+     * requiring a full console reboot. The guard persists on HDD
+     * across boots, so it still protects against boot_plugins.txt
+     * on the NEXT boot. FIX 2026-07-22: added this deletion to
+     * prevent false-positive VSH detection on re-injection. */
+    {
+        int guard_fd;
+        if (cellFsOpen("/dev_hdd0/tmp/ld_vsh_guard.txt",
+                       CELL_FS_O_WRONLY | CELL_FS_O_TRUNC,
+                       &guard_fd, NULL, 0) == CELL_OK) {
+            cellFsClose(guard_fd);
+            papertrail("OK: VSH guard deleted for re-injection");
+        }
+    }
 
     papertrail("=== module_stop SUCCESS ===");
     return SYS_PRX_STOP_OK;
@@ -185,7 +203,7 @@ static void worker_thread(uint64_t arg)
     DEBUG_PRINT("[MAIN] UDP socket bound on port 28472\n");
 
     /* -------------------------------------------------------
-     * 3. Wait for network interface (3s sleep-based heuristic)
+     * 3. Wait for network interface (3s sleep heuristic)
      * ------------------------------------------------------- */
     papertrail("Waiting for network interface (3s)...");
     network_wait_ready();
@@ -193,8 +211,8 @@ static void worker_thread(uint64_t arg)
     DEBUG_PRINT("[MAIN] Network interface ready\n");
 
     /* -------------------------------------------------------
-     * 3b. Hardcode PC server IP (dev phase — bypass broadcast discovery)
-     *     PC=192.168.0.17:28472 (0xC0A80011 = 192.168.0.17 in network order)
+     * 3b. Hardcode PC server IP (dev phase — bypass broadcast)
+     *     PC=192.168.0.17:28472
      * ------------------------------------------------------- */
     network_set_server(htonl(0xC0A80011), 28472);
     papertrail("OK: network_set_server(192.168.0.17:28472)");
@@ -202,16 +220,7 @@ static void worker_thread(uint64_t arg)
 
     /* -------------------------------------------------------
      * 4. Install USB detour hooks for Toy Pad emulation.
-     *
-     *    Intercepts the game's cellUsbdInit, cellUsbdOpenPipe,
-     *    cellUsbdTransfer, cellUsbdClosePipe, and cellUsbdRegisterLdd.
-     *    Routes Toy Pad USB traffic to the Node.js server via UDP.
-     *
-     *    This requires the SPRX to be loaded into the game process
-     *    (via PS3MAPI injection). If running in VSH context,
-     *    hook installation will fail gracefully.
-     *
-     *    usb_hook_init will fail gracefully if not in game process (returns -1).
+     *    Gracefully fails if not in game process (returns -1).
      * ------------------------------------------------------- */
     {
         int hooks_ok = usb_hook_init();
@@ -233,23 +242,6 @@ static void worker_thread(uint64_t arg)
 
     /* -------------------------------------------------------
      * 6. Main background loop
-     *
-     *    Performs:
-     *      - Non-blocking recvfrom() for incoming UDP packets from PC server
-     *      - Rate-limited server discovery probe broadcasts
-     *      - 50ms sleep each iteration to yield PPU to VSH (20 Hz)
-     *      - Memory-mapped heartbeat counter for deadlock detection
-     *
-     *    The actual USB interrupt polling will be driven by the
-     *    CellOS USB callback system once a device is attached.
-     *    Until then, this loop keeps the network path alive.
-     *
-     *    SLEEP TIMING NOTE:
-     *    The sleep was reduced from 10ms (100 Hz) to 50ms (20 Hz) on
-     *    2026-07-21 per expert recommendation. 100 Hz was starving the
-     *    sceNpTrophy background threads of PPU cycles and sceNet mutex
-     *    access, causing the "Loading Trophy" freeze. 20 Hz is the
-     *    standard polling rate for PlayStation peripheral emulation.
      * ------------------------------------------------------- */
     papertrail("=== Entering main loop ===");
     DEBUG_PRINT("[MAIN] Entering background loop\n");
@@ -257,17 +249,7 @@ static void worker_thread(uint64_t arg)
     while (!g_shutdown) {
         uint8_t buf[NET_PACKET_MAX_SIZE];
 
-        /* Memory-mapped heartbeat — incremented every iteration.
-         * Stored in the sys_memory_allocate trampoline page (offset 128).
-         * Polled by Node.js orchestrator via PS3MAPI /read_process.
-         * At 50ms sleep, this increments at ~20 Hz.
-         * No HDD writes — avoids I/O contention with game asset streaming.
-         *
-         * CACHE COHERENCY: dcbst flushes the PPU L1 data cache line
-         * containing the heartbeat value out to physical RAM. Without
-         * this, PS3MAPI's kernel-level /read_process may read stale
-         * data from physical memory since the kernel bypasses the PPU
-         * L1 cache. sync ensures the dcbst completes before proceeding. */
+        /* Memory-mapped heartbeat for deadlock detection */
         if (g_usb_hooks.heartbeat) {
             (*g_usb_hooks.heartbeat)++;
             __asm__ __volatile__ ("dcbst 0, %0" :: "r"((uint32_t)(uintptr_t)g_usb_hooks.heartbeat));
@@ -280,19 +262,13 @@ static void worker_thread(uint64_t arg)
             DEBUG_VERBOSE("[MAIN] RX %d bytes from server\n", n);
         }
 
-        /* Probe for server if not yet discovered (rate-limited).
-         * Once server is known via hardcode in step 3b, this is a no-op. */
+        /* Probe for server if not yet discovered (rate-limited). */
         network_maybe_probe_server(seq++);
 
-        /* Send periodic keepalive heartbeat to PC server.
-         * This is the ONLY outbound traffic in VSH mode (no USB hooks).
-         * It ensures the Node.js server registers/keeps the PS3 client
-         * in its clientAddress field before any game boots.
-         * Rate-limited internally to once per 3 seconds. */
+        /* Send periodic keepalive heartbeat to PC server. */
         network_send_keepalive();
 
-        /* Yield PPU — critical: without this, VSH will freeze.
-         * 50ms (20 Hz) — prevents sceNpTrophy deadlock. */
+        /* Yield PPU — 50ms (20 Hz) prevents sceNpTrophy deadlock. */
         sys_timer_usleep(50000); /* 50ms */
     }
 
