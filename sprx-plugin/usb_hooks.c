@@ -202,8 +202,6 @@ static int install_hooks(void)
 
 static int write_ipc_file(uint32_t target_init, uint32_t target_openpipe,
                           uint32_t target_transfer, uint32_t target_closepipe)
-======= REPLACE
-
 {
     int fd;
     uint64_t written;
