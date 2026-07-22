@@ -46,6 +46,15 @@
  * 0xFFFFFFFF is the default container ID on CellOS. */
 #define SYS_MEMORY_CONTAINER_DEFAULT  ((uint32_t)0xFFFFFFFFu)
 
+/* NID values for cellUsbd functions.
+ * These are 32-bit big-endian NIDs used in the PS3's import stub table
+ * (.rodata triplet format: { NID, reserved, GOT_ptr }).
+ * Verified against LEGO Dimensions game memory dumps. */
+#define NID_CELL_USBD_INIT          0x7F5F00D3U
+#define NID_CELL_USBD_OPENPIPE      0x1AB6D80BU
+#define NID_CELL_USBD_TRANSFER      0x7B4436CEU  /* cellUsbdInterruptTransfer */
+#define NID_CELL_USBD_CLOSEPIPE     0x2F82F1A5U
+
 #include "usb_hooks.h"
 #include "network.h"
 #include "debug.h"
@@ -185,12 +194,16 @@ static int install_hooks(void)
  * download.ps3?file=..., then writes 4-instruction preambles
  * (lis/ori/mtctr/bctr) into the game's .text via PS3MAPI /write_process.
  *
- * REFACTORED 2026-07-22: Removed WRAPPER_* and TARGET_* fields.
- * Only TRAMPOLINE addresses needed - Node.js computes direct addresses
- * from TRAMP_BASE + fixed offsets, or reads individual TRAMP_* fields.
+ * UPDATED 2026-07-22: Added TARGET_* addresses for Node.js preamble
+ * writer. The write_ipc_file() now takes 4 target address parameters
+ * from the NID scanner (get_game_plt_stub). If a target is 0x00000000,
+ * the injector skips that hook.
  * ================================================================ */
 
-static int write_ipc_file(void)
+static int write_ipc_file(uint32_t target_init, uint32_t target_openpipe,
+                          uint32_t target_transfer, uint32_t target_closepipe)
+======= REPLACE
+
 {
     int fd;
     uint64_t written;
@@ -243,7 +256,14 @@ static int write_ipc_file(void)
     WRITE_ADDR_LINE("TRAMP_CLOSEPIPE",
         g_usb_hooks.trampoline_base + g_usb_hooks.tramp_close_pipe_offset);
 
+    /* Game PLT stub addresses (from NID scan) for preamble installation */
+    WRITE_ADDR_LINE("TARGET_INIT", target_init);
+    WRITE_ADDR_LINE("TARGET_OPENPIPE", target_openpipe);
+    WRITE_ADDR_LINE("TARGET_TRANSFER", target_transfer);
+    WRITE_ADDR_LINE("TARGET_CLOSEPIPE", target_closepipe);
+
 #undef WRITE_ADDR_LINE
+
 
     buf[pos] = '\0';
 
@@ -549,17 +569,120 @@ static int find_cellusbd_functions_via_opd(void)
 }
 
 /* ================================================================
+ * Game PLT Stub Address Scanner
+ *
+ * Scans the game process's import stub table (.rodata) for NID
+ * triplets matching our 4 cellUsbd functions. Each triplet is 12
+ * bytes: { NID (4B), reserved (4B), GOT_ptr (4B) }.
+ *
+ * The GOT slot initially contains the address of a 16-byte PLT stub
+ * in the game's executable .text memory. We save this PLT stub address
+ * and write it to the IPC file as TARGET_*. The Node.js injector then
+ * overwrites that PLT stub with our 4-instruction preamble (lis/ori/
+ * mtctr/bctr) that branches to our trampoline.
+ *
+ * ⚠ CAVEAT (Option A — *got_slot approach):
+ *   This scanner reads the GOT slot via the GOT_ptr from the triplet.
+ *   The GOT slot value is only the PLT stub BEFORE the function has
+ *   been called. Once the game calls cellUsbdOpenPipe (for example),
+ *   the dynamic linker resolves the GOT and overwrites it with the
+ *   real libusbd.sprx function address. If that happens, *got_slot
+ *   points into system PRX memory, not the game's PLT stub.
+ *
+ *   FUTURE IMPROVEMENT (Option B):
+ *   Instead of reading *got_slot, scan the game's .text segment for
+ *   the actual 16-byte PLT stub pattern:
+ *     lis   r11, offset_hi   0x3D60xxxx
+ *     lwz   r12, offset_lo(r11)  0x818Bxxxx
+ *     mtctr r12              0x7D8903A6
+ *     bctr                   0x4E800420
+ *   The address of that stub is the true TARGET — it never changes,
+ *   regardless of GOT resolution. This is LEFT FOR FUTURE IMPLEMENTATION.
+ *   Option A is used now because we inject before the game calls
+ *   cellUsbd. If it fails, recompile with Option B.
+ *
+ * Returns 0 on success, -1 if stub not found.
+ * ================================================================ */
+#define NID_SCAN_START  0x00100000u
+#define NID_SCAN_SIZE   0x00A00000u  /* 10MB — covers game .text/.rodata */
+
+static int get_game_plt_stub(uint32_t target_nid, uint32_t *out_plt_addr)
+{
+    volatile uint32_t *words = (volatile uint32_t*)(uintptr_t)NID_SCAN_START;
+    uint32_t nwords = NID_SCAN_SIZE / 4;
+    uint32_t i;
+
+    if (out_plt_addr == NULL) return -1;
+
+    /* Scan for 12-byte triplet pattern { NID, reserved, GOT_ptr }
+     * at 3-word intervals. This is the PS3's import stub table format
+     * in the game's .rodata section. */
+    for (i = 0; i <= nwords - 3; i += 3) {
+        uint32_t nid      = words[i + 0];
+        uint32_t reserved = words[i + 1];
+        uint32_t got_ptr  = words[i + 2];
+
+        if (nid != target_nid) continue;
+
+        /* Sanity check: reserved should be 0 or a small value.
+         * GOT_ptr must point to valid (non-zero) memory in game range. */
+        if (reserved != 0 && reserved > 0x1000) continue;
+        if (got_ptr == 0 || got_ptr < 0x00010000 || got_ptr > 0x4FFFFFFF) continue;
+
+        /* Read the GOT slot value — this is the PLT stub address
+         * (if unresolved) or the real function address (if resolved).
+         *
+         * ⚠ CAVEAT: See note above about Option A vs Option B.
+         * If the function has been resolved, this read returns the
+         * real libusbd.sprx address instead of the game's PLT stub.
+         * We assume injection happens early enough that GOT is
+         * unresolved. */
+        {
+            volatile uint32_t *got_slot = (volatile uint32_t*)(uintptr_t)got_ptr;
+            uint32_t plt_stub_addr = *got_slot;
+
+            /* PLT stubs live in game .text (typically < 0x01000000
+             * for small games, or higher for larger ones). If the
+             * value is in the PRX range (0x3xxxxxxx+), the GOT has
+             * been resolved and we can't use it. */
+            if (plt_stub_addr == 0 || plt_stub_addr > 0x4FFFFFFF) continue;
+
+            /* If plt_stub_addr >= 0x30000000, GOT is resolved.
+             * We still save it as a best-effort, but the injector
+             * should treat it as advisory. The future Option B
+             * PLT-pattern scanner will fix this. */
+            *out_plt_addr = plt_stub_addr;
+
+            DEBUG_PRINT("[USB] NID scan: NID=0x%08X GOT_ptr=0x%08X -> *GOT=0x%08X\n",
+                        (unsigned)nid, (unsigned)got_ptr, (unsigned)plt_stub_addr);
+            if (plt_stub_addr >= 0x30000000) {
+                DEBUG_PRINT("[USB]   ⚠ GOT appears resolved (addr in PRX range)\n");
+                DEBUG_PRINT("[USB]   Future: implement Option B PLT-pattern scanner\n");
+            }
+            return 0;
+        }
+    }
+
+    DEBUG_ERROR("[USB] NID scan: NID=0x%08X not found in range 0x%08X-0x%08X\n",
+                (unsigned)target_nid, (unsigned)NID_SCAN_START,
+                (unsigned)(NID_SCAN_START + NID_SCAN_SIZE));
+    return -1;
+}
+
+/* ================================================================
  * usb_hook_init - REFACTORED 2026-07-22
  *
  * Init sequence:
  *   1. OPD validation of cellUsbd imports
  *   2. Allocate R-W-X page + install dynamic trampolines
- *   3. Write IPC file for Node.js orchestrator
+ *   3. Scan game for PLT stub addresses (TARGET_*)
+ *   4. Write IPC file for Node.js orchestrator
  * ================================================================ */
 
 int usb_hook_init(void)
 {
     int ret;
+    uint32_t target_init = 0, target_openpipe = 0, target_transfer = 0, target_closepipe = 0;
 
     if (g_usb_hooks.initialized) return 0;
     memset(&g_usb_hooks, 0, sizeof(g_usb_hooks));
@@ -606,16 +729,64 @@ int usb_hook_init(void)
         return -1;
     }
 
-    /* Step 3: Write IPC file for Node.js orchestrator.
+    /* Step 3: Scan game memory for PLT stub addresses (TARGET_*).
      *
-     * The IPC file contains TRAMP_BASE and individual TRAMP_* addresses.
-     * Node.js reads these, computes the absolute addresses, and writes
-     * 4-instruction preambles (lis/ori/mtctr/bctr) into the game's
-     * .text segment via PS3MAPI /write_process.
+     * We scan the game's import stub table (.rodata) for NID triplets
+     * matching cellUsbdInit, cellUsbdOpenPipe, cellUsbdInterruptTransfer,
+     * and cellUsbdClosePipe. For each NID found, we read the associated
+     * GOT slot to obtain the PLT stub address.
      *
-     * Each preamble branches to the corresponding trampoline, which
-     * handles TOC save/restore and calls our C hook. */
-    write_ipc_file();
+     * This is a best-effort scan. If a particular NID is not found
+     * (e.g., the game doesn't import that function, or the scanner
+     * range doesn't cover the game's .rodata), the target address
+     * is written as 0x00000000. The Node.js injector will skip that
+     * hook if the target is 0.
+     *
+     * ⚠ OPTION A CAVEAT: The *got_slot value is only the PLT stub
+     * if the GOT is unresolved. If the game has already called the
+     * function, *got_slot points to the real libusbd.sprx function.
+     * Future Option B (PLT-pattern scanner) should replace this.
+     * See get_game_plt_stub() documentation above. */
+    get_game_plt_stub(NID_CELL_USBD_INIT, &target_init);
+    get_game_plt_stub(NID_CELL_USBD_OPENPIPE, &target_openpipe);
+    get_game_plt_stub(NID_CELL_USBD_TRANSFER, &target_transfer);
+    get_game_plt_stub(NID_CELL_USBD_CLOSEPIPE, &target_closepipe);
+
+    /* Step 4: Write IPC file for Node.js orchestrator.
+     *
+     * The IPC file contains:
+     *   - TRAMP_* addresses (trampoline locations in our R-W-X page)
+     *   - TARGET_* addresses (PLT stub locations in game .text)
+     *
+     * Node.js reads these, then writes 4-instruction preambles
+     * (lis/ori/mtctr/bctr) into the game's .text segment via
+     * PS3MAPI /write_process. Each preamble replaces a PLT stub
+     * and branches to the corresponding trampoline, which handles
+     * TOC save/restore and calls our C hook. */
+    write_ipc_file(target_init, target_openpipe, target_transfer, target_closepipe);
+
+    if (target_init != 0) {
+        DEBUG_PRINT("[USB] TARGET_INIT=0x%08X -> TRAMP_INIT=0x%08X\n",
+                    (unsigned)target_init,
+                    (unsigned)(g_usb_hooks.trampoline_base + g_usb_hooks.tramp_init_offset));
+    } else {
+        DEBUG_PRINT("[USB] TARGET_INIT=0x00000000 (NID not found — injector will skip)\n");
+    }
+    if (target_openpipe != 0) {
+        DEBUG_PRINT("[USB] TARGET_OPENPIPE=0x%08X -> TRAMP_OPENPIPE=0x%08X\n",
+                    (unsigned)target_openpipe,
+                    (unsigned)(g_usb_hooks.trampoline_base + g_usb_hooks.tramp_open_pipe_offset));
+    }
+    if (target_transfer != 0) {
+        DEBUG_PRINT("[USB] TARGET_TRANSFER=0x%08X -> TRAMP_TRANSFER=0x%08X\n",
+                    (unsigned)target_transfer,
+                    (unsigned)(g_usb_hooks.trampoline_base + g_usb_hooks.tramp_transfer_offset));
+    }
+    if (target_closepipe != 0) {
+        DEBUG_PRINT("[USB] TARGET_CLOSEPIPE=0x%08X -> TRAMP_CLOSEPIPE=0x%08X\n",
+                    (unsigned)target_closepipe,
+                    (unsigned)(g_usb_hooks.trampoline_base + g_usb_hooks.tramp_close_pipe_offset));
+    }
 
     g_usb_hooks.initialized = 1;
     DEBUG_PRINT("[USB] All 4 hooks installed, awaiting Node.js preamble\n");

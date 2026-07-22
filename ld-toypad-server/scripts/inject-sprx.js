@@ -379,71 +379,80 @@ async function waitForIpcAndInstall(gamePid) {
   verbose(`IPC parsed: ${JSON.stringify(kv, null, 2)}`);
   
   // Show discovered addresses
-  log(`  Trampoline base: ${kv.TRAMP_BASE || 'unknown'}`);
-  log(`  Target INIT:     ${kv.INIT_ADDR || 'unknown'} -> wrapper ${kv.INIT_WRAP || 'unknown'}`);
-  log(`  Target OPEN:     ${kv.OPENPIPE_ADDR || 'unknown'} -> wrapper ${kv.OPENPIPE_WRAP || 'unknown'}`);
-  log(`  Target XFER:     ${kv.TRANSFER_ADDR || 'unknown'} -> wrapper ${kv.TRANSFER_WRAP || 'unknown'}`);
-  log(`  Target CLOSE:    ${kv.CLOSEPIPE_ADDR || 'unknown'} -> wrapper ${kv.CLOSEPIPE_WRAP || 'unknown'}`);
-  log(`  Target REGLDD:   ${kv.REGISTERLDD_ADDR || 'unknown'} -> wrapper ${kv.REGISTERLDD_WRAP || 'unknown'}`);
-  
-  // Build and install preambles for each target
+  log(`  Trampoline base:  ${kv.TRAMP_BASE || 'unknown'}`);
+  log(`  TRAMP_INIT:       ${kv.TRAMP_INIT || 'unknown'}`);
+  log(`  TRAMP_OPENPIPE:   ${kv.TRAMP_OPENPIPE || 'unknown'}`);
+  log(`  TRAMP_TRANSFER:   ${kv.TRAMP_TRANSFER || 'unknown'}`);
+  log(`  TRAMP_CLOSEPIPE:  ${kv.TRAMP_CLOSEPIPE || 'unknown'}`);
+  log(`  TARGET_INIT:      ${kv.TARGET_INIT || 'unknown'} (PLT stub in game .text)`);
+  log(`  TARGET_OPENPIPE:  ${kv.TARGET_OPENPIPE || 'unknown'}`);
+  log(`  TARGET_TRANSFER:  ${kv.TARGET_TRANSFER || 'unknown'}`);
+  log(`  TARGET_CLOSEPIPE: ${kv.TARGET_CLOSEPIPE || 'unknown'}`);
+
+  // Build and install preambles for each target.
+  // Each preamble overwrites the game's 16-byte PLT stub with:
+  //   [0] lis   r11, hi16(tramp_addr)    0x3D60xxxx
+  //   [1] ori   r11, r11, lo16(tramp)    0x616Bxxxx
+  //   [2] mtctr r11                      0x7D6B03A6
+  //   [3] bctr                           0x4E800420
+  // This redirects the game's cellUsbd call to our trampoline.
   const targets = [
-    { name: 'cellUsbdInit',         target: kv.INIT_ADDR,         wrapper: kv.INIT_WRAP },
-    { name: 'cellUsbdOpenPipe',     target: kv.OPENPIPE_ADDR,     wrapper: kv.OPENPIPE_WRAP },
-    { name: 'cellUsbdTransfer',     target: kv.TRANSFER_ADDR,     wrapper: kv.TRANSFER_WRAP },
-    { name: 'cellUsbdClosePipe',    target: kv.CLOSEPIPE_ADDR,    wrapper: kv.CLOSEPIPE_WRAP },
-    { name: 'cellUsbdRegisterLdd',  target: kv.REGISTERLDD_ADDR,  wrapper: kv.REGISTERLDD_WRAP },
+    { name: 'cellUsbdInit',              target: kv.TARGET_INIT,    tramp: kv.TRAMP_INIT },
+    { name: 'cellUsbdOpenPipe',          target: kv.TARGET_OPENPIPE,     tramp: kv.TRAMP_OPENPIPE },
+    { name: 'cellUsbdInterruptTransfer', target: kv.TARGET_TRANSFER,     tramp: kv.TRAMP_TRANSFER },
+    { name: 'cellUsbdClosePipe',         target: kv.TARGET_CLOSEPIPE,    tramp: kv.TRAMP_CLOSEPIPE },
   ];
-  
+
   for (const t of targets) {
-    if (!t.target || !t.wrapper || t.target === '0x0' || t.wrapper === '0x0') {
-      log(`  ⚠ Skipping ${t.name}: missing address`);
+    if (!t.target || !t.tramp || t.target === '0x0' || t.tramp === '0x0') {
+      log(`  ⚠ Skipping ${t.name}: missing address (target=${t.target}, tramp=${t.tramp})`);
       continue;
     }
-    
+
     const targetAddr = parseInt(t.target, 16);
-    const wrapperAddr = parseInt(t.wrapper, 16);
-    
-    if (isNaN(targetAddr) || isNaN(wrapperAddr)) {
+    const trampAddr = parseInt(t.tramp, 16);
+
+    if (isNaN(targetAddr) || isNaN(trampAddr)) {
       log(`  ⚠ Skipping ${t.name}: invalid address format`);
       continue;
     }
-    
-    log(`  Installing preamble on ${t.name} @ 0x${targetAddr.toString(16)} -> wrapper 0x${wrapperAddr.toString(16)}`);
-    
+
+    log(`  Installing preamble on ${t.name} PLT stub @ 0x${targetAddr.toString(16)} -> trampoline 0x${trampAddr.toString(16)}`);
+
     // Build 4-instruction preamble:
-    // [0] lis  r11, hi16(wrapper_addr)    0x3D60xxxx
-    // [1] ori  r11, r11, lo16(wrapper)    0x616Bxxxx
-    // [2] mtctr r11                       0x7D6B03A6
-    // [3] bctr                            0x4E800420
+    // [0] lis  r11, hi16(tramp_addr)     0x3D60xxxx
+    // [1] ori  r11, r11, lo16(tramp)     0x616Bxxxx
+    // [2] mtctr r11                      0x7D6B03A6
+    // [3] bctr                           0x4E800420
     const preamble = Buffer.alloc(16); // 4 instructions × 4 bytes
-    preamble.writeUInt32BE((0x3D60 << 16) | ((wrapperAddr >> 16) & 0xFFFF), 0);  // lis r11
-    preamble.writeUInt32BE((0x616B << 16) | (wrapperAddr & 0xFFFF), 4);          // ori r11,r11
+    preamble.writeUInt32BE((0x3D60 << 16) | ((trampAddr >> 16) & 0xFFFF), 0);  // lis r11, hi16(tramp)
+    preamble.writeUInt32BE((0x616B << 16) | (trampAddr & 0xFFFF), 4);          // ori r11, r11, lo16(tramp)
     preamble.writeUInt32BE(0x7D6B03A6, 8);  // mtctr r11
     preamble.writeUInt32BE(0x4E800420, 12); // bctr
-    
+
     // Write via PS3MAPI MEMORY SET command (webMAN MOD 1.47.48c+ JSON API)
     // Ring 0 level, bypasses R-X .text segment protection
     const hexData = preamble.toString('hex').toUpperCase();
     const pidHex = '0x' + gamePid.toString(16);
     const addrHex = '0x' + targetAddr.toString(16);
     const writeEndpoint = `/ps3mapi.ps3?MEMORY%20SET%20${pidHex}%20${addrHex}%20${hexData}`;
-    
+
     verbose(`  Write endpoint: ${writeEndpoint}`);
-    
+
     try {
       const writeResp = await ps3mapiRequest(writeEndpoint, 5000);
       verbose(`  Write response: ${writeResp ? writeResp.trim() : '(empty)'}`);
-      log(`  ✓ Preamble installed on ${t.name}`);
+      log(`  ✓ Preamble installed on ${t.name} PLT stub @ 0x${targetAddr.toString(16)}`);
     } catch (err) {
       log(`  ✗ Failed to write preamble on ${t.name}: ${err.message}`);
     }
-    
+
     await sleep(100); // Small delay between writes
   }
-  
+
   log('✓ All preambles installed!');
-  log('  Game will now route Toy Pad USB traffic via hooks.');
+  log('  Game PLT stubs now redirect to our trampolines/hooks.');
+
   return true;
 }
 
