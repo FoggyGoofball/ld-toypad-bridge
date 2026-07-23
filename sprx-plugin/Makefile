@@ -1,6 +1,11 @@
 # Makefile for LD-ToyPad Bridge SPRX
 # Build with Sony PS3 DUPLEX SDK (SN Systems / SDK 3.40)
 # Package with oscetool via WSL
+#
+# REFACTORED 2026-07-22:
+#   - Removed toc_trampoline.s and toc_trampoline_c.c (assembly wrappers)
+#   - Added trampoline_gen.c (dynamic PowerPC trampoline generator)
+#   - Assembly-free: all TOC management done at runtime via trampoline_gen.c
 
 CELL_SDK   ?= /mnt/c/usr/local/cell
 CELL_HOST   = $(CELL_SDK)/host-win32
@@ -17,10 +22,9 @@ TARGET   := ldtoypad
 BUILDDIR := build
 OBJDIR   := obj
 
-C_SRCS   := main.c compat.c network.c debug.c toypad_state.c usb_hooks.c toc_trampoline_c.c
+C_SRCS   := main.c compat.c network.c debug.c toypad_state.c usb_hooks.c trampoline_gen.c
 C_OBJS   := $(C_SRCS:%.c=$(OBJDIR)/%.o)
-S_SRCS   := toc_trampoline.s
-S_OBJS   := $(S_SRCS:%.s=$(OBJDIR)/%.o)
+# No .s assembly files needed — all trampolines generated dynamically at runtime
 
 INCLUDES := -I$(CELL_TARGET)/ppu/include
 
@@ -48,13 +52,9 @@ $(OBJDIR)/%.o: %.c
 	@echo "  CC    $<"
 	$(CC) $(CFLAGS) -c "$<" -o "$@"
 
-$(OBJDIR)/%.o: %.s
-	@echo "  AS    $<"
-	$(CC) $(CFLAGS) -c "$<" -o "$@"
-
-$(BUILDDIR)/$(TARGET).prx: $(C_OBJS) $(S_OBJS)
+$(BUILDDIR)/$(TARGET).prx: $(C_OBJS)
 	@echo "  LD    $@"
-	$(LD) $(C_OBJS) $(S_OBJS) $(LDFLAGS) -o "$@"
+	$(LD) $(C_OBJS) $(LDFLAGS) -o "$@"
 
 $(BUILDDIR)/$(TARGET).sprx: $(BUILDDIR)/$(TARGET).prx
 	@echo "  SPRX  $@ (via sign.sh)"

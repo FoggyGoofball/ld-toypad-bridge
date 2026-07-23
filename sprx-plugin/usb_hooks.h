@@ -1,18 +1,26 @@
 /**
- * usb_hooks.h — REFACTORED 2026-07-20
+ * usb_hooks.h — REFACTORED 2026-07-22 (Dynamic Trampoline Generation)
  *
- * Provides replacement functions for the LEGO Dimensions game's
- * cellUsbd imports. When the game calls cellUsbdInit, cellUsbdOpenPipe,
- * cellUsbdTransfer, or cellUsbdClosePipe, our hooks intercept the call
- * and route Toy Pad traffic to the network layer (Node.js server).
+ * MAJOR CHANGES:
+ *   1. Removed all assembly wrapper/passthrough references
+ *   2. Removed target_*_addr fields (OPD trick extracts raw code ptrs
+ *      but they're only used locally in usb_hooks.c)
+ *   3. Added trampoline_base field (single R-W-X allocation)
+ *   4. Added trampoline_*_offset fields (64-byte aligned offsets into page)
+ *   5. Removed call_original_* externs — hooks call real cellUsbd directly
+ *   6. Removed get_wrapper_*_addr helpers — trampoline addresses are
+ *      passed directly to Node.js via IPC file
  *
- * REFACTOR CHANGES:
- *   - No more hook_trampoline_t types (removed hook.h dependency)
- *   - uint32_t tramp_*_addr replaces hook_trampoline_t
- *   - Function signatures updated: game_toc is LAST argument
- *   - No more prx_toc param on usb_hook_init()
- *   - Added target_*_addr fields for NID scan results
- *   - No more hook_install/remove — preamble written by PS3MAPI from Ring 0
+ * ARCHITECTURE:
+ *   usb_hook_init() allocates 1 R-W-X page, calls create_hook_trampoline()
+ *   for each of 4 hooks, writes IPC file. The Node.js orchestrator reads
+ *   the IPC file and writes 4-instruction preambles (lis/ori/mtctr/bctr)
+ *   into the game's .text segment targeting each trampoline address.
+ *
+ *   Passthrough: Non-ToyPad USB calls just call the real cellUsbd*
+ *   functions directly. The SPRX has its own resolved imports from
+ *   -lusbd_stub, so calling cellUsbdOpenPipe() from C uses the SPRX's
+ *   GOT/TOC and never touches the game's memory.
  */
 
 #ifndef USB_HOOKS_H
@@ -38,6 +46,15 @@ extern "C" {
 #define TOYPAD_VID         0x0E6F
 #define TOYPAD_PID         0x0241
 
+/** Size of each trampoline in bytes (16 instructions) */
+#define HOOK_TRAMPOLINE_SIZE  64
+
+/** Stack frame offset where trampoline saves game's TOC (r2) */
+#define HOOK_TOC_SAVE_OFFSET   0x28
+
+/** Number of hooks to install */
+#define HOOK_COUNT  4
+
 /* ---------------------------------------------------------------
  * Types
  * --------------------------------------------------------------- */
@@ -51,29 +68,25 @@ typedef struct {
 
 /**
  * Global state for the USB hook system.
- * REFACTORED: hook_trampoline_t replaced with raw uint32_t addresses.
+ * REFACTORED 2026-07-22: Dynamic trampoline generation.
  */
 typedef struct {
     int               initialized;          /**< 1 after usb_hook_init() */
 
-    /* NID scan results: target function addresses in game .text */
-    uint32_t          target_init_addr;
-    uint32_t          target_open_pipe_addr;
-    uint32_t          target_transfer_addr;
-    uint32_t          target_close_pipe_addr;
+    /* Trampoline page base address (from sys_memory_allocate R-W-X) */
+    uint32_t          trampoline_base;
 
-    /* Trampoline addresses (allocated via sys_memory_allocate R-W-X) */
-    uint32_t          tramp_init_addr;
-    uint32_t          tramp_open_pipe_addr;
-    uint32_t          tramp_transfer_addr;
-    uint32_t          tramp_close_pipe_addr;
+    /* Trampoline offsets within the page (64-byte aligned) */
+    uint32_t          tramp_init_offset;
+    uint32_t          tramp_open_pipe_offset;
+    uint32_t          tramp_transfer_offset;
+    uint32_t          tramp_close_pipe_offset;
 
-    /* Heartbeat counter — stored in the sys_memory_allocate page at offset 128
-     * (after 4 × 32-byte trampoline blocks). Incremented each worker loop
-     * iteration (~20 Hz at 50ms sleep). Polled by Node.js orchestrator via
-     * PS3MAPI /read_process. No HDD writes — avoids I/O contention with game
-     * asset streaming that would trigger the trophy freeze. */
-    volatile uint32_t *heartbeat;       /**< Memory-mapped heartbeat pointer */
+    /* Heartbeat counter — stored in trampoline page at offset 256
+     * (after 4 × 64-byte trampolines = 256 bytes). Incremented each
+     * worker loop iteration (~20 Hz at 50ms sleep). Polled by Node.js
+     * orchestrator via PS3MAPI /read_process. */
+    volatile uint32_t *heartbeat;
 
     usb_hook_pipe_t   pipes[USB_HOOK_MAX_PIPES]; /**< Virtual pipe pool */
     uint32_t          next_pipe_id;     /**< Monotonic counter for pipe handles */
@@ -92,8 +105,9 @@ usb_hook_pipe_t *usb_hook_lookup_pipe(uint32_t pipe_handle);
 /* ---------------------------------------------------------------
  * Hook Functions
  *
- * REFACTORED: All signatures updated to include game_toc as LAST arg.
- * TOC is passed by the assembly wrapper (toc_trampoline.s) — NOT inline asm.
+ * All signatures include game_toc as LAST argument.
+ * TOC is passed by the dynamic trampoline (trampoline_gen.c) — NOT
+ * by assembly wrappers.
  * --------------------------------------------------------------- */
 
 /**
@@ -124,12 +138,17 @@ int my_cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf,
 int my_cellUsbdClosePipe(uint32_t pipe_handle, uint32_t game_toc);
 
 /* ---------------------------------------------------------------
- * Initialization
+ * Initialization / Shutdown
  *
- * REFACTORED: No more prx_toc param.
- * usb_hook_init() performs NID scan, allocates trampoline pages,
- * copies original instructions, and writes IPC file for Node.js.
- * The actual preamble is written by PS3MAPI from Ring 0.
+ * usb_hook_init():
+ *   1. Extracts cellUsbd code addresses from SPRX OPDs
+ *   2. Allocates 1 R-W-X page via sys_memory_allocate
+ *   3. Calls create_hook_trampoline() for each of 4 hooks
+ *   4. Writes IPC file for Node.js orchestrator
+ *   5. Returns 0 on success, -1 on failure
+ *
+ * usb_hook_shutdown():
+ *   Writes shutdown IPC file, resets state
  * --------------------------------------------------------------- */
 
 int usb_hook_init(void);

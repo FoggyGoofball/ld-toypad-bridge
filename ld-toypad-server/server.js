@@ -476,9 +476,8 @@ server.on('message', (msg, rinfo) => {
   const zone = msg[1];
   const sequence = msg[2];
 
-  if (CONFIG.VERBOSE) {
-    console.log(`[Server] RX type=0x${packetType.toString(16)} zone=${zone} seq=${sequence} len=${msg.length}`);
-  }
+  // ALWAYS LOG incoming packets regardless of VERBOSE flag
+  console.log(`[Server] RX from ${rinfo.address}:${rinfo.port} type=0x${packetType.toString(16)} zone=${zone} seq=${sequence} len=${msg.length}`);
 
   // Process the packet
   processPacket(packetType, zone, sequence, rinfo, msg);

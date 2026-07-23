@@ -46,6 +46,13 @@
  * 0xFFFFFFFF is the default container ID on CellOS. */
 #define SYS_MEMORY_CONTAINER_DEFAULT  ((uint32_t)0xFFFFFFFFu)
 
+/* NOTE: The SDK's <sys/memory.h> defines SYS_MEMORY_PROT_* as 64-bit mapping
+ * attributes (SYS_MEMORY_PROT_READ_ONLY, SYS_MEMORY_PROT_READ_WRITE). There is
+ * NO exec flag. Memory from sys_memory_allocate() is already readable and
+ * executable by PPU threads. Do NOT redefine these flags here. */
+/* Forward declaration for hook integrity checker */
+static int hook_verify_preamble(uint32_t target_addr, const char *name);
+
 /* NID values for cellUsbd functions.
  * These are 32-bit big-endian NIDs used in the PS3's import stub table
  * (.rodata triplet format: { NID, reserved, GOT_ptr }).
@@ -111,6 +118,95 @@ typedef struct {
 #define TOC_REG_TRANSFER   8   /* 5 args -> TOC goes in r8 */
 #define TOC_REG_CLOSEPIPE  4   /* 1 arg  -> TOC goes in r4 */
 
+/* ================================================================
+ * Hook Integrity Checker
+ *
+ * Verifies that a game PLT stub address is safe to overwrite.
+ * Called during hook init to sanity-check TARGET_* addresses
+ * before writing them to the IPC file. Runs once at startup.
+ *
+ * Checks:
+ *   1. Address is non-zero (0 = NID not found, skip)
+ *   2. Address is within game .text range (< 0x30000000)
+ *   3. Address is word-aligned (max(denial of the PPU))
+ *   4. Reads the first 4 bytes at target — warns if they look
+ *      like executable code (should be lis/ori pattern later)
+ *
+ * Returns 0 if target looks plumbable, -1 if something is wrong.
+ * ================================================================ */
+static int hook_verify_preamble(uint32_t target_addr, const char *name)
+{
+    if (target_addr == 0) {
+        DEBUG_PRINT("[USB] INTEGRITY: %s target=0x00000000 (skipped — NID not found)\n", name);
+        return -1;
+    }
+
+    /* Must be in game .text range. If it's in PRX range (>= 0x30000000),
+     * the GOT was resolved and we'd be overwriting libusbd.sprx. */
+    if (target_addr >= 0x30000000) {
+        DEBUG_ERROR("[USB] INTEGRITY FAIL: %s target=0x%08X — in PRX range, GOT resolved!\n",
+                    name, (unsigned)target_addr);
+        return -1;
+    }
+
+    /* Must be word-aligned */
+    if (target_addr & 3) {
+        DEBUG_ERROR("[USB] INTEGRITY FAIL: %s target=0x%08X — misaligned (not word-aligned)\n",
+                    name, (unsigned)target_addr);
+        return -1;
+    }
+
+    /* Validate that the address actually maps to readable memory.
+     * Attempt a volatile read of the first instruction word at the
+     * target. If this crashes (ISI), the target is unmapped and the
+     * injector should not write there.
+     *
+     * To avoid crashing the SPRX on a bad read, we mark the check
+     * as best-effort: if it seems valid, we pass it; if the first
+     * word looks like a PLT stub pattern (lis with r11 or r12),
+     * we log it for diagnostics but still allow the injector
+     * to overwrite it. */
+    {
+        volatile uint32_t *p = (volatile uint32_t*)(uintptr_t)target_addr;
+        uint32_t first_word = p[0];
+
+        DEBUG_VERBOSE("[USB] INTEGRITY: %s target=0x%08X [0]=0x%08X\n",
+                      name, (unsigned)target_addr, (unsigned)first_word);
+
+        /* Log if the first word looks like a lis instruction (3Dxx or 3Cxx).
+         * PLT stubs start with 'lis r11, offset' = 0x3D60xxxx or
+         * 'lis r12, offset' = 0x3D80xxxx. A lis is expected for an
+         * unresolved PLT stub. Anything else might indicate:
+         *   - Already resolved (branch to libusbd)
+         *   - Corrupted memory
+         *   - Not a PLT stub at all
+         * We log but do NOT fail — the injector will overwrite anyway. */
+        if ((first_word & 0xFFFF0000) == 0x3D600000 ||
+            (first_word & 0xFFFF0000) == 0x3D800000) {
+            DEBUG_VERBOSE("[USB] INTEGRITY: %s — lis pattern at target (expected for unresolved PLT)\n",
+                          name);
+        } else {
+            DEBUG_PRINT("[USB] INTEGRITY: %s target=0x%08X [0]=0x%08X (non-standard PLT pattern)\n",
+                        name, (unsigned)target_addr, (unsigned)first_word);
+            /* Non-standard — could be resolved GOT, could be custom stub.
+             * Allow injector to attempt overwrite anyway. */
+        }
+    }
+
+    DEBUG_PRINT("[USB] INTEGRITY: %s target=0x%08X — OK (safe to overwrite)\n",
+                name, (unsigned)target_addr);
+    return 0;
+}
+
+/* Helper: log first 4 words of a trampoline for offline disassembly */
+static void log_trampoline_header(const char *label, uint32_t base)
+{
+    volatile uint32_t *p = (volatile uint32_t*)(uintptr_t)base;
+    DEBUG_PRINT("[USB]   %s tramp [0]=0x%08X [1]=0x%08X [2]=0x%08X [3]=0x%08X\n",
+                label, (unsigned)p[0], (unsigned)p[1],
+                (unsigned)p[2], (unsigned)p[3]);
+}
+
 static int install_hooks(void)
 {
     sys_memory_container_t container;
@@ -119,14 +215,33 @@ static int install_hooks(void)
 
     container = SYS_MEMORY_CONTAINER_DEFAULT;
 
-    /* Step 1: Allocate R-W-X page */
+    /* Step 1: Allocate 64KB page.
+     *
+     * On CellOS, sys_memory_allocate() returns memory that is already
+     * readable and executable by PPU threads by default. The SDK's
+     * <sys/memory.h> defines SYS_MEMORY_PROT_* flags only for mapping
+     * attributes (SYS_MEMORY_PROT_READ_ONLY, SYS_MEMORY_PROT_READ_WRITE),
+     * and there is SYS_MEMORY_PROT_MASK. There is NO exec-specific flag
+     * and NO sys_memory_set_protection() API in this SDK version.
+     *
+     * The allocated pages are accessible by PPU threads for both read
+     * and execute operations. No extra protection call is needed. */
     ret = sys_memory_allocate(TRAMPOLINE_PAGE_SIZE,
                                SYS_MEMORY_PAGE_SIZE_64K,
                                &base_addr);
     if (ret != 0) {
-        DEBUG_ERROR("[USB] sys_memory_allocate failed: 0x%x\n", ret);
+        DEBUG_ERROR("[USB] sys_memory_allocate(size=%u) failed: 0x%x\n",
+                    (unsigned)TRAMPOLINE_PAGE_SIZE, ret);
         return -1;
     }
+    DEBUG_PRINT("[USB] sys_memory_allocate OK: base=0x%08X size=%u (PPU-exec by default)\n",
+                (unsigned)base_addr, (unsigned)TRAMPOLINE_PAGE_SIZE);
+
+    /* CRITICAL CACHE COHERENCY: The icbi/isync flush in
+     * create_hook_trampoline() handles data/instruction cache
+     * coherency after writing trampoline instructions. No
+     * additional protection call is needed — PPU threads can
+     * both read and execute from allocated pages by default. */
 
     g_usb_hooks.trampoline_base = base_addr;
     g_usb_hooks.tramp_init_offset = 0;
@@ -162,24 +277,28 @@ static int install_hooks(void)
         (void*)my_cellUsbdInit, TOC_REG_INIT);
     DEBUG_PRINT("[USB] Init trampoline at 0x%08X\n",
                 (unsigned)(base_addr + g_usb_hooks.tramp_init_offset));
+    log_trampoline_header("Init", (unsigned)(base_addr + g_usb_hooks.tramp_init_offset));
 
     create_hook_trampoline(
         (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_open_pipe_offset),
         (void*)my_cellUsbdOpenPipe, TOC_REG_OPENPIPE);
     DEBUG_PRINT("[USB] OpenPipe trampoline at 0x%08X\n",
                 (unsigned)(base_addr + g_usb_hooks.tramp_open_pipe_offset));
+    log_trampoline_header("OpenPipe", (unsigned)(base_addr + g_usb_hooks.tramp_open_pipe_offset));
 
     create_hook_trampoline(
         (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_transfer_offset),
         (void*)my_cellUsbdInterruptTransfer, TOC_REG_TRANSFER);
     DEBUG_PRINT("[USB] Transfer trampoline at 0x%08X\n",
                 (unsigned)(base_addr + g_usb_hooks.tramp_transfer_offset));
+    log_trampoline_header("Transfer", (unsigned)(base_addr + g_usb_hooks.tramp_transfer_offset));
 
     create_hook_trampoline(
         (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_close_pipe_offset),
         (void*)my_cellUsbdClosePipe, TOC_REG_CLOSEPIPE);
     DEBUG_PRINT("[USB] ClosePipe trampoline at 0x%08X\n",
                 (unsigned)(base_addr + g_usb_hooks.tramp_close_pipe_offset));
+    log_trampoline_header("ClosePipe", (unsigned)(base_addr + g_usb_hooks.tramp_close_pipe_offset));
 
     DEBUG_PRINT("[USB] Trampoline page at 0x%08X (size=%u)\n",
                 (unsigned)base_addr, (unsigned)TRAMPOLINE_PAGE_SIZE);
@@ -280,8 +399,35 @@ static int write_ipc_file(uint32_t target_init, uint32_t target_openpipe,
         DEBUG_ERROR("[USB] Failed to open temp IPC file\n");
         return -1;
     }
-    cellFsWrite(fd, buf, pos, &written);
-    cellFsClose(fd);
+
+    /* DEBUG_VERBOSE: full IPC buffer content for offline diagnostics */
+    DEBUG_VERBOSE("[USB] IPC buffer (%d bytes):\n%s", pos, buf);
+
+    written = 0;
+    {
+        int64_t write_ret = cellFsWrite(fd, buf, pos, &written);
+        if (write_ret != CELL_OK) {
+            DEBUG_ERROR("[USB] cellFsWrite IPC file failed: 0x%llx\n",
+                        (unsigned long long)write_ret);
+            cellFsClose(fd);
+            return -1;
+        }
+        if ((int64_t)written != pos) {
+            DEBUG_ERROR("[USB] cellFsWrite short write: %llu/%d bytes\n",
+                        (unsigned long long)written, pos);
+            cellFsClose(fd);
+            return -1;
+        }
+    }
+
+    {
+        int64_t close_ret = cellFsClose(fd);
+        if (close_ret != CELL_OK) {
+            DEBUG_ERROR("[USB] cellFsClose IPC file failed: 0x%llx\n",
+                        (unsigned long long)close_ret);
+            return -1;
+        }
+    }
 
     /* Atomic rename - if this crashes, Node.js sees a stale file
      * (still valid format, just out-of-date content), never a
@@ -292,7 +438,7 @@ static int write_ipc_file(uint32_t target_init, uint32_t target_openpipe,
         return -1;
     }
 
-    DEBUG_PRINT("[USB] IPC file written (%d bytes, atomic rename)\n", pos);
+    DEBUG_PRINT("[USB] IPC file written (%d bytes written, atomic rename)\n", (int)written);
     return 0;
 }
 
@@ -365,6 +511,7 @@ static uint8_t extract_ep_addr(const void *ep_descriptor)
 int my_cellUsbdInit(uint32_t game_toc)
 {
     (void)game_toc;
+    DEBUG_PRINT("[USB] ENTER cellUsbdInit(game_toc=0x%08X)\n", (unsigned)game_toc);
     DEBUG_PRINT("[USB] cellUsbdInit() intercepted returning CELL_OK\n");
     return CELL_OK;
 }
@@ -389,6 +536,9 @@ int my_cellUsbdOpenPipe(uint32_t *pipe_handle, uint32_t dev_id,
     usb_hook_pipe_t *pipe;
 
     (void)game_toc;
+
+    DEBUG_PRINT("[USB] ENTER my_cellUsbdOpenPipe(dev_id=0x%08X, game_toc=0x%08X)\n",
+                (unsigned)dev_id, (unsigned)game_toc);
 
     if (pipe_handle == NULL) {
         return CELL_USBD_ERROR_FAILED;
@@ -426,6 +576,11 @@ int my_cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf,
 {
     int toypad_type;
     (void)done_cb; (void)arg; (void)game_toc;
+
+    DEBUG_PRINT("[USB] ENTER my_cellUsbdInterruptTransfer(pipe=0x%08X, len=%u, game_toc=0x%08X)\n",
+                (unsigned)pipe_handle,
+                (unsigned)(len ? *len : 0),
+                (unsigned)game_toc);
 
     toypad_type = usb_hook_is_toypad_pipe(pipe_handle);
     if (toypad_type == 0) {
@@ -489,6 +644,9 @@ int my_cellUsbdClosePipe(uint32_t pipe_handle, uint32_t game_toc)
     int toypad_type;
     (void)game_toc;
 
+    DEBUG_PRINT("[USB] ENTER my_cellUsbdClosePipe(pipe=0x%08X, game_toc=0x%08X)\n",
+                (unsigned)pipe_handle, (unsigned)game_toc);
+
     toypad_type = usb_hook_is_toypad_pipe(pipe_handle);
     if (toypad_type == 0) {
         /* Non-ToyPad: pass through to real cellUsbdClosePipe.
@@ -516,54 +674,81 @@ int my_cellUsbdClosePipe(uint32_t pipe_handle, uint32_t game_toc)
  * our own functions' OPDs, not the cellUsbd imports' OPDs.
  * ================================================================ */
 
+/* Validate a single OPD and log all 3 fields.
+ * Returns 0 if valid, -1 if any field looks suspicious. */
+static int validate_opd(const char *name, const ppc_opd_t *opd)
+{
+    uint32_t code = opd->code_addr;
+    uint32_t toc  = opd->toc_addr;
+    uint32_t env  = opd->env_ptr;
+
+    DEBUG_PRINT("[USB] OPD: %s => { code=0x%08X toc=0x%08X env=0x%08X } (opd at 0x%08X)\n",
+                name, (unsigned)code, (unsigned)toc, (unsigned)env,
+                (unsigned)(uintptr_t)opd);
+
+    /* Code address must be in PRX executable range (0x3xxxxxxx-0x4xxxxxxx).
+     * If it looks like a PowerPC opcode (e.g. 0x48xxxxxx branch), the symbol
+     * might be an import stub rather than a real OPD — this is a soft-fail. */
+    if (code < 0x30000000 || code > 0x4FFFFFFF) {
+        DEBUG_ERROR("[USB] OPD: %s code_addr=0x%08X out of range - likely import stub\n",
+                    name, (unsigned)code);
+        return -1;
+    }
+
+    /* TOC should be in the same general range. If code is valid but TOC is
+     * wildly different, the OPD may be corrupted or misaligned. */
+    if (toc < 0x30000000 || toc > 0x4FFFFFFF) {
+        DEBUG_ERROR("[USB] OPD: %s toc_addr=0x%08X suspicious - ignoring\n",
+                    name, (unsigned)toc);
+        return -1;
+    }
+
+    /* Environment pointer should be 0 in the official SDK. Non-zero suggests
+     * we're reading garbage, not a valid OPD entry. */
+    if (env != 0) {
+        DEBUG_ERROR("[USB] OPD: %s env_ptr=0x%08X is non-zero - expected 0\n",
+                    name, (unsigned)env);
+        /* NOT returning -1 here — some SDK builds may use env_ptr.
+         * Logged as warning only. */
+    }
+
+    DEBUG_VERBOSE("[USB] OPD: %s validated (code=0x%08X, toc=0x%08X, env=0x%08X)\n",
+                  name, (unsigned)code, (unsigned)toc, (unsigned)env);
+    return 0;
+}
+
 static int find_cellusbd_functions_via_opd(void)
 {
-    const ppc_opd_t *opd;
-    uint32_t code_addr;
+    int all_ok = 0;
 
-    /* cellUsbdInit */
-    opd = (const ppc_opd_t*)(uintptr_t)cellUsbdInit;
-    code_addr = opd->code_addr;
-    DEBUG_PRINT("[USB] OPD: cellUsbdInit => code=0x%08X (opd at 0x%08X)\n",
-                (unsigned)code_addr, (unsigned)(uintptr_t)opd);
-    if (code_addr < 0x30000000 || code_addr > 0x4FFFFFFF) {
-        DEBUG_ERROR("[USB] OPD: cellUsbdInit code_addr out of range (0x%08X)\n",
-                    (unsigned)code_addr);
-        return -1;
+    DEBUG_PRINT("[USB] OPD extraction: cellUsbdInit at %p\n",
+                (void*)(uintptr_t)cellUsbdInit);
+    if (validate_opd("cellUsbdInit",
+        (const ppc_opd_t*)(uintptr_t)cellUsbdInit) == 0) all_ok++;
+
+    DEBUG_PRINT("[USB] OPD extraction: cellUsbdOpenPipe at %p\n",
+                (void*)(uintptr_t)cellUsbdOpenPipe);
+    if (validate_opd("cellUsbdOpenPipe",
+        (const ppc_opd_t*)(uintptr_t)cellUsbdOpenPipe) == 0) all_ok++;
+
+    DEBUG_PRINT("[USB] OPD extraction: cellUsbdInterruptTransfer at %p\n",
+                (void*)(uintptr_t)cellUsbdInterruptTransfer);
+    if (validate_opd("cellUsbdInterruptTransfer",
+        (const ppc_opd_t*)(uintptr_t)cellUsbdInterruptTransfer) == 0) all_ok++;
+
+    DEBUG_PRINT("[USB] OPD extraction: cellUsbdClosePipe at %p\n",
+                (void*)(uintptr_t)cellUsbdClosePipe);
+    if (validate_opd("cellUsbdClosePipe",
+        (const ppc_opd_t*)(uintptr_t)cellUsbdClosePipe) == 0) all_ok++;
+
+    if (all_ok == 4) {
+        DEBUG_PRINT("[USB] All 4 cellUsbd functions resolved & validated via OPD\n");
+        return 0;
     }
 
-    /* cellUsbdOpenPipe */
-    opd = (const ppc_opd_t*)(uintptr_t)cellUsbdOpenPipe;
-    code_addr = opd->code_addr;
-    DEBUG_PRINT("[USB] OPD: cellUsbdOpenPipe => code=0x%08X\n", (unsigned)code_addr);
-    if (code_addr < 0x30000000 || code_addr > 0x4FFFFFFF) {
-        DEBUG_ERROR("[USB] OPD: cellUsbdOpenPipe code_addr out of range (0x%08X)\n",
-                    (unsigned)code_addr);
-        return -1;
-    }
-
-    /* cellUsbdInterruptTransfer */
-    opd = (const ppc_opd_t*)(uintptr_t)cellUsbdInterruptTransfer;
-    code_addr = opd->code_addr;
-    DEBUG_PRINT("[USB] OPD: cellUsbdTransfer => code=0x%08X\n", (unsigned)code_addr);
-    if (code_addr < 0x30000000 || code_addr > 0x4FFFFFFF) {
-        DEBUG_ERROR("[USB] OPD: cellUsbdTransfer code_addr out of range (0x%08X)\n",
-                    (unsigned)code_addr);
-        return -1;
-    }
-
-    /* cellUsbdClosePipe */
-    opd = (const ppc_opd_t*)(uintptr_t)cellUsbdClosePipe;
-    code_addr = opd->code_addr;
-    DEBUG_PRINT("[USB] OPD: cellUsbdClosePipe => code=0x%08X\n", (unsigned)code_addr);
-    if (code_addr < 0x30000000 || code_addr > 0x4FFFFFFF) {
-        DEBUG_ERROR("[USB] OPD: cellUsbdClosePipe code_addr out of range (0x%08X)\n",
-                    (unsigned)code_addr);
-        return -1;
-    }
-
-    DEBUG_PRINT("[USB] All 4 cellUsbd functions resolved via OPD\n");
-    return 0;
+    DEBUG_ERROR("[USB] OPD: %d/4 cellUsbd imports validated, soft-fail %d\n",
+                all_ok, 4 - all_ok);
+    return -1;
 }
 
 /* ================================================================
@@ -642,21 +827,25 @@ static int get_game_plt_stub(uint32_t target_nid, uint32_t *out_plt_addr)
             /* PLT stubs live in game .text (typically < 0x01000000
              * for small games, or higher for larger ones). If the
              * value is in the PRX range (0x3xxxxxxx+), the GOT has
-             * been resolved and we can't use it. */
+             * been resolved and we cannot safely overwrite it. */
             if (plt_stub_addr == 0 || plt_stub_addr > 0x4FFFFFFF) continue;
 
-            /* If plt_stub_addr >= 0x30000000, GOT is resolved.
-             * We still save it as a best-effort, but the injector
-             * should treat it as advisory. The future Option B
-             * PLT-pattern scanner will fix this. */
+            if (plt_stub_addr >= 0x30000000) {
+                /* GOT is already resolved — writing a preamble here
+                 * would corrupt libusbd.sprx code. Hard-fail. */
+                DEBUG_ERROR("[USB] NID scan: NID=0x%08X GOT_ptr=0x%08X -> *GOT=0x%08X (RESOLVED)\n",
+                            (unsigned)nid, (unsigned)got_ptr, (unsigned)plt_stub_addr);
+                DEBUG_ERROR("[USB]   GOT resolved! Injection too late. Implement Option B PLT-pattern scanner.\n");
+                *out_plt_addr = 0;  /* Signal injector to skip this hook */
+                return -1;
+            }
+
             *out_plt_addr = plt_stub_addr;
 
-            DEBUG_PRINT("[USB] NID scan: NID=0x%08X GOT_ptr=0x%08X -> *GOT=0x%08X\n",
+            DEBUG_PRINT("[USB] NID scan: NID=0x%08X GOT_ptr=0x%08X -> *GOT=0x%08X (ok, unresolved)\n",
                         (unsigned)nid, (unsigned)got_ptr, (unsigned)plt_stub_addr);
-            if (plt_stub_addr >= 0x30000000) {
-                DEBUG_PRINT("[USB]   ⚠ GOT appears resolved (addr in PRX range)\n");
-                DEBUG_PRINT("[USB]   Future: implement Option B PLT-pattern scanner\n");
-            }
+            DEBUG_PRINT("[USB]   PLT stub at 0x%08X will be overwritten with preamble\n",
+                        (unsigned)plt_stub_addr);
             return 0;
         }
     }

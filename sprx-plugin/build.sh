@@ -3,6 +3,11 @@
 # Copies sources to /tmp, builds with WSL-accessible paths.
 set -euo pipefail
 
+# REFACTORED 2026-07-22:
+#   - Removed hook.c, hook.h (replaced by trampoline_gen.c/h)
+#   - Added trampoline_gen.c (dynamic PowerPC trampoline generation)
+#   - No assembly files needed
+
 SRC="/mnt/c/Users/Admin/source/repos/dimensions plugin/sprx-plugin"
 TMPDIR=/tmp/ldtoypad-build
 rm -rf "$TMPDIR"
@@ -10,9 +15,9 @@ mkdir -p "$TMPDIR"
 
 # Copy all C sources and headers
 cp "$SRC"/main.c "$SRC"/network.c "$SRC"/toypad_state.c \
-   "$SRC"/debug.c "$SRC"/compat.c "$SRC"/hook.c "$SRC"/usb_hooks.c "$TMPDIR/"
+   "$SRC"/debug.c "$SRC"/compat.c "$SRC"/usb_hooks.c "$SRC"/trampoline_gen.c "$TMPDIR/"
 cp "$SRC"/network.h "$SRC"/debug.h "$SRC"/toypad_state.h \
-   "$SRC"/hook.h "$SRC"/usb_hooks.h "$TMPDIR/"
+   "$SRC"/usb_hooks.h "$SRC"/trampoline_gen.h "$TMPDIR/"
 
 # Write a WSL-native Makefile
 CELL_SDK="/mnt/c/usr/local/cell"
@@ -26,7 +31,7 @@ TARGET="ldtoypad"
 BUILDDIR="build"
 OBJDIR="obj"
 
-C_SRCS="main.c compat.c network.c debug.c toypad_state.c hook.c usb_hooks.c"
+C_SRCS="main.c compat.c network.c debug.c toypad_state.c usb_hooks.c trampoline_gen.c"
 C_OBJS=""
 for f in $C_SRCS; do
   C_OBJS="$C_OBJS $OBJDIR/${f%.c}.o"
@@ -34,7 +39,7 @@ done
 
 INCLUDES="-I$CELL_SDK/target/ppu/include"
 CFLAGS="-mprx -std=gnu99 -O2 -g -fno-builtin -nodefaultlibs $INCLUDES"
-LDFLAGS="-mprx -nodefaultlibs -llv2_stub -lfs_stub -lnet_stub"
+LDFLAGS="-mprx -nodefaultlibs -llv2_stub -lfs_stub -lnet_stub -lusbd_stub"
 
 cd "$TMPDIR"
 mkdir -p "$OBJDIR" "$BUILDDIR"

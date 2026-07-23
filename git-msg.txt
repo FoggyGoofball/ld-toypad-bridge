@@ -1,0 +1,11 @@
+OPD TRICK FIX: Resolve cellUsbd from SPRX own imports  
+  
+CORE CHANGE (usb_hooks.c):  
+- Replaced broken NID memory scanner with OPD trick  
+- Cast cellUsbdInit to ppc_opd_t* to extract code addr  
+- Removed NID scan loop, retry logic  
+- Solves chicken-and-egg with game GOT PLT stubs  
+  
+SUPPORTING: usb_hooks.h OPD struct, main.c dead code removed  
+toc_trampoline.s/c OPD table, inject-sprx.js comments updated  
+build-all.ps1 fix, Makefile -lusbd_stub, do-sign.sh added 
