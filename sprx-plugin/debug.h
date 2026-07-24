@@ -122,6 +122,16 @@ void debug_printf(const char* fmt, ...);
 void debug_set_remote(uint32_t ip, uint16_t port);
 
 /**
+ * Write init progress marker to HDD papertrail file.
+ *
+ * Writes the current g_init_progress step number to
+ * /dev_hdd0/tmp/ld_paper.txt atomically. Called from
+ * the INIT_PROGRESS(x) macro at every init step boundary.
+ * Used by Node.js injector to detect where SPRX crashed.
+ */
+void debug_write_progress(void);
+
+/**
  * Dump a buffer as hex for debugging
  *
  * @param label Text label for the dump
@@ -129,5 +139,6 @@ void debug_set_remote(uint32_t ip, uint16_t port);
  * @param len Length of data
  */
 void debug_hex_dump(const char* label, const uint8_t* data, int len);
+
 
 #endif // DEBUG_H

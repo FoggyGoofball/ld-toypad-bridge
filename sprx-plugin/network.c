@@ -94,7 +94,15 @@ int network_init(uint16_t port)
                 continue;
             }
 
-            /* Bind to port — NO SO_REUSEADDR (see comment above) */
+            /* Set SO_REUSEADDR before bind — ensures port is freed
+             * immediately on close, allowing clean module reload. */
+            {
+                int reuse = 1;
+                setsockopt(g_net.socket_fd, SOL_SOCKET, SO_REUSEADDR,
+                           (void*)&reuse, sizeof(reuse));
+            }
+
+            /* Bind to port */
             memset(&local_addr, 0, sizeof(local_addr));
             local_addr.sin_family = AF_INET;
             local_addr.sin_port = htons(port);

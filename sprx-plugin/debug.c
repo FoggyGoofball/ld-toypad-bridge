@@ -317,7 +317,83 @@ void debug_set_remote(uint32_t ip, uint16_t port)
     debug_printf("[LDTP] remote debug target set port=%u", (unsigned int)port);
 }
 
+/**
+ * Write init progress marker to HDD papertrail file.
+ *
+ * Writes the current g_init_progress step number to
+ * /dev_hdd0/tmp/ld_paper.txt. Each write overwrites the file
+ * atomically (write to .tmp, rename). This is used by the Node.js
+ * injector to detect where the SPRX crashed during initialization.
+ *
+ * This is called from the INIT_PROGRESS(x) macro in both main.c
+ * and usb_hooks.c, at every critical init step boundary.
+ *
+ * If the file write fails (e.g., HDD problem), we silently ignore it.
+ * The in-memory g_init_progress variable is the primary diagnostic;
+ * this file is the fallback for when the SPRX crashes before it can
+ * write the main IPC file.
+ */
+void debug_write_progress(void)
+{
+    int fd;
+    uint64_t written;
+    char buf[64];
+    int len;
+    uint32_t step;
+
+    /* Read g_init_progress via extern */
+    extern volatile uint32_t g_init_progress;
+    step = g_init_progress;
+
+    /* Format the step number into buf */
+    {
+        char tmp[12];
+        int i = 0;
+        uint32_t v = step;
+        if (v == 0) {
+            tmp[i++] = '0';
+        } else {
+            char rev[12];
+            int j = 0;
+            while (v != 0 && j < 11) {
+                rev[j++] = (char)('0' + (v % 10));
+                v /= 10;
+            }
+            while (j > 0) {
+                tmp[i++] = rev[--j];
+            }
+        }
+        tmp[i] = '\0';
+
+        /* Write to buf */
+        for (len = 0; tmp[len]; len++) {
+            buf[len] = tmp[len];
+        }
+        buf[len++] = '\n';
+        buf[len] = '\0';
+    }
+
+    /* Write to .tmp file, then atomic rename */
+    if (cellFsOpen("/dev_hdd0/tmp/ld_paper.tmp",
+                   CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
+                   &fd, NULL, 0) != CELL_OK) {
+        return; /* Silently ignore write failures */
+    }
+
+    cellFsWrite(fd, buf, len, &written);
+
+    {
+        int64_t close_ret = cellFsClose(fd);
+        (void)close_ret;
+    }
+
+    /* Atomic rename — avoids partial-read race with Node.js */
+    cellFsRename("/dev_hdd0/tmp/ld_paper.tmp",
+                 "/dev_hdd0/tmp/ld_paper.txt");
+}
+
 void debug_hex_dump(const char* label, const uint8_t* data, int len)
+
 {
     int i;
 

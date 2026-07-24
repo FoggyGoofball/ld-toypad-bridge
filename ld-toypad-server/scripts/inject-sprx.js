@@ -2,55 +2,35 @@
 /**
  * inject-sprx.js — PS3MAPI Game Process Injector for LD-ToyPad Bridge
  *
- * TWO-PHASE HOOK INSTALLATION (REFACTORED 2026-07-21):
+ * ARCHITECTURE (REFACTORED 2026-07-24 — Direct GOT Overwrite):
  *
  * Uses webMAN MOD 1.47.48c+ JSON RESTful API endpoint:
  *   GET /ps3mapi.ps3?<COMMAND>
  *
- * PHASE 1 (SPRX-side):
- *   - SPRX injected into game process via /ps3mapi.ps3?MODULE%20LOAD...
- *   - OPD trick: extracts cellUsbd function addresses from SPRX's own
- *     resolved imports (avoids game memory NID scan chicken-and-egg)
+ * ALL HOOK WORK DONE IN-SPRX:
+ *   - SPRX injected into game process
  *   - sys_memory_allocate allocates R-W-X trampoline pages
- *   - Original 4 instructions copied + branch-back written
- *   - IPC file written to /dev_hdd0/tmp/ld_hooks_ready.txt
+ *   - NID scanner finds cellUsbd GOT slots in game .data
+ *   - SPRX overwrites resolved GOT slots with trampoline addresses
+ *   - Game's PLT stubs (unchanged) load trampoline address from GOT
+ *   - No PS3MAPI memory patches needed — everything in-process
  *
- * PHASE 2 (Node.js-side, THIS SCRIPT):
- *   - Polls for IPC file via direct HTTP GET /dev_hdd0/tmp/ld_hooks_ready.txt
- *   - Parses target and wrapper addresses
- *   - Writes 4-instruction preamble (lis/ori/mtctr/bctr) to each
- *     target function via PS3MAPI MEMORY SET command
- *   - R-X .text segment protection bypassed by PS3MAPI kernel module
+ * THIS SCRIPT ONLY:
+ *   - Injects SPRX via PS3MAPI MODULE LOAD
+ *   - Reads IPC file to VERIFY GOT overwrite took effect
+ *   - No preamble writing (Phase 2 eliminated)
  *
  * ARCHITECTURE:
- *   ┌──────────┐   HTTP (port 80)    ┌────────────┐
- *   │  PS3      │ ←───────────────── │  inject    │
- *   │  webMAN   │                    │  -sprx.js  │
- *   │  MOD      │                    └─────┬──────┘
- *   └────┬─────┘                           │
- *        │ 1) MODULE LOAD                  │
- *        ▼                                 │
- *   ┌──────────┐  2) writes IPC file      │
- *   │ SPRX     │ ──────────────────────→  │
- *   │ (game)   │                          │
- *   └──────────┘  3) MEMORY SET           │
- *        │        ←─────────────────────  │
- *        │  preamble (4 insns)            │
- *        ▼                                │
- *   ┌──────────┐  cellUsbd hooks         │
- *   │ GAME     │ ────────────────→  server│
- *   │ process  │  UDP:28472              │
- *   └──────────┘                         │
+ *   PS3 SPRX -> NID scan -> GOT overwrite (in-process)
+ *              -> IPC file for verification
+ *              -> Game calls cellUsbd -> PLT stub reads GOT -> trampoline -> hooks
  *
- * URL MIGRATION NOTES (webMAN MOD 1.47.48c+):
- *   OLD: /ps3mapi_process                    →  400 Bad Request
- *   NEW: /ps3mapi.ps3?PROCESS%20GETCURRENTPID
- *   OLD: /ps3mapi_process?pid=X&load_prx=... →  400 Bad Request
- *   NEW: /ps3mapi.ps3?MODULE%20LOAD%200xX%20/path
- *   OLD: /cpursx.ps3?/write_process...       →  Non-standard
- *   NEW: /ps3mapi.ps3?MEMORY%20SET%200xX%200xADDR%20HEX
- *   OLD: /cpursx.ps3?/read_process?path=...   →  Non-standard
- *   NEW: /dev_hdd0/tmp/filename.txt          →  Direct filesystem
+ * URL REFERENCE (webMAN MOD 1.47.48c+):
+ *   Process detect:  /ps3mapi.ps3?PROCESS%20GETCURRENTPID
+ *   Module load:     /ps3mapi.ps3?MODULE%20LOAD%200x{PID}%20{path}
+ *   Module unload:   /ps3mapi.ps3?MODULE%20UNLOAD%200x{PID}%20{path}
+ *   Memory read:     /ps3mapi.ps3?MEMORY%20GET%20{PID}%20{addr}%20{size}
+ *   File access:     /dev_hdd0/tmp/filename.txt (direct filesystem)
  *
  * USAGE:
  *   node inject-sprx.js [options]
@@ -63,7 +43,7 @@
  *   --no-inject       Scan only, do not inject
  *   --verbose, -v     Verbose logging
  *   --port <num>      PS3MAPI HTTP port (default: 80)
- *   --server-start    Also start the UDP bridge server automatically
+ *   --help, -h        Show this help
  */
 
 const http = require('http');
@@ -137,9 +117,6 @@ function verbose(msg) {
 // ──────────────────────────────────────────────
 // 1. Detect Game Process
 // ──────────────────────────────────────────────
-// Uses webMAN MOD 1.47.48c+ JSON RESTful API:
-//   GET /ps3mapi.ps3?PROCESS%20GETCURRENTPID
-// Returns JSON: { "result": "0x01030000" } or similar
 async function detectGame() {
   log(`Detecting game on ${PS3_IP}:${PS3MAPI_PORT} (poll every ${POLL_MS}ms)...`);
   log('  Using webMAN 1.47.48c+ JSON API: /ps3mapi.ps3?PROCESS%20GETCURRENTPID');
@@ -162,47 +139,34 @@ async function detectGame() {
   }
 }
 
-// Parse JSON response from /ps3mapi.ps3?PROCESS GETCURRENTPID
-// Actual observed format: { "response": "0x0000000001010200" }
-//   - Key is "response" (not "result")
-//   - Value is 64-bit hex with leading zeros, e.g. 0x0000000001010200
-// Fallback: raw hex string like "0x01030000"
 function parseJsonPid(resp) {
   if (!resp) return null;
   
-  // Try JSON parse first (official webMAN MOD 1.47.48c+ format)
   try {
     const json = JSON.parse(resp);
-    // Try "response" key first (actual webMAN MOD API format)
     const pidStr = (json && json.response) ? String(json.response) :
                    (json && json.result) ? String(json.result) : null;
     if (pidStr) {
       const hexMatch = pidStr.match(/0x([0-9a-fA-F]+)/);
       if (hexMatch) {
         const pid = parseInt(hexMatch[1], 16);
-        // PID 0x10005 = VSH (XMB), PID must be > 0x10000
         if (pid > 0 && pid !== 0x10005) {
           verbose(`  PID candidate from JSON: ${pidStr} → parsed ${pid} (0x${pid.toString(16)})`);
           return pid;
         }
       }
     }
-  } catch {
-    // Not JSON, try raw formats below
-  }
-  
-  // Fallback: any hex string in the response (handles 64-bit leading zeros)
+  } catch { }
+
   const hexMatch = resp.match(/0x([0-9a-fA-F]+)/);
   if (hexMatch) {
     const pid = parseInt(hexMatch[1], 16);
-    // VSH (XMB) PID, skip it
     if (pid !== 0x10005 && pid > 0x10000) {
       verbose(`  PID candidate from raw hex: 0x${hexMatch[1]} → ${pid}`);
       return pid;
     }
   }
   
-  // Fallback: decimal number string
   const numMatch = resp.match(/(\d+)/);
   if (numMatch) {
     const pid = parseInt(numMatch[1], 10);
@@ -211,8 +175,6 @@ function parseJsonPid(resp) {
   
   return null;
 }
-
-
 
 // ──────────────────────────────────────────────
 // 2. Wait for Game to Stabilize
@@ -240,28 +202,12 @@ async function waitForGame(gamePid) {
 // ──────────────────────────────────────────────
 // 3. Inject SPRX via PS3MAPI JSON API
 // ──────────────────────────────────────────────
-// Uses webMAN MOD 1.47.48c+ JSON RESTful API:
-//   UNLOAD: GET /ps3mapi.ps3?MODULE%20UNLOAD%200x{PID}%20{path}
-//   LOAD:   GET /ps3mapi.ps3?MODULE%20LOAD%200x{PID}%20{path}
-// Returns JSON: { "result": "success" } or similar
 async function injectSprx(gamePid) {
   log(`Injecting SPRX into game PID=0x${gamePid.toString(16)}...`);
   log(`  SPRX path: ${SPRX_PATH}`);
   log('  Using webMAN 1.47.48c+ JSON API: /ps3mapi.ps3?MODULE%20LOAD/UNLOAD...');
 
-  // Step 3a: Unload previous PRX (if any)
-  //
-  // CRITICAL: The network_init() regression is caused by an orphaned socket
-  // from a previous SPRX injection that never ran module_stop. The old worker
-  // thread still holds g_net.socket_fd open, so bind() fails with EADDRINUSE.
-  //
-  // UDP has no TIME_WAIT state — the port is held by the live thread, not
-  // the kernel. SO_REUSEADDR would force-bind but cause nondeterministic
-  // packet routing between the ghost SPRX and new SPRX (severe packet loss).
-  //
-  // The correct fix: explicitly unload the previous PRX via PS3MAPI before
-  // loading the new one. This triggers module_stop → worker join → socket
-  // close → sys_net_finalize → clean slate.
+  // Unload previous PRX first
   log('  CRITICAL: Unloading previous PRX (clean teardown)...');
   try {
     const pidHex = '0x' + gamePid.toString(16);
@@ -269,44 +215,42 @@ async function injectSprx(gamePid) {
     const unloadEndpoint = `/ps3mapi.ps3?MODULE%20UNLOAD%20${pidHex}%20${encodedPath}`;
     const unloadResp = await ps3mapiRequest(unloadEndpoint, 5000);
     verbose(`  Unload response: ${unloadResp ? unloadResp.trim() : '(empty)'}`);
-    await sleep(500);  // Wait for module_stop to complete
+    await sleep(500);
     log('  ✓ Previous PRX unloaded');
   } catch (err) {
-    // If there was no previous PRX loaded, the unload fails harmlessly
     verbose(`  No previous PRX to unload: ${err.message}`);
   }
 
-  // Step 3b: Load new PRX
+  // Two-pass load
+  log('  CRITICAL: Two-pass load to clear any stale VSH guard file...');
+  
   const pidHex = '0x' + gamePid.toString(16);
   const encodedPath = encodeURIComponent(SPRX_PATH);
-  const endpoint = `/ps3mapi.ps3?MODULE%20LOAD%20${pidHex}%20${encodedPath}`;
-  verbose(`Endpoint: ${endpoint}`);
+  const loadEndpoint = `/ps3mapi.ps3?MODULE%20LOAD%20${pidHex}%20${encodedPath}`;
   
   try {
-    const resp = await ps3mapiRequest(endpoint, 15000);
-    log(`  Response: ${resp ? resp.trim() : '(empty)'}`);
+    const resp1 = await ps3mapiRequest(loadEndpoint, 15000);
+    log(`  Attempt 1 response: ${resp1 ? resp1.trim() : '(empty)'}`);
+    await sleep(1000);
     
-    // Check for success indicators in JSON response
-    if (resp) {
-      const lower = resp.toLowerCase();
-      if (lower.includes('success') || lower.includes('loaded') || lower.includes('ok') || lower.includes('"result"')) {
-        log('✓ SPRX injection SUCCESSFUL!');
-        return true;
-      }
-      log(`⚠ Injection response: "${resp.trim()}"`);
-      return true;
-    } else {
-      log('⚠ Empty response — injection may have succeeded');
+    const resp2 = await ps3mapiRequest(loadEndpoint, 15000);
+    log(`  Attempt 2 response: ${resp2 ? resp2.trim() : '(empty)'}`);
+    
+    const lower = resp2.toLowerCase();
+    if (lower.includes('success') || lower.includes('loaded') || lower.includes('ok') || lower.includes('"result"')) {
+      log('✓ SPRX injection SUCCESSFUL!');
       return true;
     }
+    log(`⚠ Injection response: "${resp2.trim()}"`);
+    return true;
   } catch (err) {
     log(`✗ Injection FAILED: ${err.message}`);
     
     log('  Retrying once...');
     try {
       await sleep(2000);
-      const resp2 = await ps3mapiRequest(endpoint, 15000);
-      log(`  Retry response: ${resp2 ? resp2.trim() : '(empty)'}`);
+      const resp3 = await ps3mapiRequest(loadEndpoint, 15000);
+      log(`  Retry response: ${resp3 ? resp3.trim() : '(empty)'}`);
       log('✓ Injection successful on retry');
       return true;
     } catch (err2) {
@@ -316,26 +260,24 @@ async function injectSprx(gamePid) {
   }
 }
 
-
 // ──────────────────────────────────────────────
-// 4. Wait for SPRX IPC file + Write Preambles
+// 4. Wait for SPRX IPC file (verification only)
 // ──────────────────────────────────────────────
-// Uses webMAN MOD 1.47.48c+ endpoints:
-//   IPC POLL:  GET /dev_hdd0/tmp/ld_hooks_ready.txt  (direct filesystem)
-//   MEM WRITE: GET /ps3mapi.ps3?MEMORY%20SET%200x{PID}%200x{ADDR}%20{HEX}
-async function waitForIpcAndInstall(gamePid) {
-  log('Waiting for SPRX to write IPC file (ld_hooks_ready.txt)...');
-  log('  SPRX will resolve cellUsbd via OPD trick (instant), allocate');
-  log('  trampolines, copy original instructions, and write IPC file');
-  log('  on /dev_hdd0/tmp/. This should take < 1 second after injection.');
+// The SPRX now does everything in-process:
+//   - NID scan -> find GOT slots
+//   - Overwrite GOT slots with trampoline addresses
+//   - Write IPC file for verification
+//
+// No preamble writing needed! The game's PLT stubs already
+// load our trampoline addresses from the overwritten GOT slots.
+async function waitForIpcAndVerify(gamePid) {
+  log('Waiting for SPRX IPC file (ld_hooks_ready.txt) for verification...');
+  log('  SPRX does everything in-process: NID scan, GOT overwrite,');
+  log('  then writes IPC file for verification. No preamble needed.');
   log('  Using direct HTTP GET: /dev_hdd0/tmp/ld_hooks_ready.txt');
   
   let ipcContent = null;
   
-  // Poll for IPC file (up to 80 seconds)
-  // SPRX Phase 1 NID scan can take up to 20 seconds (10 attempts × 2s).
-  // Add extra time for HDD I/O and game responsiveness.
-  // Uses direct filesystem access via webMAN HTTP server
   for (let attempt = 0; attempt < 80; attempt++) {
     try {
       const resp = await ps3mapiRequest(
@@ -348,10 +290,8 @@ async function waitForIpcAndInstall(gamePid) {
         log('✓ IPC file found! Parsing addresses...');
         break;
       }
-    } catch {
-      // File not ready yet
-    }
-    
+    } catch { }
+
     if (attempt % 10 === 0) {
       log(`  ...waiting for IPC file (attempt ${attempt + 1}/80)`);
     }
@@ -364,7 +304,6 @@ async function waitForIpcAndInstall(gamePid) {
     return false;
   }
   
-  // Parse IPC content into key-value map
   const kv = {};
   for (const line of ipcContent.split('\n')) {
     const trimmed = line.trim();
@@ -378,88 +317,118 @@ async function waitForIpcAndInstall(gamePid) {
   
   verbose(`IPC parsed: ${JSON.stringify(kv, null, 2)}`);
   
-  // Show discovered addresses
   log(`  Trampoline base:  ${kv.TRAMP_BASE || 'unknown'}`);
   log(`  TRAMP_INIT:       ${kv.TRAMP_INIT || 'unknown'}`);
   log(`  TRAMP_OPENPIPE:   ${kv.TRAMP_OPENPIPE || 'unknown'}`);
   log(`  TRAMP_TRANSFER:   ${kv.TRAMP_TRANSFER || 'unknown'}`);
   log(`  TRAMP_CLOSEPIPE:  ${kv.TRAMP_CLOSEPIPE || 'unknown'}`);
-  log(`  TARGET_INIT:      ${kv.TARGET_INIT || 'unknown'} (PLT stub in game .text)`);
+  log(`  TARGET_INIT:      ${kv.TARGET_INIT || 'unknown'} (GOT slot address)`);
   log(`  TARGET_OPENPIPE:  ${kv.TARGET_OPENPIPE || 'unknown'}`);
   log(`  TARGET_TRANSFER:  ${kv.TARGET_TRANSFER || 'unknown'}`);
   log(`  TARGET_CLOSEPIPE: ${kv.TARGET_CLOSEPIPE || 'unknown'}`);
 
-  // Build and install preambles for each target.
-  // Each preamble overwrites the game's 16-byte PLT stub with:
-  //   [0] lis   r11, hi16(tramp_addr)    0x3D60xxxx
-  //   [1] ori   r11, r11, lo16(tramp)    0x616Bxxxx
-  //   [2] mtctr r11                      0x7D6B03A6
-  //   [3] bctr                           0x4E800420
-  // This redirects the game's cellUsbd call to our trampoline.
-  const targets = [
-    { name: 'cellUsbdInit',              target: kv.TARGET_INIT,    tramp: kv.TRAMP_INIT },
-    { name: 'cellUsbdOpenPipe',          target: kv.TARGET_OPENPIPE,     tramp: kv.TRAMP_OPENPIPE },
-    { name: 'cellUsbdInterruptTransfer', target: kv.TARGET_TRANSFER,     tramp: kv.TRAMP_TRANSFER },
-    { name: 'cellUsbdClosePipe',         target: kv.TARGET_CLOSEPIPE,    tramp: kv.TRAMP_CLOSEPIPE },
-  ];
-
-  for (const t of targets) {
-    if (!t.target || !t.tramp || t.target === '0x0' || t.tramp === '0x0') {
-      log(`  ⚠ Skipping ${t.name}: missing address (target=${t.target}, tramp=${t.tramp})`);
-      continue;
+  // Count how many GOT overwrites succeeded
+  let gotCount = 0;
+  for (const key of ['TARGET_INIT', 'TARGET_OPENPIPE', 'TARGET_TRANSFER', 'TARGET_CLOSEPIPE']) {
+    if (kv[key] && kv[key] !== '0x0' && kv[key] !== '0x00000000') {
+      gotCount++;
     }
-
-    const targetAddr = parseInt(t.target, 16);
-    const trampAddr = parseInt(t.tramp, 16);
-
-    if (isNaN(targetAddr) || isNaN(trampAddr)) {
-      log(`  ⚠ Skipping ${t.name}: invalid address format`);
-      continue;
-    }
-
-    log(`  Installing preamble on ${t.name} PLT stub @ 0x${targetAddr.toString(16)} -> trampoline 0x${trampAddr.toString(16)}`);
-
-    // Build 4-instruction preamble:
-    // [0] lis  r11, hi16(tramp_addr)     0x3D60xxxx
-    // [1] ori  r11, r11, lo16(tramp)     0x616Bxxxx
-    // [2] mtctr r11                      0x7D6B03A6
-    // [3] bctr                           0x4E800420
-    const preamble = Buffer.alloc(16); // 4 instructions × 4 bytes
-    preamble.writeUInt32BE((0x3D60 << 16) | ((trampAddr >> 16) & 0xFFFF), 0);  // lis r11, hi16(tramp)
-    preamble.writeUInt32BE((0x616B << 16) | (trampAddr & 0xFFFF), 4);          // ori r11, r11, lo16(tramp)
-    preamble.writeUInt32BE(0x7D6B03A6, 8);  // mtctr r11
-    preamble.writeUInt32BE(0x4E800420, 12); // bctr
-
-    // Write via PS3MAPI MEMORY SET command (webMAN MOD 1.47.48c+ JSON API)
-    // Ring 0 level, bypasses R-X .text segment protection
-    const hexData = preamble.toString('hex').toUpperCase();
-    const pidHex = '0x' + gamePid.toString(16);
-    const addrHex = '0x' + targetAddr.toString(16);
-    const writeEndpoint = `/ps3mapi.ps3?MEMORY%20SET%20${pidHex}%20${addrHex}%20${hexData}`;
-
-    verbose(`  Write endpoint: ${writeEndpoint}`);
-
-    try {
-      const writeResp = await ps3mapiRequest(writeEndpoint, 5000);
-      verbose(`  Write response: ${writeResp ? writeResp.trim() : '(empty)'}`);
-      log(`  ✓ Preamble installed on ${t.name} PLT stub @ 0x${targetAddr.toString(16)}`);
-    } catch (err) {
-      log(`  ✗ Failed to write preamble on ${t.name}: ${err.message}`);
-    }
-
-    await sleep(100); // Small delay between writes
   }
 
-  log('✓ All preambles installed!');
-  log('  Game PLT stubs now redirect to our trampolines/hooks.');
+  log(`  ✓ ${gotCount}/4 GOT slots overwritten by SPRX in-process`);
+
+  if (gotCount === 4) {
+    log('');
+    log('  ╔══════════════════════════════════════════════════╗');
+    log('  ║  ALL 4 GOT HOOKS ACTIVE — No preamble needed!  ║');
+    log('  ╚══════════════════════════════════════════════════╝');
+    log('');
+    log('  The SPRX directly overwrote the game\'s resolved');
+    log('  cellUsbd GOT slots with trampoline addresses.');
+    log('  Game PLT stubs now redirect to our hooks.');
+  }
 
   return true;
 }
 
+// ──────────────────────────────────────────────
+// 4b. Poll init_progress papertrail file
+// ──────────────────────────────────────────────
+async function pollInitProgress(gamePid) {
+  log('Polling SPRX init progress (ld_paper.txt + ld_init_progress.txt)...');
+
+  let gInitProgressAddr = null;
+  for (let attempt = 0; attempt < 30; attempt++) {
+    try {
+      const resp = await ps3mapiRequest(`/dev_hdd0/tmp/ld_init_progress.txt`, 3000);
+      if (resp && resp.length > 0) {
+        const match = resp.match(/INIT_PROGRESS_ADDR=0x([0-9A-Fa-f]+)/);
+        if (match) {
+          gInitProgressAddr = parseInt(match[1], 16);
+          log(`✓ g_init_progress address: 0x${gInitProgressAddr.toString(16)}`);
+          break;
+        }
+      }
+    } catch { }
+    await sleep(200);
+  }
+
+  for (let attempt = 0; attempt < 120; attempt++) {
+    try {
+      const paperResp = await ps3mapiRequest(`/dev_hdd0/tmp/ld_paper.txt`, 3000);
+      if (paperResp && paperResp.length > 0) {
+        const step = parseInt(paperResp.trim(), 10);
+        log(`  [progress] SPRX at step ${step}`);
+      } else {
+        log(`  [progress] ld_paper.txt not yet written (step 0)`);
+      }
+    } catch {
+      log(`  [progress] ld_paper.txt not ready yet`);
+    }
+
+    if (gInitProgressAddr) {
+      try {
+        const pidHex = '0x' + gamePid.toString(16);
+        const addrHex = '0x' + gInitProgressAddr.toString(16);
+        const memResp = await ps3mapiRequest(
+          `/ps3mapi.ps3?MEMORY%20GET%20${pidHex}%20${addrHex}%200x4`,
+          3000
+        );
+        if (memResp && memResp.length > 0) {
+          const cleanHex = memResp.replace(/[^0-9A-Fa-f]/g, '');
+          if (cleanHex.length >= 8) {
+            const directProgress = parseInt(cleanHex.substring(0, 8), 16);
+            if (directProgress !== 0) {
+              log(`  [mem] g_init_progress = ${directProgress}`);
+            }
+          }
+        }
+      } catch { }
+    }
+
+    try {
+      const ipcCheck = await ps3mapiRequest(`/dev_hdd0/tmp/ld_hooks_ready.txt`, 2000);
+      if (ipcCheck && ipcCheck.includes('STATUS=ready')) {
+        log('✓ IPC file detected — SPRX initialization complete!');
+        return true;
+      }
+    } catch { }
+
+    if (attempt % 10 === 0 && attempt > 0) {
+      log(`  ...still waiting for SPRX init (attempt ${attempt + 1}/120)`);
+    }
+
+    await sleep(1000);
+  }
+
+  log('✗ SPRX did not show progress for 120s — probable crash');
+  return false;
+}
 
 // ──────────────────────────────────────────────
 // Utility
 // ──────────────────────────────────────────────
+
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -535,7 +504,7 @@ async function main() {
   log('Step 3: Waiting for game initialization...');
   await waitForGame(gamePid);
   
-  // Step 4: Inject SPRX (Phase 1 — SPRX prepares trampolines)
+  // Step 4: Inject SPRX
   log('');
   if (NO_INJECT) {
     log('Step 4: SKIPPING injection (--no-inject flag)');
@@ -560,18 +529,23 @@ async function main() {
     return;
   }
   
-  // Step 5: Wait for IPC + install preambles (Phase 2 — Node.js writes via PS3MAPI)
+  // Step 4b: Poll init_progress
   log('');
-  log('Step 5: Polling for SPRX IPC and installing preambles...');
-  const installed = await waitForIpcAndInstall(gamePid);
-  
-  if (installed) {
+  log('Step 4b: Polling SPRX init_progress address...');
+  await pollInitProgress(gamePid);
+
+  // Step 5: Verify IPC (GOT overwrite verification only)
+  log('');
+  log('Step 5: Verifying GOT overwrites via IPC file...');
+  const verified = await waitForIpcAndVerify(gamePid);
+
+  if (verified) {
     log('');
     log('╔══════════════════════════════════════════════════╗');
-    log('║  ✓ FULL INSTALLATION COMPLETE                  ║');
+    log('║  ✓ INJECTION COMPLETE                          ║');
     log('║                                                ║');
-    log('║  Phase 1: SPRX injected — trampolines ready    ║');
-    log('║  Phase 2: Preambles installed via Ring 0       ║');
+    log('║  SPRX injected — GOT overwritten in-process    ║');
+    log('║  No PS3MAPI memory patches needed              ║');
     log('║                                                ║');
     log('║  CellUsbd hooks now active in game process.    ║');
     log('║                                                ║');
@@ -582,11 +556,10 @@ async function main() {
   } else {
     log('');
     log('╔══════════════════════════════════════════════════╗');
-    log('║  ⚠ SPRX INJECTED BUT PREAMBLES FAILED          ║');
+    log('║  ⚠ SPRX LOADED BUT IPC NOT FOUND               ║');
     log('║                                                ║');
-    log('║  The SPRX is loaded but hooks not installed.   ║');
-    log('║  The game should continue normally (no crash). ║');
-    log('║  Check /dev_hdd0/plugins/ldtoypad_boot.log.    ║');
+    log('║  The SPRX is loaded but may have crashed during ║');
+    log('║  hook initialization. Check boot.log.          ║');
     log('╚══════════════════════════════════════════════════╝');
   }
 }

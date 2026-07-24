@@ -31,15 +31,14 @@ INCLUDES := -I$(CELL_TARGET)/ppu/include
 CFLAGS := -mprx -std=gnu99 -O2 -g -fno-builtin -nodefaultlibs $(INCLUDES)
 LDFLAGS := -mprx -nodefaultlibs -llv2_stub -lfs_stub -lnet_stub -lusbd_stub
 
-# oscetool flags for SPRX signing (APP = application/PRX type)
-# Note: -5 APP is required for this oscetool version (0.9.2).
-# -5 ISLAND causes "Error: Invalid SELF type" on this toolchain.
+# oscetool flags for SPRX signing
+# Note: -5 PRX per expert recommendation for injectable modules.
 SCETOOL_FLAGS := \
 	-0 SELF -1 TRUE \
 	-2 000A -3 1010000001000003 \
 	-4 01000002 \
 	-A 0001000000000000 \
-	-5 APP \
+	-5 PRX \
 	-8 4000000000000000000000000000000000000000000000000000000000000002 \
 	-6 0004009300000000
 

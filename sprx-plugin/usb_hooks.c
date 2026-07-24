@@ -73,6 +73,19 @@ usb_hook_state_t g_usb_hooks;
 #define CELL_OK                  0
 #define CELL_USBD_ERROR_FAILED  -1
 
+/* ================================================================
+ * DIAGNOSTICS: g_init_progress extern + INIT_PROGRESS macro
+ *
+ * Declared in main.c. Updated at every init step boundary for
+ * PS3MAPI memory-polling diagnostics. Cache-coherent writes.
+ * ================================================================ */
+extern volatile uint32_t g_init_progress;
+
+#define INIT_PROGRESS(x) do { \
+    g_init_progress = (x); \
+    __asm__ __volatile__ ("dcbst 0, %0\n\tsync" :: "r"(&g_init_progress) : "memory"); \
+} while(0)
+
 /* cellUsbd function imports from -lusbd_stub.
  * We declare these as extern functions - they're resolved by the CellOS
  * PRX loader when the SPRX is loaded. We use them for:
@@ -789,6 +802,124 @@ static int find_cellusbd_functions_via_opd(void)
 #define NID_SCAN_START  0x00100000u
 #define NID_SCAN_SIZE   0x00A00000u  /* 10MB — covers game .text/.rodata */
 
+/* ================================================================
+ * PING-AND-SCAN GOT FINDER (Expert-Recommended, 2026-07-24)
+ *
+ * The game's NID table is stripped at runtime. We force our SPRX's
+ * imports to resolve, extract the real OS addresses from our GOT,
+ * and scan the game's data segment for those exact 32-bit pointers.
+ * ================================================================ */
+
+/**
+ * get_real_os_address — Parse our SPRX's GCC PRX import stub to
+ * read the resolved function address from our own GOT.
+ *
+ * GCC -mprx stubs: lis rX, got_hi / lwz rX, got_lo(rX)
+ */
+static uint32_t get_real_os_address(void *func_ptr)
+{
+    uint32_t *stub = (uint32_t *)func_ptr;
+    uint32_t w0 = stub[0];
+    uint32_t w1 = stub[1];
+    uint32_t rt, hi, lo;
+
+    DEBUG_PRINT("[USB] ping: stub=%p [0]=0x%08X [1]=0x%08X\n",
+                func_ptr, (unsigned)w0, (unsigned)w1);
+
+    /* Case 1: func_ptr points directly to stub code (lis/addis pattern).
+     * Check: first word has addis opcode (0x3C). */
+    if ((w0 & 0xFC000000) == 0x3C000000) {
+        rt = (w0 >> 21) & 0x1F;
+        hi = w0 & 0xFFFF;
+        /* lwz rX, lo(rX) — matching register */
+        if ((w1 & 0xFC000000) != 0x80000000) { DEBUG_PRINT("[USB] ping: not lwz\n"); return 0; }
+        if (((w1 >> 16) & 0x1F) != rt || ((w1 >> 21) & 0x1F) != rt) {
+            DEBUG_PRINT("[USB] ping: reg mismatch\n"); return 0;
+        }
+        lo = w1 & 0xFFFF;
+        {
+            int16_t slo = (int16_t)lo;
+            uint32_t got_addr = (hi << 16) + (uint32_t)(int32_t)slo;
+            volatile uint32_t *got_slot = (volatile uint32_t *)(uintptr_t)got_addr;
+            uint32_t resolved = *got_slot;
+            DEBUG_PRINT("[USB] ping: direct stub GOT=0x%08X -> 0x%08X\n",
+                        (unsigned)got_addr, (unsigned)resolved);
+            if (resolved >= 0x30000000 && resolved <= 0x4FFFFFFF) return resolved;
+        }
+        return 0;
+    }
+
+    /* Case 2: func_ptr points to an OPD (Official Procedure Descriptor).
+     * OPD layout: { code_addr, toc_addr, env_ptr }.
+     * The code_addr points to the actual import stub code.
+     * Follow the OPD to read the stub, then parse it. */
+    if (w0 >= 0x00010000 && w0 <= 0x4FFFFFFF) {
+        uint32_t code_addr = w0;
+        uint32_t *real_stub = (uint32_t *)(uintptr_t)code_addr;
+        uint32_t sw0 = real_stub[0];
+        uint32_t sw1 = real_stub[1];
+
+        DEBUG_PRINT("[USB] ping: OPD follow: code=0x%08X stub[0]=0x%08X stub[1]=0x%08X\n",
+                    (unsigned)code_addr, (unsigned)sw0, (unsigned)sw1);
+
+        /* Now parse the stub at code_addr for lis/addis + lwz */
+        if ((sw0 & 0xFC000000) == 0x3C000000) {
+            rt = (sw0 >> 21) & 0x1F;
+            hi = sw0 & 0xFFFF;
+            if ((sw1 & 0xFC000000) != 0x80000000) {
+                DEBUG_PRINT("[USB] ping: OPD stub w1 not lwz\n");
+                return 0;
+            }
+            if (((sw1 >> 16) & 0x1F) != rt || ((sw1 >> 21) & 0x1F) != rt) {
+                DEBUG_PRINT("[USB] ping: OPD stub reg mismatch\n");
+                return 0;
+            }
+            lo = sw1 & 0xFFFF;
+            {
+                int16_t slo = (int16_t)lo;
+                uint32_t got_addr = (hi << 16) + (uint32_t)(int32_t)slo;
+                volatile uint32_t *got_slot = (volatile uint32_t *)(uintptr_t)got_addr;
+                uint32_t resolved = *got_slot;
+                DEBUG_PRINT("[USB] ping: OPD stub GOT=0x%08X -> 0x%08X\n",
+                            (unsigned)got_addr, (unsigned)resolved);
+                if (resolved >= 0x30000000 && resolved <= 0x4FFFFFFF) return resolved;
+            }
+        } else {
+            DEBUG_PRINT("[USB] ping: OPD stub not addis/lis (0x%08X)\n", (unsigned)sw0);
+        }
+    }
+
+    return 0;
+}
+
+/**
+ * find_game_got_slot — Scan game's data segment for a known 32-bit
+ * value (the real OS address). Returns pointer to the GOT slot.
+ */
+static uint32_t *find_game_got_slot(uint32_t real_addr)
+{
+    uint32_t scan_start = 0x00880000;
+    uint32_t scan_end   = 0x02000000;
+    uint32_t *words = (uint32_t *)(uintptr_t)scan_start;
+    uint32_t nwords = (scan_end - scan_start) / 4;
+    uint32_t i;
+
+    DEBUG_PRINT("[USB] scan: searching 0x%08X-0x%08X (%u words) for 0x%08X\n",
+                (unsigned)scan_start, (unsigned)scan_end, (unsigned)nwords, (unsigned)real_addr);
+
+    for (i = 0; i < nwords; i++) {
+        if (words[i] == real_addr) {
+            DEBUG_PRINT("[USB] scan: MATCH at word %u -> GOT slot 0x%08X\n",
+                        (unsigned)i, (unsigned)(uintptr_t)&words[i]);
+            return &words[i];
+        }
+    }
+    DEBUG_PRINT("[USB] scan: no match for 0x%08X in range\n", (unsigned)real_addr);
+    return NULL;
+}
+
+/* ---- Original NID scanner (get_game_plt_stub) follows ---- */
+
 static int get_game_plt_stub(uint32_t target_nid, uint32_t *out_plt_addr)
 {
     volatile uint32_t *words = (volatile uint32_t*)(uintptr_t)NID_SCAN_START;
@@ -934,10 +1065,99 @@ int usb_hook_init(void)
      * function, *got_slot points to the real libusbd.sprx function.
      * Future Option B (PLT-pattern scanner) should replace this.
      * See get_game_plt_stub() documentation above. */
-    get_game_plt_stub(NID_CELL_USBD_INIT, &target_init);
-    get_game_plt_stub(NID_CELL_USBD_OPENPIPE, &target_openpipe);
-    get_game_plt_stub(NID_CELL_USBD_TRANSFER, &target_transfer);
-    get_game_plt_stub(NID_CELL_USBD_CLOSEPIPE, &target_closepipe);
+
+    /* Step 3: PING-AND-SCAN GOT OVERWRITE (Expert-Recommended 2026-07-24).
+     * NID tables stripped at runtime. Use our SPRX's resolved imports.
+     *
+     * 3a. Ping cellUsbd functions → force SPRX GOT resolution.
+     * 3b. Parse import stubs → extract real OS addresses (0x30XXXXXX).
+     * 3c. Scan game data segment for those addresses → GOT slots.
+     * 3d. Direct overwrite each GOT slot with trampoline + cache sync. */
+    DEBUG_PRINT("[USB] === PING-AND-SCAN GOT OVERWRITE ===\n");
+    INIT_PROGRESS(61);
+    {
+        uint32_t tramp_init     = g_usb_hooks.trampoline_base + g_usb_hooks.tramp_init_offset;
+        uint32_t tramp_openpipe = g_usb_hooks.trampoline_base + g_usb_hooks.tramp_open_pipe_offset;
+        uint32_t tramp_transfer = g_usb_hooks.trampoline_base + g_usb_hooks.tramp_transfer_offset;
+        uint32_t tramp_closepipe = g_usb_hooks.trampoline_base + g_usb_hooks.tramp_close_pipe_offset;
+        uint32_t real_init = 0, real_open = 0, real_transfer = 0, real_close = 0;
+        uint32_t *got_init = NULL, *got_open = NULL, *got_transfer = NULL, *got_close = NULL;
+        int hooks_installed = 0;
+
+        /* 3a: Ping to force lazy-binding resolution */
+        DEBUG_PRINT("[USB] ping: forcing SPRX import resolution...\n");
+        cellUsbdInit();
+        cellUsbdClosePipe(0xFFFFFFFF);
+
+        /* 3b: Extract real OS addresses from our SPRX's resolved GOT */
+        INIT_PROGRESS(62);
+        real_init     = get_real_os_address((void*)cellUsbdInit);
+        real_open     = get_real_os_address((void*)cellUsbdOpenPipe);
+        real_transfer = get_real_os_address((void*)cellUsbdInterruptTransfer);
+        real_close    = get_real_os_address((void*)cellUsbdClosePipe);
+
+        DEBUG_PRINT("[USB] ping result: init=0x%08X open=0x%08X xfer=0x%08X close=0x%08X\n",
+                    (unsigned)real_init, (unsigned)real_open,
+                    (unsigned)real_transfer, (unsigned)real_close);
+
+        if (!real_init || !real_open || !real_transfer || !real_close) {
+            DEBUG_ERROR("[USB] FAIL: Could not resolve %d/4 SPRX imports\n",
+                        (real_init?1:0)+(real_open?1:0)+(real_transfer?1:0)+(real_close?1:0));
+        } else {
+            /* 3c: Scan game memory for matching GOT slots */
+            INIT_PROGRESS(63);
+            DEBUG_PRINT("[USB] scan: searching game data for resolved addresses...\n");
+            got_init     = find_game_got_slot(real_init);
+            got_open     = find_game_got_slot(real_open);
+            got_transfer = find_game_got_slot(real_transfer);
+            got_close    = find_game_got_slot(real_close);
+
+            DEBUG_PRINT("[USB] scan result: init=%p open=%p xfer=%p close=%p\n",
+                        (void*)got_init, (void*)got_open,
+                        (void*)got_transfer, (void*)got_close);
+
+            /* 3d: Overwrite each GOT slot + cache sync */
+            INIT_PROGRESS(64);
+            if (got_init) {
+                target_init = (uint32_t)(uintptr_t)got_init;
+                DEBUG_PRINT("[USB] GOT INIT: *0x%08X = 0x%08X (was 0x%08X)\n",
+                            (unsigned)target_init, (unsigned)tramp_init, (unsigned)real_init);
+                *got_init = tramp_init;
+                __asm__ __volatile__ ("dcbst 0, %0\n\tsync\n\ticbi 0, %0\n\tisync" :: "r"(got_init) : "memory");
+                hooks_installed++;
+            } else { DEBUG_ERROR("[USB] GOT INIT: not found\n"); }
+
+            if (got_open) {
+                target_openpipe = (uint32_t)(uintptr_t)got_open;
+                DEBUG_PRINT("[USB] GOT OPEN: *0x%08X = 0x%08X\n",
+                            (unsigned)target_openpipe, (unsigned)tramp_openpipe);
+                *got_open = tramp_openpipe;
+                __asm__ __volatile__ ("dcbst 0, %0\n\tsync\n\ticbi 0, %0\n\tisync" :: "r"(got_open) : "memory");
+                hooks_installed++;
+            } else { DEBUG_ERROR("[USB] GOT OPEN: not found\n"); }
+
+            if (got_transfer) {
+                target_transfer = (uint32_t)(uintptr_t)got_transfer;
+                DEBUG_PRINT("[USB] GOT XFER: *0x%08X = 0x%08X\n",
+                            (unsigned)target_transfer, (unsigned)tramp_transfer);
+                *got_transfer = tramp_transfer;
+                __asm__ __volatile__ ("dcbst 0, %0\n\tsync\n\ticbi 0, %0\n\tisync" :: "r"(got_transfer) : "memory");
+                hooks_installed++;
+            } else { DEBUG_ERROR("[USB] GOT XFER: not found\n"); }
+
+            if (got_close) {
+                target_closepipe = (uint32_t)(uintptr_t)got_close;
+                DEBUG_PRINT("[USB] GOT CLOSE: *0x%08X = 0x%08X\n",
+                            (unsigned)target_closepipe, (unsigned)tramp_closepipe);
+                *got_close = tramp_closepipe;
+                __asm__ __volatile__ ("dcbst 0, %0\n\tsync\n\ticbi 0, %0\n\tisync" :: "r"(got_close) : "memory");
+                hooks_installed++;
+            } else { DEBUG_ERROR("[USB] GOT CLOSE: not found\n"); }
+
+            DEBUG_PRINT("[USB] %d/4 GOT slots overwritten via ping-and-scan\n", hooks_installed);
+        }
+    }
+    INIT_PROGRESS(67);
 
     /* Step 4: Write IPC file for Node.js orchestrator.
      *

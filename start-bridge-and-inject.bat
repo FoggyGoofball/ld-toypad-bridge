@@ -54,7 +54,7 @@ echo ============================================================
 echo  All systems starting. The injector window will:
 echo    1. Wait for LEGO Dimensions to launch
 echo    2. Inject the SPRX into the game process
-echo    3. Install USB hooks (Phase 2 preambles)
+echo    3. SPRX auto-installs USB hooks via GOT overwrite
 echo ============================================================
 echo.
 echo  Server log: %LOG_FILE%
