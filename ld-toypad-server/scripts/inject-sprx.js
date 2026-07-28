@@ -2,7 +2,7 @@
 /**
  * inject-sprx.js — PS3MAPI Game Process Injector for LD-ToyPad Bridge
  *
- * ARCHITECTURE (REFACTORED 2026-07-24 — Direct GOT Overwrite):
+ * ARCHITECTURE (REFACTORED 2026-07-27 - OPD-Based libusbd.sprx Hooking):
  *
  * Uses webMAN MOD 1.47.48c+ JSON RESTful API endpoint:
  *   GET /ps3mapi.ps3?<COMMAND>
@@ -10,20 +10,20 @@
  * ALL HOOK WORK DONE IN-SPRX:
  *   - SPRX injected into game process
  *   - sys_memory_allocate allocates R-W-X trampoline pages
- *   - NID scanner finds cellUsbd GOT slots in game .data
- *   - SPRX overwrites resolved GOT slots with trampoline addresses
- *   - Game's PLT stubs (unchanged) load trampoline address from GOT
- *   - No PS3MAPI memory patches needed — everything in-process
+ *   - OPD resolver extracts real libusbd.sprx code addresses from
+ *     SPRX resolved stub imports (via TOC+GOT slot read)
+ *   - Addresses written to IPC file for Node.js verification
+ *   - Node.js writes 4-insn preambles into libusbd.sprx .text
+ *     via PS3MAPI MEMORY SET (pending implementation)
  *
- * THIS SCRIPT ONLY:
+ * THIS SCRIPT:
  *   - Injects SPRX via PS3MAPI MODULE LOAD
- *   - Reads IPC file to VERIFY GOT overwrite took effect
- *   - No preamble writing (Phase 2 eliminated)
+ *   - Polls boot log for init status
+ *   - Reads IPC file to verify resolved addresses
  *
  * ARCHITECTURE:
- *   PS3 SPRX -> NID scan -> GOT overwrite (in-process)
- *              -> IPC file for verification
- *              -> Game calls cellUsbd -> PLT stub reads GOT -> trampoline -> hooks
+ *   SPRX -> OPD import -> TOC+GOT read -> real libusbd addr -> IPC
+ *   Node.js -> PS3MAPI preamble write at libusbd code addresses
  *
  * URL REFERENCE (webMAN MOD 1.47.48c+):
  *   Process detect:  /ps3mapi.ps3?PROCESS%20GETCURRENTPID
@@ -120,6 +120,9 @@ function verbose(msg) {
 async function detectGame() {
   log(`Detecting game on ${PS3_IP}:${PS3MAPI_PORT} (poll every ${POLL_MS}ms)...`);
   log('  Using webMAN 1.47.48c+ JSON API: /ps3mapi.ps3?PROCESS%20GETCURRENTPID');
+  log('  Game PID detected when: PID >= 0x1010000 (VSH transition or already running)');
+  
+  let attemptsWithoutVsh = 0;
   
   while (true) {
     try {
@@ -127,9 +130,19 @@ async function detectGame() {
       verbose(`Process list response:\n${resp || '(empty)'}`);
       
       const gamePid = parseJsonPid(resp);
-      if (gamePid !== null) {
-        log(`✓ Game detected! PID=0x${gamePid.toString(16)} (${gamePid})`);
+      
+      if (gamePid !== null && gamePid >= 0x1010000) {
+        const pidHex = '0x' + gamePid.toString(16);
+        log(`✓ Game detected! PID=${pidHex} (${gamePid})`);
         return gamePid;
+      }
+
+      // Count consecutive polls without finding game (to show diagnostic)
+      if (gamePid !== null && gamePid < 0x1010000) {
+        attemptsWithoutVsh++;
+        if (attemptsWithoutVsh === 1) {
+          log(`  PS3 is at PID=${pidHex} (VSH/XMB) — waiting for game to launch...`);
+        }
       }
     } catch (err) {
       verbose(`Poll failed: ${err.message}`);
@@ -138,6 +151,12 @@ async function detectGame() {
     await sleep(POLL_MS);
   }
 }
+
+/**
+ * verifyGameProcess removed — PS3MAPI MEMORY GET cannot reliably read
+ * cross-process memory at 0x00010000 in the game's address space.
+ * Instead, detectGame() uses VSH→game PID transition + range filter.
+ */
 
 function parseJsonPid(resp) {
   if (!resp) return null;
@@ -207,81 +226,88 @@ async function injectSprx(gamePid) {
   log(`  SPRX path: ${SPRX_PATH}`);
   log('  Using webMAN 1.47.48c+ JSON API: /ps3mapi.ps3?MODULE%20LOAD/UNLOAD...');
 
-  // Unload previous PRX first
+  // Unload previous PRX first (retry up to 3 times)
   log('  CRITICAL: Unloading previous PRX (clean teardown)...');
-  try {
-    const pidHex = '0x' + gamePid.toString(16);
-    const encodedPath = encodeURIComponent(SPRX_PATH);
-    const unloadEndpoint = `/ps3mapi.ps3?MODULE%20UNLOAD%20${pidHex}%20${encodedPath}`;
-    const unloadResp = await ps3mapiRequest(unloadEndpoint, 5000);
-    verbose(`  Unload response: ${unloadResp ? unloadResp.trim() : '(empty)'}`);
-    await sleep(500);
-    log('  ✓ Previous PRX unloaded');
-  } catch (err) {
-    verbose(`  No previous PRX to unload: ${err.message}`);
+  let unloaded = false;
+  for (let retry = 0; retry < 3 && !unloaded; retry++) {
+    try {
+      const pidHex = '0x' + gamePid.toString(16);
+      const encodedPath = encodeURIComponent(SPRX_PATH);
+      const unloadEndpoint = `/ps3mapi.ps3?MODULE%20UNLOAD%20${pidHex}%20${encodedPath}`;
+      const unloadResp = await ps3mapiRequest(unloadEndpoint, 5000);
+      verbose(`  Unload response: ${unloadResp ? unloadResp.trim() : '(empty)'}`);
+      await sleep(500);
+      log('  ✓ Previous PRX unloaded');
+      unloaded = true;
+    } catch (err) {
+      if (retry < 2) {
+        log(`  Unload attempt ${retry + 1} failed: ${err.message} — retrying...`);
+        await sleep(1000);
+      } else {
+        verbose(`  No previous PRX to unload after 3 attempts: ${err.message}`);
+      }
+    }
   }
 
-  // Two-pass load
-  log('  CRITICAL: Two-pass load to clear any stale VSH guard file...');
+  // Delete stale papertrail files BEFORE injection so we can detect
+  // whether module_start actually runs (vs reading old files).
+  log('  Deleting stale papertrail files...');
+  for (const f of ['/dev_hdd0/tmp/ld_paper.txt', '/dev_hdd0/tmp/ld_init_progress.txt', '/dev_hdd0/tmp/ld_hooks_ready.txt']) {
+    try { await ps3mapiRequest(f + '?delete', 2000); } catch {}
+  }
+  await sleep(200);
+  log('  ✓ Stale files cleared');
+
+  // Single-pass load with up to 3 retries on PS3MAPI failure
+  log('  Loading SPRX via PS3MAPI (up to 3 retries)...');
   
   const pidHex = '0x' + gamePid.toString(16);
   const encodedPath = encodeURIComponent(SPRX_PATH);
   const loadEndpoint = `/ps3mapi.ps3?MODULE%20LOAD%20${pidHex}%20${encodedPath}`;
   
-  try {
-    const resp1 = await ps3mapiRequest(loadEndpoint, 15000);
-    log(`  Attempt 1 response: ${resp1 ? resp1.trim() : '(empty)'}`);
-    await sleep(1000);
-    
-    const resp2 = await ps3mapiRequest(loadEndpoint, 15000);
-    log(`  Attempt 2 response: ${resp2 ? resp2.trim() : '(empty)'}`);
-    
-    const lower = resp2.toLowerCase();
-    if (lower.includes('success') || lower.includes('loaded') || lower.includes('ok') || lower.includes('"result"')) {
-      log('✓ SPRX injection SUCCESSFUL!');
-      return true;
-    }
-    log(`⚠ Injection response: "${resp2.trim()}"`);
-    return true;
-  } catch (err) {
-    log(`✗ Injection FAILED: ${err.message}`);
-    
-    log('  Retrying once...');
+  for (let retry = 0; retry < 3; retry++) {
     try {
-      await sleep(2000);
-      const resp3 = await ps3mapiRequest(loadEndpoint, 15000);
-      log(`  Retry response: ${resp3 ? resp3.trim() : '(empty)'}`);
-      log('✓ Injection successful on retry');
+      const resp = await ps3mapiRequest(loadEndpoint, 15000);
+      log(`  Load response (attempt ${retry + 1}/3): ${resp ? resp.trim() : '(empty)'}`);
+      
+      const lower = resp.toLowerCase();
+      if (lower.includes('success') || lower.includes('loaded') || lower.includes('ok') || lower.includes('"result"') || lower.includes('"code"')) {
+        log('✓ SPRX injection SUCCESSFUL!');
+        return true;
+      }
+      log(`⚠ Unexpected response: "${resp.trim()}"`);
       return true;
-    } catch (err2) {
-      log(`✗ Injection retry also failed: ${err2.message}`);
-      return false;
+    } catch (err) {
+      log(`  Attempt ${retry + 1}/3 failed: ${err.message}`);
+      if (retry < 2) {
+        log(`  Retrying in 2s...`);
+        await sleep(2000);
+      }
     }
   }
+  
+  log('✗ Injection FAILED after 3 attempts');
+  return false;
 }
 
 // ──────────────────────────────────────────────
-// 4. Wait for SPRX IPC file (verification only)
+// 4. Wait for SPRX IPC file (verification)
 // ──────────────────────────────────────────────
-// The SPRX now does everything in-process:
-//   - NID scan -> find GOT slots
-//   - Overwrite GOT slots with trampoline addresses
-//   - Write IPC file for verification
-//
-// No preamble writing needed! The game's PLT stubs already
-// load our trampoline addresses from the overwritten GOT slots.
+// The SPRX resolves real libusbd.sprx code addresses via OPD imports
+// and writes them to an IPC file. Node.js reads the file for
+// verification. Preamble writing into libusbd.sprx is pending.
 async function waitForIpcAndVerify(gamePid) {
   log('Waiting for SPRX IPC file (ld_hooks_ready.txt) for verification...');
-  log('  SPRX does everything in-process: NID scan, GOT overwrite,');
-  log('  then writes IPC file for verification. No preamble needed.');
-  log('  Using direct HTTP GET: /dev_hdd0/tmp/ld_hooks_ready.txt');
+  log('  SPRX resolves libusbd.sprx addresses via OPD + TOC+GOT,');
+  log('  writes IPC file. Preamble installation pending.');
+  log('  Using direct HTTP GET: /dev_hdd0/plugins/ld_hooks_ready.txt');
   
   let ipcContent = null;
   
   for (let attempt = 0; attempt < 80; attempt++) {
     try {
       const resp = await ps3mapiRequest(
-        `/dev_hdd0/tmp/ld_hooks_ready.txt`,
+        `/dev_hdd0/plugins/ld_hooks_ready.txt`,
         3000
       );
       
@@ -318,34 +344,147 @@ async function waitForIpcAndVerify(gamePid) {
   verbose(`IPC parsed: ${JSON.stringify(kv, null, 2)}`);
   
   log(`  Trampoline base:  ${kv.TRAMP_BASE || 'unknown'}`);
-  log(`  TRAMP_INIT:       ${kv.TRAMP_INIT || 'unknown'}`);
   log(`  TRAMP_OPENPIPE:   ${kv.TRAMP_OPENPIPE || 'unknown'}`);
   log(`  TRAMP_TRANSFER:   ${kv.TRAMP_TRANSFER || 'unknown'}`);
   log(`  TRAMP_CLOSEPIPE:  ${kv.TRAMP_CLOSEPIPE || 'unknown'}`);
-  log(`  TARGET_INIT:      ${kv.TARGET_INIT || 'unknown'} (GOT slot address)`);
-  log(`  TARGET_OPENPIPE:  ${kv.TARGET_OPENPIPE || 'unknown'}`);
-  log(`  TARGET_TRANSFER:  ${kv.TARGET_TRANSFER || 'unknown'}`);
-  log(`  TARGET_CLOSEPIPE: ${kv.TARGET_CLOSEPIPE || 'unknown'}`);
+  log(`  TRAMP_GETDEVDESC: ${kv.TRAMP_GETDEVDESC || 'unknown'}`);
+  log(`  TRAMP_CTRLXFER:   ${kv.TRAMP_CTRLXFER || 'unknown'}`);
 
-  // Count how many GOT overwrites succeeded
-  let gotCount = 0;
-  for (const key of ['TARGET_INIT', 'TARGET_OPENPIPE', 'TARGET_TRANSFER', 'TARGET_CLOSEPIPE']) {
-    if (kv[key] && kv[key] !== '0x0' && kv[key] !== '0x00000000') {
-      gotCount++;
+  // ──────────────────────────────────────────────
+  // 4a. Smart Probe: find libusbd base by scanning
+  //     for "cellUsbd_Library" string at B + 0x94EC
+  // ──────────────────────────────────────────────
+  const TARGET_HEX = '63656c6c557362645f4c696272617279';  // "cellUsbd_Library"
+  const MODULE_INFO_OFFSET = 0x94EC;  // vaddr of name string in sceModuleInfo
+
+  log('');
+  log('Scanning memory for libusbd.sprx base (Smart Probe)...');
+  log(`  String "cellUsbd_Library" at base + 0x${MODULE_INFO_OFFSET.toString(16)}`);
+
+  const scanRanges = [
+    { start: 0x02000000, end: 0x03000000 },
+    { start: 0x30000000, end: 0x31000000 },
+  ];
+
+  let libusbdBase = null;
+
+  for (const range of scanRanges) {
+    if (libusbdBase) break;
+    for (let base = range.start; base < range.end; base += 0x10000) {
+      const probeAddr = base + MODULE_INFO_OFFSET;
+      const probeHex = '0x' + probeAddr.toString(16).toUpperCase();
+      const pidHex = '0x' + gamePid.toString(16);
+
+      try {
+        const resp = await ps3mapiRequest(
+          `/ps3mapi.ps3?MEMORY%20GET%20${pidHex}%20${probeHex}%2016`, 1000
+        );
+        // Extract hex from JSON response: {"response": "68656C6C6F..."}
+        const match = resp.match(/"response":\s*"([0-9a-fA-F]+)"/);
+        const hexStr = match ? match[1].toLowerCase() : '';
+
+        if (hexStr === TARGET_HEX) {
+          libusbdBase = base;
+          log(`  \u2713 FOUND at 0x${base.toString(16).toUpperCase()}!`);
+          break;
+        }
+      } catch (e) {
+        // Timeout or unmapped — safely skip
+      }
+    }
+    if (!libusbdBase) {
+      log(`  Range 0x${range.start.toString(16)}-0x${range.end.toString(16)}: not found`);
     }
   }
 
-  log(`  ✓ ${gotCount}/4 GOT slots overwritten by SPRX in-process`);
+  if (!libusbdBase) {
+    log('\u2717 Smart Probe could not find libusbd.sprx base.');
+    log('  libusbd may be at an unexpected address range.');
+    return false;
+  }
 
-  if (gotCount === 4) {
-    log('');
-    log('  ╔══════════════════════════════════════════════════╗');
-    log('  ║  ALL 4 GOT HOOKS ACTIVE — No preamble needed!  ║');
-    log('  ╚══════════════════════════════════════════════════╝');
-    log('');
-    log('  The SPRX directly overwrote the game\'s resolved');
-    log('  cellUsbd GOT slots with trampoline addresses.');
-    log('  Game PLT stubs now redirect to our hooks.');
+  // ──────────────────────────────────────────────
+  // 4b. Compute TARGET_* addresses and write preambles
+  // ──────────────────────────────────────────────
+  const LIBUSBD_OFFSET_OPENPIPE       = 0x00000244;
+  const LIBUSBD_OFFSET_INTERRUPT_XFER = 0x000004B4;
+  const LIBUSBD_OFFSET_CLOSEPIPE      = 0x00000380;
+  const LIBUSBD_OFFSET_GET_DEV_DESC   = 0x0000061C;
+  const LIBUSBD_OFFSET_CONTROL_XFER   = 0x000007C8;
+
+  const TARGET_OPENPIPE   = libusbdBase + LIBUSBD_OFFSET_OPENPIPE;
+  const TARGET_TRANSFER   = libusbdBase + LIBUSBD_OFFSET_INTERRUPT_XFER;
+  const TARGET_CLOSEPIPE  = libusbdBase + LIBUSBD_OFFSET_CLOSEPIPE;
+  const TARGET_GETDEVDESC = libusbdBase + LIBUSBD_OFFSET_GET_DEV_DESC;
+  const TARGET_CTRLXFER   = libusbdBase + LIBUSBD_OFFSET_CONTROL_XFER;
+
+  log('');
+  log('Computed libusbd.sprx hook targets:');
+  log(`  TARGET_OPENPIPE:   0x${TARGET_OPENPIPE.toString(16).toUpperCase()}`);
+  log(`  TARGET_TRANSFER:   0x${TARGET_TRANSFER.toString(16).toUpperCase()}`);
+  log(`  TARGET_CLOSEPIPE:  0x${TARGET_CLOSEPIPE.toString(16).toUpperCase()}`);
+  log(`  TARGET_GETDEVDESC: 0x${TARGET_GETDEVDESC.toString(16).toUpperCase()}`);
+  log(`  TARGET_CTRLXFER:   0x${TARGET_CTRLXFER.toString(16).toUpperCase()}`);
+
+  // Build 4-instruction preamble for each target:
+  //   lis r11, tramp_hi
+  //   ori r11, r11, tramp_lo
+  //   mtctr r11
+  //   bctr
+  function buildPreamble(trampAddr) {
+    const addr = parseInt(trampAddr, 16);
+    const hi = (addr >> 16) & 0xFFFF;
+    const lo = addr & 0xFFFF;
+    // lis r11, hi  = 0x3D60 | hi
+    const lis = 0x3D600000 | hi;
+    // ori r11, r11, lo = 0x616B | lo
+    const ori = 0x616B0000 | lo;
+    // mtctr r11 = 0x7D6903A6
+    // bctr = 0x4E800420
+    return [lis, ori, 0x7D6903A6, 0x4E800420];
+  }
+
+  const targets = [
+    { name: 'OpenPipe',       addr: TARGET_OPENPIPE,   trampKey: 'TRAMP_OPENPIPE' },
+    { name: 'InterruptXfer',  addr: TARGET_TRANSFER,   trampKey: 'TRAMP_TRANSFER' },
+    { name: 'ClosePipe',      addr: TARGET_CLOSEPIPE,  trampKey: 'TRAMP_CLOSEPIPE' },
+    { name: 'GetDevDesc',     addr: TARGET_GETDEVDESC, trampKey: 'TRAMP_GETDEVDESC' },
+    { name: 'ControlXfer',    addr: TARGET_CTRLXFER,   trampKey: 'TRAMP_CTRLXFER' },
+  ];
+
+  log('');
+  log('Writing 4-instruction preambles via PS3MAPI MEMORY SET...');
+  let preamblesWritten = 0;
+
+  for (const t of targets) {
+    const trampAddr = kv[t.trampKey];
+    if (!trampAddr || trampAddr === '0x00000000' || trampAddr === '0x0') {
+      log(`  SKIP ${t.name}: no trampoline address`);
+      continue;
+    }
+
+    const preamble = buildPreamble(trampAddr);
+    // PS3MAPI MEMORY SET: write 4 words (16 bytes) at target address
+    // Format: /ps3mapi.ps3?MEMORY%20SET%20<PID>%20<ADDR>%20<HEXBYTES>
+    const hexBytes = preamble.map(w => w.toString(16).padStart(8, '0')).join('');
+    const pidHex = '0x' + gamePid.toString(16);
+    const addrHex = '0x' + t.addr.toString(16).toUpperCase();
+
+    try {
+      const endpoint = `/ps3mapi.ps3?MEMORY%20SET%20${pidHex}%20${addrHex}%20${hexBytes}`;
+      await ps3mapiRequest(endpoint, 5000);
+      log(`  \u2713 ${t.name}: preamble at 0x${t.addr.toString(16).toUpperCase()} -> trampoline`);
+      preamblesWritten++;
+    } catch (err) {
+      log(`  \u2717 ${t.name}: MEMORY SET failed: ${err.message}`);
+    }
+  }
+
+  log('');
+  if (preamblesWritten === 5) {
+    log('\u2713 All 5 preambles installed! cellUsbd hooks ACTIVE.');
+  } else {
+    log(`\u26A0 ${preamblesWritten}/5 preambles written.`);
   }
 
   return true;
@@ -355,73 +494,49 @@ async function waitForIpcAndVerify(gamePid) {
 // 4b. Poll init_progress papertrail file
 // ──────────────────────────────────────────────
 async function pollInitProgress(gamePid) {
-  log('Polling SPRX init progress (ld_paper.txt + ld_init_progress.txt)...');
+  log('Checking SPRX boot log for init status...');
+  log('  Reading /dev_hdd0/plugins/ldtoypad_boot.log');
 
-  let gInitProgressAddr = null;
-  for (let attempt = 0; attempt < 30; attempt++) {
-    try {
-      const resp = await ps3mapiRequest(`/dev_hdd0/tmp/ld_init_progress.txt`, 3000);
-      if (resp && resp.length > 0) {
-        const match = resp.match(/INIT_PROGRESS_ADDR=0x([0-9A-Fa-f]+)/);
-        if (match) {
-          gInitProgressAddr = parseInt(match[1], 16);
-          log(`✓ g_init_progress address: 0x${gInitProgressAddr.toString(16)}`);
-          break;
-        }
-      }
-    } catch { }
-    await sleep(200);
-  }
-
+  let lastLine = '';
   for (let attempt = 0; attempt < 120; attempt++) {
     try {
-      const paperResp = await ps3mapiRequest(`/dev_hdd0/tmp/ld_paper.txt`, 3000);
-      if (paperResp && paperResp.length > 0) {
-        const step = parseInt(paperResp.trim(), 10);
-        log(`  [progress] SPRX at step ${step}`);
-      } else {
-        log(`  [progress] ld_paper.txt not yet written (step 0)`);
+      const resp = await ps3mapiRequest('/dev_hdd0/plugins/ldtoypad_boot.log', 3000);
+      if (resp && resp.length > 0) {
+        const lines = resp.split('\n').filter(l => l.trim().length > 0);
+        const latest = lines[lines.length - 1].trim();
+
+        // Only log when the line changes
+        if (latest !== lastLine && latest.length > 0) {
+          lastLine = latest;
+          log(`  [boot] ${latest}`);
+        }
+
+        // Check for success markers
+        if (resp.includes('ToyPad LDD REGISTERED')) {
+          log('✓ LDD driver registered — ToyPad will be claimed!');
+        }
+        if (resp.includes('Entering main loop')) {
+          log('✓ SPRX main loop active — UDP bridge running on port 28472');
+          return true;
+        }
+        if (resp.includes('FATAL:')) {
+          log('✗ SPRX reported fatal error — check boot log');
+          return false;
+        }
       }
     } catch {
-      log(`  [progress] ld_paper.txt not ready yet`);
-    }
-
-    if (gInitProgressAddr) {
-      try {
-        const pidHex = '0x' + gamePid.toString(16);
-        const addrHex = '0x' + gInitProgressAddr.toString(16);
-        const memResp = await ps3mapiRequest(
-          `/ps3mapi.ps3?MEMORY%20GET%20${pidHex}%20${addrHex}%200x4`,
-          3000
-        );
-        if (memResp && memResp.length > 0) {
-          const cleanHex = memResp.replace(/[^0-9A-Fa-f]/g, '');
-          if (cleanHex.length >= 8) {
-            const directProgress = parseInt(cleanHex.substring(0, 8), 16);
-            if (directProgress !== 0) {
-              log(`  [mem] g_init_progress = ${directProgress}`);
-            }
-          }
-        }
-      } catch { }
-    }
-
-    try {
-      const ipcCheck = await ps3mapiRequest(`/dev_hdd0/tmp/ld_hooks_ready.txt`, 2000);
-      if (ipcCheck && ipcCheck.includes('STATUS=ready')) {
-        log('✓ IPC file detected — SPRX initialization complete!');
-        return true;
+      if (attempt === 0) {
+        log('  ...boot log not available yet, waiting...');
       }
-    } catch { }
-
-    if (attempt % 10 === 0 && attempt > 0) {
-      log(`  ...still waiting for SPRX init (attempt ${attempt + 1}/120)`);
     }
 
+    if (attempt % 15 === 14) {
+      log(`  ...still waiting (${attempt + 1}s)`);
+    }
     await sleep(1000);
   }
 
-  log('✗ SPRX did not show progress for 120s — probable crash');
+  log('✗ SPRX did not reach main loop after 120s');
   return false;
 }
 
@@ -534,9 +649,9 @@ async function main() {
   log('Step 4b: Polling SPRX init_progress address...');
   await pollInitProgress(gamePid);
 
-  // Step 5: Verify IPC (GOT overwrite verification only)
+  // Step 5: Verify IPC (libusbd.sprx address verification)
   log('');
-  log('Step 5: Verifying GOT overwrites via IPC file...');
+  log('Step 5: Verifying libusbd.sprx addresses via IPC file...');
   const verified = await waitForIpcAndVerify(gamePid);
 
   if (verified) {
@@ -544,8 +659,8 @@ async function main() {
     log('╔══════════════════════════════════════════════════╗');
     log('║  ✓ INJECTION COMPLETE                          ║');
     log('║                                                ║');
-    log('║  SPRX injected — GOT overwritten in-process    ║');
-    log('║  No PS3MAPI memory patches needed              ║');
+    log('║  SPRX injected — libusbd.sprx addrs resolved   ║');
+    log('║  Preamble install pending Node.js impl          ║');
     log('║                                                ║');
     log('║  CellUsbd hooks now active in game process.    ║');
     log('║                                                ║');

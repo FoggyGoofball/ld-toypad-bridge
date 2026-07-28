@@ -19,7 +19,7 @@ $CFLAGS = @(
 
 $LDFLAGS = @(
     "-mprx", "-nodefaultlibs",
-    "-llv2_stub", "-lfs_stub", "-lnet_stub", "-lusbd_stub"
+    "-llv2_stub", "-lfs_stub", "-lnet_stub", "-lusbd_stub", "-lsysmodule_stub"
 )
 
 # Clean and prepare temp directory
@@ -28,11 +28,11 @@ New-Item -ItemType Directory -Force -Path "$Tmp\obj" | Out-Null
 New-Item -ItemType Directory -Force -Path "$Tmp\build" | Out-Null
 
 # Copy all required source files
-$cSrcFiles = @("main.c","compat.c","network.c","debug.c","toypad_state.c","usb_hooks.c","trampoline_gen.c")
+$cSrcFiles = @("main.c","compat.c","network.c","debug.c","toypad_state.c","usb_hooks.c","trampoline_gen.c","ldd_driver.c","opd_hooks.c")
 foreach ($f in $cSrcFiles) {
     Copy-Item "$SrcRoot\$f" "$Tmp\$f" -Force
 }
-$hdrFiles = @("network.h","debug.h","toypad_state.h","usb_hooks.h","trampoline_gen.h")
+$hdrFiles = @("network.h","debug.h","toypad_state.h","usb_hooks.h","trampoline_gen.h","ldd_driver.h","opd_hooks.h")
 foreach ($f in $hdrFiles) {
     Copy-Item "$SrcRoot\$f" "$Tmp\$f" -Force
 }

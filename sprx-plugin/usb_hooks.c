@@ -39,6 +39,7 @@
 #include <stddef.h>
 #include <sys/memory.h>
 #include <sys/timer.h>
+#include <sys/prx.h>
 #include <cell/cell_fs.h>
 
 /* Sony SDK: sys_memory_allocate is in <sys/memory.h>
@@ -46,29 +47,49 @@
  * 0xFFFFFFFF is the default container ID on CellOS. */
 #define SYS_MEMORY_CONTAINER_DEFAULT  ((uint32_t)0xFFFFFFFFu)
 
-/* NOTE: The SDK's <sys/memory.h> defines SYS_MEMORY_PROT_* as 64-bit mapping
- * attributes (SYS_MEMORY_PROT_READ_ONLY, SYS_MEMORY_PROT_READ_WRITE). There is
- * NO exec flag. Memory from sys_memory_allocate() is already readable and
- * executable by PPU threads. Do NOT redefine these flags here. */
+/* CellOS OPD (Official Procedure Descriptor) structure.
+ * On PowerPC 32-bit CellOS, function pointers point to a 12-byte OPD
+ * struct containing: code address, TOC address, environment pointer. */
+typedef struct {
+    uint32_t code_addr;    /* Ptr to .text code */
+    uint32_t toc_addr;     /* TOC base value (loaded into r2 on call) */
+    uint32_t env_ptr;      /* Environment pointer (unused, set to 0) */
+} ppc_opd_t;
+
 /* Forward declaration for hook integrity checker */
 static int hook_verify_preamble(uint32_t target_addr, const char *name);
 
 /* NID values for cellUsbd functions.
  * These are 32-bit big-endian NIDs used in the PS3's import stub table
  * (.rodata triplet format: { NID, reserved, GOT_ptr }).
- * Verified against LEGO Dimensions game memory dumps. */
-#define NID_CELL_USBD_INIT          0x7F5F00D3U
+ * Verified against LEGO Dimensions game memory dumps.
+ *
+ * NOTE: cellUsbdInit NID removed (expert recommendation 2026-07-26).
+ * Hooking Init can destabilize the active USB stack if called after
+ * the game has already initialized USB. The game won't call Init again
+ * at T+60s, so there's no benefit to intercepting it. */
 #define NID_CELL_USBD_OPENPIPE      0x1AB6D80BU
 #define NID_CELL_USBD_TRANSFER      0x7B4436CEU  /* cellUsbdInterruptTransfer */
 #define NID_CELL_USBD_CLOSEPIPE     0x2F82F1A5U
+#define NID_CELL_USBD_GET_DEVICE_DESC 0x9C8426F7U
+#define NID_CELL_USBD_CONTROL_TRANSFER 0x3219460DU
 
 #include "usb_hooks.h"
 #include "network.h"
 #include "debug.h"
 #include "trampoline_gen.h"
+#include "toypad_state.h"
 
 /* Global state */
 usb_hook_state_t g_usb_hooks;
+
+/* Real libusbd.sprx function addresses (for passthrough, skipping preamble) */
+static uint32_t g_real_openpipe_addr = 0;
+static uint32_t g_real_transfer_addr = 0;
+static uint32_t g_real_closepipe_addr = 0;
+
+/* libusbd.sprx runtime base address (from sys_prx_get_module_id_by_name) */
+static uint32_t g_libusbd_base = 0;
 
 #define CELL_OK                  0
 #define CELL_USBD_ERROR_FAILED  -1
@@ -81,55 +102,43 @@ usb_hook_state_t g_usb_hooks;
  * ================================================================ */
 extern volatile uint32_t g_init_progress;
 
+/* papertrail — defined in main.c, writes to boot log (single string only) */
+extern int papertrail(const char *msg);
+
 #define INIT_PROGRESS(x) do { \
     g_init_progress = (x); \
     __asm__ __volatile__ ("dcbst 0, %0\n\tsync" :: "r"(&g_init_progress) : "memory"); \
 } while(0)
 
 /* cellUsbd function imports from -lusbd_stub.
- * We declare these as extern functions - they're resolved by the CellOS
- * PRX loader when the SPRX is loaded. We use them for:
- *   1. OPD extraction (get resolved code addresses)
- *   2. Direct passthrough calls (non-ToyPad USB traffic)
- *
- * IMPORTANT: When calling these functions from C, the compiler uses the
- * SPRX's own GOT/TOC. The game's GOT is never touched. This is safe. */
-extern int cellUsbdInit(void);
+ * NOTE: cellUsbdInit removed — calling it after game USB init is dangerous. */
 extern int cellUsbdOpenPipe(void *pipe_handle, uint32_t dev_id, void *ep_descriptor);
 extern int cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf, uint32_t *len,
                                      void *done_cb, void *arg);
 extern int cellUsbdClosePipe(uint32_t pipe_handle);
-
-/* CellOS OPD (Official Procedure Descriptor) structure.
- * On PowerPC 32-bit CellOS, function pointers point to a 12-byte OPD
- * struct containing: code address, TOC address, environment pointer.
- * We extract the code_addr from our own SPRX's resolved imports to
- * get the real function addresses for OPD extraction in trampoline_gen.c. */
-typedef struct {
-    uint32_t code_addr;    /* Ptr to .text code */
-    uint32_t toc_addr;     /* TOC base value (loaded into r2 on call) */
-    uint32_t env_ptr;      /* Environment pointer (unused, set to 0) */
-} ppc_opd_t;
+/* cellUsbdGetDeviceDescriptor NOT in libusbd_stub.a — found via NID scan */
 
 /* ================================================================
  * Hook Installation (replaces allocate_trampolines + toc_trampoline.s)
  * ================================================================
  * We allocate a single 64KB R-W-X page via sys_memory_allocate.
- * Within this page, we generate 4 trampolines at 64-byte offsets:
- *   Offset 0:   Init trampoline     (toc_arg_reg=3)
- *   Offset 64:  OpenPipe trampoline (toc_arg_reg=6)
- *   Offset 128: Transfer trampoline (toc_arg_reg=8)
- *   Offset 192: ClosePipe trampoline (toc_arg_reg=4)
- *   Offset 256: Heartbeat counter (uint32_t)
+ * Within this page, we generate 5 trampolines at 64-byte offsets:
+ *   Offset 0:   OpenPipe trampoline        (toc_arg_reg=6)
+ *   Offset 64:  Transfer trampoline        (toc_arg_reg=8)
+ *   Offset 128: ClosePipe trampoline       (toc_arg_reg=4)
+ *   Offset 192: GetDeviceDescriptor tramp  (toc_arg_reg=5)
+ *   Offset 256: ControlTransfer trampoline (toc_arg_reg=9)
+ *   Offset 320: Heartbeat counter (uint32_t)
  * ================================================================ */
 #define TRAMPOLINE_PAGE_SIZE    (64 * 1024)
 #define TRAMPOLINE_BLOCK_SIZE   64  /* 16 instructions */
 
 /* TOC argument register for each hook based on number of original args */
-#define TOC_REG_INIT       3   /* 0 args -> TOC goes in r3 */
 #define TOC_REG_OPENPIPE   6   /* 3 args -> TOC goes in r6 */
 #define TOC_REG_TRANSFER   8   /* 5 args -> TOC goes in r8 */
 #define TOC_REG_CLOSEPIPE  4   /* 1 arg  -> TOC goes in r4 */
+#define TOC_REG_GET_DEVICE_DESC 5  /* 2 args (dev_num, desc) -> TOC goes in r5 */
+#define TOC_REG_CONTROL_TRANSFER 9  /* 6 args -> TOC goes in r9 */
 
 /* ================================================================
  * Hook Integrity Checker
@@ -154,10 +163,11 @@ static int hook_verify_preamble(uint32_t target_addr, const char *name)
         return -1;
     }
 
-    /* Must be in game .text range. If it's in PRX range (>= 0x30000000),
-     * the GOT was resolved and we'd be overwriting libusbd.sprx. */
-    if (target_addr >= 0x30000000) {
-        DEBUG_ERROR("[USB] INTEGRITY FAIL: %s target=0x%08X — in PRX range, GOT resolved!\n",
+    /* Must be in mapped range. With OPD-based hooking, targets point to
+     * the real libusbd.sprx functions (which may be at 0x02C00000).
+     * Accept any valid address above 0x00010000. */
+    if (target_addr < 0x00010000 || target_addr > 0x4FFFFFFF) {
+        DEBUG_ERROR("[USB] INTEGRITY FAIL: %s target=0x%08X — out of mapped range\n",
                     name, (unsigned)target_addr);
         return -1;
     }
@@ -257,40 +267,21 @@ static int install_hooks(void)
      * both read and execute from allocated pages by default. */
 
     g_usb_hooks.trampoline_base = base_addr;
-    g_usb_hooks.tramp_init_offset = 0;
-    g_usb_hooks.tramp_open_pipe_offset = TRAMPOLINE_BLOCK_SIZE;
-    g_usb_hooks.tramp_transfer_offset = 2 * TRAMPOLINE_BLOCK_SIZE;
-    g_usb_hooks.tramp_close_pipe_offset = 3 * TRAMPOLINE_BLOCK_SIZE;
+    g_usb_hooks.tramp_open_pipe_offset = 0;
+    g_usb_hooks.tramp_transfer_offset = TRAMPOLINE_BLOCK_SIZE;
+    g_usb_hooks.tramp_close_pipe_offset = 2 * TRAMPOLINE_BLOCK_SIZE;
+    g_usb_hooks.tramp_get_device_desc_offset = 3 * TRAMPOLINE_BLOCK_SIZE;
+    g_usb_hooks.tramp_control_transfer_offset = 4 * TRAMPOLINE_BLOCK_SIZE;
 
-    /* Heartbeat counter at offset 256 (after 4 x 64-byte trampolines).
-     * Zero-initialized by sys_memory_allocate (page is zeroed).
-     * Incremented each worker loop iteration at ~20 Hz.
-     * Polled by Node.js orchestrator via PS3MAPI /read_process. */
-    g_usb_hooks.heartbeat = (volatile uint32_t*)(uintptr_t)(base_addr + 256);
+    /* Heartbeat counter at offset 320 (after 5 x 64-byte trampolines). */
+    g_usb_hooks.heartbeat = (volatile uint32_t*)(uintptr_t)(base_addr + 320);
     DEBUG_PRINT("[USB] Heartbeat counter at 0x%08X\n",
                 (unsigned)(base_addr + 256));
 
-    /* Step 2: Generate trampolines using create_hook_trampoline().
-     *
-     * Each trampoline is 64 bytes (16 instructions) of dynamically
-     * generated PowerPC code that:
-     *   - Saves game's TOC and LR
-     *   - Passes game's TOC as an argument to our C hook
-     *   - Loads the SPRX's TOC
-     *   - Calls the C hook via bctrl
-     *   - Restores game's TOC and LR
-     *   - Returns to game caller
-     *
-     * The c_func parameter is a pointer to our C hook function.
-     * The C function pointer is actually an OPD on CellOS.
-     * create_hook_trampoline extracts code_addr and toc_addr from
-     * the OPD and embeds them into the trampoline instructions. */
-    create_hook_trampoline(
-        (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_init_offset),
-        (void*)my_cellUsbdInit, TOC_REG_INIT);
-    DEBUG_PRINT("[USB] Init trampoline at 0x%08X\n",
-                (unsigned)(base_addr + g_usb_hooks.tramp_init_offset));
-    log_trampoline_header("Init", (unsigned)(base_addr + g_usb_hooks.tramp_init_offset));
+    /* Step 2: Generate trampolines using create_hook_trampoline(). */
+    /* Init hook REMOVED — calling cellUsbdInit() from SPRX context
+     * after game USB init can destabilize the active stack.
+     * Start directly with OpenPipe at offset 0. */
 
     create_hook_trampoline(
         (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_open_pipe_offset),
@@ -313,6 +304,20 @@ static int install_hooks(void)
                 (unsigned)(base_addr + g_usb_hooks.tramp_close_pipe_offset));
     log_trampoline_header("ClosePipe", (unsigned)(base_addr + g_usb_hooks.tramp_close_pipe_offset));
 
+    create_hook_trampoline(
+        (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_get_device_desc_offset),
+        (void*)my_cellUsbdGetDeviceDescriptor, TOC_REG_GET_DEVICE_DESC);
+    DEBUG_PRINT("[USB] GetDeviceDescriptor trampoline at 0x%08X\n",
+                (unsigned)(base_addr + g_usb_hooks.tramp_get_device_desc_offset));
+    log_trampoline_header("GetDevDesc", (unsigned)(base_addr + g_usb_hooks.tramp_get_device_desc_offset));
+
+    create_hook_trampoline(
+        (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_control_transfer_offset),
+        (void*)my_cellUsbdControlTransfer, TOC_REG_CONTROL_TRANSFER);
+    DEBUG_PRINT("[USB] ControlTransfer trampoline at 0x%08X\n",
+                (unsigned)(base_addr + g_usb_hooks.tramp_control_transfer_offset));
+    log_trampoline_header("CtrlXfer", (unsigned)(base_addr + g_usb_hooks.tramp_control_transfer_offset));
+
     DEBUG_PRINT("[USB] Trampoline page at 0x%08X (size=%u)\n",
                 (unsigned)base_addr, (unsigned)TRAMPOLINE_PAGE_SIZE);
     return 0;
@@ -332,8 +337,9 @@ static int install_hooks(void)
  * the injector skips that hook.
  * ================================================================ */
 
-static int write_ipc_file(uint32_t target_init, uint32_t target_openpipe,
-                          uint32_t target_transfer, uint32_t target_closepipe)
+static int write_ipc_file(uint32_t target_openpipe,
+                          uint32_t target_transfer, uint32_t target_closepipe,
+                          uint32_t target_getdevdesc, uint32_t target_ctrlxfer)
 {
     int fd;
     uint64_t written;
@@ -377,20 +383,27 @@ static int write_ipc_file(uint32_t target_init, uint32_t target_openpipe,
 } while(0)
 
     /* Individual trampoline addresses (absolute, for Node.js convenience) */
-    WRITE_ADDR_LINE("TRAMP_INIT",
-        g_usb_hooks.trampoline_base + g_usb_hooks.tramp_init_offset);
     WRITE_ADDR_LINE("TRAMP_OPENPIPE",
         g_usb_hooks.trampoline_base + g_usb_hooks.tramp_open_pipe_offset);
     WRITE_ADDR_LINE("TRAMP_TRANSFER",
         g_usb_hooks.trampoline_base + g_usb_hooks.tramp_transfer_offset);
     WRITE_ADDR_LINE("TRAMP_CLOSEPIPE",
         g_usb_hooks.trampoline_base + g_usb_hooks.tramp_close_pipe_offset);
+    WRITE_ADDR_LINE("TRAMP_GETDEVDESC",
+        g_usb_hooks.trampoline_base + g_usb_hooks.tramp_get_device_desc_offset);
+    WRITE_ADDR_LINE("TRAMP_CTRLXFER",
+        g_usb_hooks.trampoline_base + g_usb_hooks.tramp_control_transfer_offset);
 
     /* Game PLT stub addresses (from NID scan) for preamble installation */
-    WRITE_ADDR_LINE("TARGET_INIT", target_init);
     WRITE_ADDR_LINE("TARGET_OPENPIPE", target_openpipe);
     WRITE_ADDR_LINE("TARGET_TRANSFER", target_transfer);
     WRITE_ADDR_LINE("TARGET_CLOSEPIPE", target_closepipe);
+    WRITE_ADDR_LINE("TARGET_GETDEVDESC", target_getdevdesc);
+    WRITE_ADDR_LINE("TARGET_CTRLXFER", target_ctrlxfer);
+
+    /* Heartbeat offset — Node.js injector reads this to locate the
+     * heartbeat counter in the trampoline page. NOT hardcoded! */
+    WRITE_ADDR_LINE("HEARTBEAT_OFFSET", 320);
 
 #undef WRITE_ADDR_LINE
 
@@ -406,7 +419,7 @@ static int write_ipc_file(uint32_t target_init, uint32_t target_openpipe,
      * calling cellFsRename(), the orchestrator always sees either the
      * complete old file (if rename hasn't executed) or the complete
      * new file (if rename has executed) - never a partial write. */
-    if (cellFsOpen("/dev_hdd0/tmp/ld_hooks.tmp",
+    if (cellFsOpen("/dev_hdd0/plugins/ld_hooks.tmp",
                    CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
                    &fd, NULL, 0) != CELL_OK) {
         DEBUG_ERROR("[USB] Failed to open temp IPC file\n");
@@ -445,8 +458,8 @@ static int write_ipc_file(uint32_t target_init, uint32_t target_openpipe,
     /* Atomic rename - if this crashes, Node.js sees a stale file
      * (still valid format, just out-of-date content), never a
      * truncated one. */
-    if (cellFsRename("/dev_hdd0/tmp/ld_hooks.tmp",
-                     "/dev_hdd0/tmp/ld_hooks_ready.txt") != CELL_OK) {
+    if (cellFsRename("/dev_hdd0/plugins/ld_hooks.tmp",
+                     "/dev_hdd0/plugins/ld_hooks_ready.txt") != CELL_OK) {
         DEBUG_ERROR("[USB] cellFsRename for ready file failed\n");
         return -1;
     }
@@ -516,20 +529,6 @@ static uint8_t extract_ep_addr(const void *ep_descriptor)
 }
 
 /* ================================================================
- * HOOK: my_cellUsbdInit
- *
- * Simply returns CELL_OK - we don't need USB initialization because
- * we handle Toy Pad traffic entirely in user-space via UDP.
- * ================================================================ */
-int my_cellUsbdInit(uint32_t game_toc)
-{
-    (void)game_toc;
-    DEBUG_PRINT("[USB] ENTER cellUsbdInit(game_toc=0x%08X)\n", (unsigned)game_toc);
-    DEBUG_PRINT("[USB] cellUsbdInit() intercepted returning CELL_OK\n");
-    return CELL_OK;
-}
-
-/* ================================================================
  * HOOK: my_cellUsbdOpenPipe
  *
  * If the device is a Toy Pad (matching endpoints), we allocate a
@@ -550,8 +549,10 @@ int my_cellUsbdOpenPipe(uint32_t *pipe_handle, uint32_t dev_id,
 
     (void)game_toc;
 
-    DEBUG_PRINT("[USB] ENTER my_cellUsbdOpenPipe(dev_id=0x%08X, game_toc=0x%08X)\n",
-                (unsigned)dev_id, (unsigned)game_toc);
+    ep_addr = extract_ep_addr(ep_descriptor);
+
+    DEBUG_PRINT("[USB] ENTER my_cellUsbdOpenPipe(dev_id=0x%08X, ep=0x%02X, game_toc=0x%08X)\n",
+                (unsigned)dev_id, (unsigned)ep_addr, (unsigned)game_toc);
 
     if (pipe_handle == NULL) {
         return CELL_USBD_ERROR_FAILED;
@@ -572,8 +573,19 @@ int my_cellUsbdOpenPipe(uint32_t *pipe_handle, uint32_t dev_id,
     }
 
     /* Non-ToyPad: pass through to real cellUsbdOpenPipe.
-     * Direct call - SPRX's own import, game's memory untouched. */
-    return cellUsbdOpenPipe(pipe_handle, dev_id, ep_descriptor);
+     * Since we hooked the REAL function code (preamble at target),
+     * we must call target+16 to skip the preamble and enter the
+     * original function body. */
+    if (g_real_openpipe_addr != 0) {
+        /* Build temporary OPD pointing to target+16 (past the preamble) */
+        ppc_opd_t real_opd;
+        real_opd.code_addr = g_real_openpipe_addr + 16;
+        real_opd.toc_addr = game_toc;  /* libusbd.sprx uses game's TOC */
+        real_opd.env_ptr = 0;
+        int (*real_fn)(void*, uint32_t, void*) = (int(*)(void*,uint32_t,void*))&real_opd;
+        return real_fn(pipe_handle, dev_id, ep_descriptor);
+    }
+    return CELL_USBD_ERROR_FAILED;
 }
 
 /* ================================================================
@@ -588,22 +600,49 @@ int my_cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf,
                                   uint32_t game_toc)
 {
     int toypad_type;
-    (void)done_cb; (void)arg; (void)game_toc;
+    (void)game_toc;
+
+    /* PS3 cellUsbd is ASYNCHRONOUS. The game expects us to:
+     * 1. Process the transfer
+     * 2. Call done_cb(result, count, arg) to wake the game's USB thread
+     * 3. Return CELL_OK
+     * If we don't call done_cb, the game's USB thread sleeps forever. */
+
+    typedef void (*usbd_done_cb_t)(int32_t result, int32_t count, void *arg);
 
     DEBUG_PRINT("[USB] ENTER my_cellUsbdInterruptTransfer(pipe=0x%08X, len=%u, game_toc=0x%08X)\n",
                 (unsigned)pipe_handle,
                 (unsigned)(len ? *len : 0),
                 (unsigned)game_toc);
 
+    /* One-time log to boot log (safe — only fires once due to static counter) */
+    {
+        static int xfer_log_count = 0;
+        if (xfer_log_count == 0) {
+            xfer_log_count = 1;
+            papertrail("[USB] First InterruptTransfer called — USB bridge ACTIVE!");
+        }
+    }
+
     toypad_type = usb_hook_is_toypad_pipe(pipe_handle);
     if (toypad_type == 0) {
-        /* Non-ToyPad: pass through to real cellUsbdInterruptTransfer.
-         * Direct call - SPRX's own import, game's memory untouched. */
-        return cellUsbdInterruptTransfer(pipe_handle, buf, len, done_cb, arg);
+        /* Non-ToyPad: pass through to real function at target+16 (skip preamble) */
+        if (g_real_transfer_addr != 0) {
+            ppc_opd_t real_opd;
+            real_opd.code_addr = g_real_transfer_addr + 16;
+            real_opd.toc_addr = game_toc;
+            real_opd.env_ptr = 0;
+            int (*real_fn)(uint32_t, void*, uint32_t*, void*, void*) =
+                (int(*)(uint32_t,void*,uint32_t*,void*,void*))&real_opd;
+            return real_fn(pipe_handle, buf, len, done_cb, arg);
+        }
+        return CELL_USBD_ERROR_FAILED;
     }
 
     if (toypad_type == 1) {
-        /* Toy Pad IN endpoint: Poll network for data to send to game */
+        /* Toy Pad IN endpoint: Non-blocking. Return dummy data with 0x55
+         * magic byte to test protocol handshake, then wake the game's
+         * USB thread via done_cb. CRITICAL: call done_cb or game freezes! */
         uint32_t max_len;
         uint8_t response[512];
         uint8_t zone = 1;
@@ -613,11 +652,11 @@ int my_cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf,
         max_len = *len;
         if (max_len > 256) max_len = 256;
         seq = (uint8_t)(g_usb_hooks.next_pipe_id++);
-        if (network_send_poll(zone, seq) < 0) {
-            if (max_len > 0) memset(buf, 0, max_len);
-            *len = 0;
-            return CELL_OK;
-        }
+
+        /* Tell server we're polling */
+        network_send_poll(zone, seq);
+
+        /* Non-blocking receive (socket is SO_NBIO) */
         recv_len = network_recv(response, sizeof(response));
         if (recv_len > 2 && response[0] == 0x00) {
             int payload_len = recv_len - 3;
@@ -625,21 +664,32 @@ int my_cellUsbdInterruptTransfer(uint32_t pipe_handle, void *buf,
             if (payload_len > 0) memcpy(buf, response + 3, (size_t)payload_len);
             *len = (uint32_t)payload_len;
         } else {
-            if (max_len > 0) {
-                memset(buf, 0, max_len);
-                ((uint8_t*)buf)[0] = 0x01;
-            }
-            *len = max_len;
+            /* No server response — return 0x55 magic byte to test handshake */
+            if (max_len > 0) memset(buf, 0, max_len);
+            ((uint8_t*)buf)[0] = 0x55;
+            *len = (max_len > 0) ? max_len : 1;
+        }
+
+        /* CRITICAL: Wake the game's USB thread! */
+        if (done_cb) {
+            usbd_done_cb_t cb = (usbd_done_cb_t)done_cb;
+            cb(CELL_OK, (int32_t)*len, arg);
         }
         return CELL_OK;
     }
 
     if (toypad_type == 2) {
-        /* Toy Pad OUT endpoint: Send data from game to network server */
+        /* Toy Pad OUT endpoint: Send data to server, then wake game */
         uint8_t zone = 1;
         uint8_t seq = (uint8_t)(g_usb_hooks.next_pipe_id++);
         if (buf == NULL || len == NULL) return CELL_USBD_ERROR_FAILED;
         network_send_data(zone, seq, (const uint8_t*)buf, (int)*len);
+
+        /* CRITICAL: Wake the game's USB thread! */
+        if (done_cb) {
+            usbd_done_cb_t cb = (usbd_done_cb_t)done_cb;
+            cb(CELL_OK, (int32_t)*len, arg);
+        }
         return CELL_OK;
     }
 
@@ -662,15 +712,135 @@ int my_cellUsbdClosePipe(uint32_t pipe_handle, uint32_t game_toc)
 
     toypad_type = usb_hook_is_toypad_pipe(pipe_handle);
     if (toypad_type == 0) {
-        /* Non-ToyPad: pass through to real cellUsbdClosePipe.
-         * Direct call - SPRX's own import, game's memory untouched. */
-        return cellUsbdClosePipe(pipe_handle);
+        /* Non-ToyPad: pass through to real function at target+16 (skip preamble) */
+        if (g_real_closepipe_addr != 0) {
+            ppc_opd_t real_opd;
+            real_opd.code_addr = g_real_closepipe_addr + 16;
+            real_opd.toc_addr = game_toc;
+            real_opd.env_ptr = 0;
+            int (*real_fn)(uint32_t) = (int(*)(uint32_t))&real_opd;
+            return real_fn(pipe_handle);
+        }
+        return CELL_USBD_ERROR_FAILED;
     }
 
     free_pipe(pipe_handle);
     DEBUG_PRINT("[USB] ToyPad pipe closed: handle=0x%08X\n",
                 (unsigned)pipe_handle);
     return CELL_OK;
+}
+
+/* ================================================================
+ * HOOK: my_cellUsbdGetDeviceDescriptor — TROJAN HORSE (2026-07-26)
+ *
+ * When a physical USB device is plugged into the PS3, the LV2 kernel
+ * wakes all sleeping LDDs. The game's probe() callback calls
+ * cellUsbdGetDeviceDescriptor() to identify the device. We intercept
+ * that call and return the LEGO Dimensions ToyPad descriptor
+ * (VID=0x0E6F, PID=0x0241), tricking the game into believing the
+ * physical device is a ToyPad.
+ *
+ * Whatever USB device was just plugged in (flash drive, controller,
+ * etc.) is now treated as a ToyPad. The game returns PROBE_SUCCEEDED
+ * to the kernel, which fires the game's attach() callback. Our
+ * OpenPipe hook (above) then intercepts the open-pipe calls and
+ * returns fake pipe handles, completing the bridge.
+ *
+ * DESCRIPTOR FORMAT (18 bytes):
+ *   Offset  Size  Description
+ *   0       1     bLength (18)
+ *   1       1     bDescriptorType (0x01 = DEVICE)
+ *   2       2     bcdUSB (0x0200 = USB 2.0)
+ *   4       1     bDeviceClass
+ *   5       1     bDeviceSubClass
+ *   6       1     bDeviceProtocol
+ *   7       1     bMaxPacketSize0
+ *   8       2     idVendor (0x0E6F = Logic3/PDP)
+ *   10      2     idProduct (0x0241 = LEGO Dimensions ToyPad)
+ *   12      2     bcdDevice
+ *   14      1     iManufacturer
+ *   15      1     iProduct
+ *   16      1     iSerialNumber
+ *   17      1     bNumConfigurations
+ * ================================================================ */
+int my_cellUsbdGetDeviceDescriptor(uint32_t dev_id, void *desc,
+                                    uint32_t game_toc)
+{
+    (void)dev_id;
+    (void)game_toc;
+
+    DEBUG_PRINT("[USB] *** TROJAN HORSE: cellUsbdGetDeviceDescriptor(dev=0x%08X) ***\n",
+                (unsigned)dev_id);
+
+    /* Log to boot log (called once per USB plug, safe) */
+    papertrail("[USB] *** TROJAN HORSE FIRED! Returning ToyPad VID/PID ***");
+
+    /* Return the ToyPad device descriptor unconditionally.
+     * Whatever physical device was just plugged in is now a ToyPad. */
+    if (desc != NULL) {
+        static const uint8_t toypad_dev_desc[18] = {
+            0x12,                       /* bLength: 18 bytes */
+            0x01,                       /* bDescriptorType: DEVICE */
+            0x00, 0x02,                 /* bcdUSB: USB 2.0 */
+            0x00,                       /* bDeviceClass */
+            0x00,                       /* bDeviceSubClass */
+            0x00,                       /* bDeviceProtocol */
+            0x08,                       /* bMaxPacketSize0: 8 bytes */
+            0x6F, 0x0E,                 /* idVendor: 0x0E6F (Logic3/PDP) */
+            0x41, 0x02,                 /* idProduct: 0x0241 (LEGO Dimensions) */
+            0x00, 0x01,                 /* bcdDevice: 1.00 */
+            0x01,                       /* iManufacturer */
+            0x02,                       /* iProduct */
+            0x00,                       /* iSerialNumber */
+            0x01                        /* bNumConfigurations */
+        };
+        memcpy(desc, toypad_dev_desc, 18);
+    }
+
+    DEBUG_PRINT("[USB] *** TROJAN HORSE: returned ToyPad descriptor (VID=0x0E6F, PID=0x0241) ***\n");
+    return CELL_OK;
+}
+
+/* ================================================================
+ * HOOK: my_cellUsbdControlTransfer — Fake HID Descriptors
+ *
+ * After the game accepts the ToyPad VID/PID, it requests the full
+ * USB descriptor chain (Configuration, Interface, HID Report, String).
+ * If we don't intercept these, the request passes through to the real
+ * OS which returns the flash drive's Mass Storage descriptors,
+ * corrupting the game's heap. This hook routes all descriptor requests
+ * through toypad_state_control_transfer() which returns the correct
+ * ToyPad HID descriptors.
+ * ================================================================ */
+int my_cellUsbdControlTransfer(uint32_t dev_handle, void *setup_pkt,
+                                void *buf, uint32_t *length,
+                                void *done_cb, void *user_data,
+                                uint32_t game_toc)
+{
+    (void)dev_handle; (void)done_cb; (void)user_data; (void)game_toc;
+
+    if (setup_pkt == NULL || buf == NULL || length == NULL)
+        return CELL_USBD_ERROR_FAILED;
+
+    /* Standard USB setup packet: 8 bytes
+     * [0] bmRequestType, [1] bRequest, [2:3] wValue, [4:5] wIndex, [6:7] wLength */
+    uint8_t *sp = (uint8_t*)setup_pkt;
+    uint32_t bmRequestType = sp[0];
+    uint32_t bRequest      = sp[1];
+    uint32_t wValue        = sp[2] | ((uint32_t)sp[3] << 8);
+    uint32_t wIndex        = sp[4] | ((uint32_t)sp[5] << 8);
+    uint32_t wLength       = sp[6] | ((uint32_t)sp[7] << 8);
+
+    DEBUG_PRINT("[USB] ControlTransfer: bmReq=0x%02X bReq=0x%02X wVal=0x%04X wIdx=0x%04X wLen=%u\n",
+                (unsigned)bmRequestType, (unsigned)bRequest,
+                (unsigned)wValue, (unsigned)wIndex, (unsigned)wLength);
+
+    int ret = toypad_state_control_transfer(bmRequestType, bRequest,
+                                             wValue, wIndex, buf, wLength);
+    if (ret == 0 && wLength > 0) {
+        *length = wLength;
+    }
+    return ret;
 }
 
 /* ================================================================
@@ -734,10 +904,8 @@ static int find_cellusbd_functions_via_opd(void)
 {
     int all_ok = 0;
 
-    DEBUG_PRINT("[USB] OPD extraction: cellUsbdInit at %p\n",
-                (void*)(uintptr_t)cellUsbdInit);
-    if (validate_opd("cellUsbdInit",
-        (const ppc_opd_t*)(uintptr_t)cellUsbdInit) == 0) all_ok++;
+    /* NOTE: cellUsbdInit OPD validation removed — we no longer hook Init.
+     * Only validate the 3 functions we actually hook + passthrough. */
 
     DEBUG_PRINT("[USB] OPD extraction: cellUsbdOpenPipe at %p\n",
                 (void*)(uintptr_t)cellUsbdOpenPipe);
@@ -754,449 +922,289 @@ static int find_cellusbd_functions_via_opd(void)
     if (validate_opd("cellUsbdClosePipe",
         (const ppc_opd_t*)(uintptr_t)cellUsbdClosePipe) == 0) all_ok++;
 
-    if (all_ok == 4) {
-        DEBUG_PRINT("[USB] All 4 cellUsbd functions resolved & validated via OPD\n");
+    /* cellUsbdGetDeviceDescriptor is NOT in libusbd_stub.a — cannot
+     * validate via OPD. Found via NID scan (get_game_plt_stub) instead. */
+
+    if (all_ok >= 3) {
+        DEBUG_PRINT("[USB] %d/3 cellUsbd functions validated via OPD (+1 NID scan for GetDeviceDescriptor)\n", all_ok);
         return 0;
     }
 
-    DEBUG_ERROR("[USB] OPD: %d/4 cellUsbd imports validated, soft-fail %d\n",
-                all_ok, 4 - all_ok);
+    DEBUG_ERROR("[USB] OPD: %d/3 cellUsbd imports validated, soft-fail %d (+1 NID scan for GetDeviceDescriptor)\n",
+                all_ok, 3 - all_ok);
     return -1;
 }
 
-/* ================================================================
- * Game PLT Stub Address Scanner
- *
- * Scans the game process's import stub table (.rodata) for NID
- * triplets matching our 4 cellUsbd functions. Each triplet is 12
- * bytes: { NID (4B), reserved (4B), GOT_ptr (4B) }.
- *
- * The GOT slot initially contains the address of a 16-byte PLT stub
- * in the game's executable .text memory. We save this PLT stub address
- * and write it to the IPC file as TARGET_*. The Node.js injector then
- * overwrites that PLT stub with our 4-instruction preamble (lis/ori/
- * mtctr/bctr) that branches to our trampoline.
- *
- * ⚠ CAVEAT (Option A — *got_slot approach):
- *   This scanner reads the GOT slot via the GOT_ptr from the triplet.
- *   The GOT slot value is only the PLT stub BEFORE the function has
- *   been called. Once the game calls cellUsbdOpenPipe (for example),
- *   the dynamic linker resolves the GOT and overwrites it with the
- *   real libusbd.sprx function address. If that happens, *got_slot
- *   points into system PRX memory, not the game's PLT stub.
- *
- *   FUTURE IMPROVEMENT (Option B):
- *   Instead of reading *got_slot, scan the game's .text segment for
- *   the actual 16-byte PLT stub pattern:
- *     lis   r11, offset_hi   0x3D60xxxx
- *     lwz   r12, offset_lo(r11)  0x818Bxxxx
- *     mtctr r12              0x7D8903A6
- *     bctr                   0x4E800420
- *   The address of that stub is the true TARGET — it never changes,
- *   regardless of GOT resolution. This is LEFT FOR FUTURE IMPLEMENTATION.
- *   Option A is used now because we inject before the game calls
- *   cellUsbd. If it fails, recompile with Option B.
- *
- * Returns 0 on success, -1 if stub not found.
- * ================================================================ */
-#define NID_SCAN_START  0x00100000u
-#define NID_SCAN_SIZE   0x00A00000u  /* 10MB — covers game .text/.rodata */
 
 /* ================================================================
- * PING-AND-SCAN GOT FINDER (Expert-Recommended, 2026-07-24)
+ * STATIC OFFSET RESOLVER (Expert Final, 2026-07-27)
  *
- * The game's NID table is stripped at runtime. We force our SPRX's
- * imports to resolve, extract the real OS addresses from our GOT,
- * and scan the game's data segment for those exact 32-bit pointers.
+ * Abandons all dynamic scanning. Uses sys_prx_get_module_id_by_name
+ * to find libusbd.sprx in memory, then adds hardcoded offsets
+ * extracted offline from the firmware's libusbd.sprx ELF.
+ *
+ * Offsets are FIRMWARE-SPECIFIC (Evilnat 4.91 CFW). If the
+ * firmware changes, re-extract offsets from the new libusbd.sprx.
+ *
+ * PLACEHOLDER OFFSETS: Replace 0x00000000 values with actual
+ * offsets extracted from libusbd.sprx export table.
  * ================================================================ */
 
-/**
- * get_real_os_address — Parse our SPRX's GCC PRX import stub to
- * read the resolved function address from our own GOT.
- *
- * GCC -mprx stubs: lis rX, got_hi / lwz rX, got_lo(rX)
- */
-static uint32_t get_real_os_address(void *func_ptr)
-{
-    uint32_t *stub = (uint32_t *)func_ptr;
-    uint32_t w0 = stub[0];
-    uint32_t w1 = stub[1];
-    uint32_t rt, hi, lo;
+/* Hardcoded offsets into libusbd.sprx .text (firmware 4.93).
+ * Extracted via OPD scanning + SDK API ordering from decrypted ELF.
+ * VERIFIED: 2026-07-27, Ghidra + Python OPD analysis.
+ * These are the vaddr offsets within libusbd.sprx .text section. */
+#define LIBUSBD_OFFSET_OPENPIPE       0x00000244
+#define LIBUSBD_OFFSET_INTERRUPT_XFER 0x000004B4
+#define LIBUSBD_OFFSET_CLOSEPIPE      0x00000380
+#define LIBUSBD_OFFSET_GET_DEV_DESC   0x0000061C
+#define LIBUSBD_OFFSET_CONTROL_XFER   0x000007C8
 
-    DEBUG_PRINT("[USB] ping: stub=%p [0]=0x%08X [1]=0x%08X\n",
-                func_ptr, (unsigned)w0, (unsigned)w1);
-
-    /* Case 1: func_ptr points directly to stub code (lis/addis pattern).
-     * Check: first word has addis opcode (0x3C). */
-    if ((w0 & 0xFC000000) == 0x3C000000) {
-        rt = (w0 >> 21) & 0x1F;
-        hi = w0 & 0xFFFF;
-        /* lwz rX, lo(rX) — matching register */
-        if ((w1 & 0xFC000000) != 0x80000000) { DEBUG_PRINT("[USB] ping: not lwz\n"); return 0; }
-        if (((w1 >> 16) & 0x1F) != rt || ((w1 >> 21) & 0x1F) != rt) {
-            DEBUG_PRINT("[USB] ping: reg mismatch\n"); return 0;
-        }
-        lo = w1 & 0xFFFF;
-        {
-            int16_t slo = (int16_t)lo;
-            uint32_t got_addr = (hi << 16) + (uint32_t)(int32_t)slo;
-            volatile uint32_t *got_slot = (volatile uint32_t *)(uintptr_t)got_addr;
-            uint32_t resolved = *got_slot;
-            DEBUG_PRINT("[USB] ping: direct stub GOT=0x%08X -> 0x%08X\n",
-                        (unsigned)got_addr, (unsigned)resolved);
-            if (resolved >= 0x30000000 && resolved <= 0x4FFFFFFF) return resolved;
-        }
-        return 0;
-    }
-
-    /* Case 2: func_ptr points to an OPD (Official Procedure Descriptor).
-     * OPD layout: { code_addr, toc_addr, env_ptr }.
-     * The code_addr points to the actual import stub code.
-     * Follow the OPD to read the stub, then parse it. */
-    if (w0 >= 0x00010000 && w0 <= 0x4FFFFFFF) {
-        uint32_t code_addr = w0;
-        uint32_t *real_stub = (uint32_t *)(uintptr_t)code_addr;
-        uint32_t sw0 = real_stub[0];
-        uint32_t sw1 = real_stub[1];
-
-        DEBUG_PRINT("[USB] ping: OPD follow: code=0x%08X stub[0]=0x%08X stub[1]=0x%08X\n",
-                    (unsigned)code_addr, (unsigned)sw0, (unsigned)sw1);
-
-        /* Now parse the stub at code_addr for lis/addis + lwz */
-        if ((sw0 & 0xFC000000) == 0x3C000000) {
-            rt = (sw0 >> 21) & 0x1F;
-            hi = sw0 & 0xFFFF;
-            if ((sw1 & 0xFC000000) != 0x80000000) {
-                DEBUG_PRINT("[USB] ping: OPD stub w1 not lwz\n");
-                return 0;
-            }
-            if (((sw1 >> 16) & 0x1F) != rt || ((sw1 >> 21) & 0x1F) != rt) {
-                DEBUG_PRINT("[USB] ping: OPD stub reg mismatch\n");
-                return 0;
-            }
-            lo = sw1 & 0xFFFF;
-            {
-                int16_t slo = (int16_t)lo;
-                uint32_t got_addr = (hi << 16) + (uint32_t)(int32_t)slo;
-                volatile uint32_t *got_slot = (volatile uint32_t *)(uintptr_t)got_addr;
-                uint32_t resolved = *got_slot;
-                DEBUG_PRINT("[USB] ping: OPD stub GOT=0x%08X -> 0x%08X\n",
-                            (unsigned)got_addr, (unsigned)resolved);
-                if (resolved >= 0x30000000 && resolved <= 0x4FFFFFFF) return resolved;
-            }
-        } else {
-            DEBUG_PRINT("[USB] ping: OPD stub not addis/lis (0x%08X)\n", (unsigned)sw0);
-        }
-    }
-
-    return 0;
-}
-
-/**
- * find_game_got_slot — Scan game's data segment for a known 32-bit
- * value (the real OS address). Returns pointer to the GOT slot.
- */
-static uint32_t *find_game_got_slot(uint32_t real_addr)
-{
-    uint32_t scan_start = 0x00880000;
-    uint32_t scan_end   = 0x02000000;
-    uint32_t *words = (uint32_t *)(uintptr_t)scan_start;
-    uint32_t nwords = (scan_end - scan_start) / 4;
-    uint32_t i;
-
-    DEBUG_PRINT("[USB] scan: searching 0x%08X-0x%08X (%u words) for 0x%08X\n",
-                (unsigned)scan_start, (unsigned)scan_end, (unsigned)nwords, (unsigned)real_addr);
-
-    for (i = 0; i < nwords; i++) {
-        if (words[i] == real_addr) {
-            DEBUG_PRINT("[USB] scan: MATCH at word %u -> GOT slot 0x%08X\n",
-                        (unsigned)i, (unsigned)(uintptr_t)&words[i]);
-            return &words[i];
-        }
-    }
-    DEBUG_PRINT("[USB] scan: no match for 0x%08X in range\n", (unsigned)real_addr);
-    return NULL;
-}
-
-/* ---- Original NID scanner (get_game_plt_stub) follows ---- */
-
-static int get_game_plt_stub(uint32_t target_nid, uint32_t *out_plt_addr)
-{
-    volatile uint32_t *words = (volatile uint32_t*)(uintptr_t)NID_SCAN_START;
-    uint32_t nwords = NID_SCAN_SIZE / 4;
-    uint32_t i;
-
-    if (out_plt_addr == NULL) return -1;
-
-    /* Scan for 12-byte triplet pattern { NID, reserved, GOT_ptr }
-     * at 3-word intervals. This is the PS3's import stub table format
-     * in the game's .rodata section. */
-    for (i = 0; i <= nwords - 3; i += 3) {
-        uint32_t nid      = words[i + 0];
-        uint32_t reserved = words[i + 1];
-        uint32_t got_ptr  = words[i + 2];
-
-        if (nid != target_nid) continue;
-
-        /* Sanity check: reserved should be 0 or a small value.
-         * GOT_ptr must point to valid (non-zero) memory in game range. */
-        if (reserved != 0 && reserved > 0x1000) continue;
-        if (got_ptr == 0 || got_ptr < 0x00010000 || got_ptr > 0x4FFFFFFF) continue;
-
-        /* Read the GOT slot value — this is the PLT stub address
-         * (if unresolved) or the real function address (if resolved).
-         *
-         * ⚠ CAVEAT: See note above about Option A vs Option B.
-         * If the function has been resolved, this read returns the
-         * real libusbd.sprx address instead of the game's PLT stub.
-         * We assume injection happens early enough that GOT is
-         * unresolved. */
-        {
-            volatile uint32_t *got_slot = (volatile uint32_t*)(uintptr_t)got_ptr;
-            uint32_t plt_stub_addr = *got_slot;
-
-            /* PLT stubs live in game .text (typically < 0x01000000
-             * for small games, or higher for larger ones). If the
-             * value is in the PRX range (0x3xxxxxxx+), the GOT has
-             * been resolved and we cannot safely overwrite it. */
-            if (plt_stub_addr == 0 || plt_stub_addr > 0x4FFFFFFF) continue;
-
-            if (plt_stub_addr >= 0x30000000) {
-                /* GOT is already resolved — writing a preamble here
-                 * would corrupt libusbd.sprx code. Hard-fail. */
-                DEBUG_ERROR("[USB] NID scan: NID=0x%08X GOT_ptr=0x%08X -> *GOT=0x%08X (RESOLVED)\n",
-                            (unsigned)nid, (unsigned)got_ptr, (unsigned)plt_stub_addr);
-                DEBUG_ERROR("[USB]   GOT resolved! Injection too late. Implement Option B PLT-pattern scanner.\n");
-                *out_plt_addr = 0;  /* Signal injector to skip this hook */
-                return -1;
-            }
-
-            *out_plt_addr = plt_stub_addr;
-
-            DEBUG_PRINT("[USB] NID scan: NID=0x%08X GOT_ptr=0x%08X -> *GOT=0x%08X (ok, unresolved)\n",
-                        (unsigned)nid, (unsigned)got_ptr, (unsigned)plt_stub_addr);
-            DEBUG_PRINT("[USB]   PLT stub at 0x%08X will be overwritten with preamble\n",
-                        (unsigned)plt_stub_addr);
-            return 0;
-        }
-    }
-
-    DEBUG_ERROR("[USB] NID scan: NID=0x%08X not found in range 0x%08X-0x%08X\n",
-                (unsigned)target_nid, (unsigned)NID_SCAN_START,
-                (unsigned)(NID_SCAN_START + NID_SCAN_SIZE));
-    return -1;
-}
+/* Offset of "cellUsbd_Library" string within libusbd.sprx sceModuleInfo */
+#define MODULE_INFO_OFFSET            0x94EC
 
 /* ================================================================
- * usb_hook_init - REFACTORED 2026-07-22
+ * find_libusbd_base_safe — Safe kernel/shared memory probe
  *
- * Init sequence:
- *   1. OPD validation of cellUsbd imports
- *   2. Allocate R-W-X page + install dynamic trampolines
- *   3. Scan game for PLT stub addresses (TARGET_*)
- *   4. Write IPC file for Node.js orchestrator
+ * Uses cellFsWrite() as a "memory radar" to safely test whether
+ * a kernel-space/shared-memory page is mapped.  If the address is
+ * unmapped, cellFsWrite returns CELL_EFAULT gracefully instead of
+ * triggering a DSI exception that would crash the process.
+ *
+ * Scans 64KB-aligned addresses from 0x01000000 to 0x30000000,
+ * looking for "cellUsbd_Library" at base + 0x94EC (the sceModuleInfo
+ * module name field inside libusbd.sprx).
+ *
+ * Returns: libusbd runtime base address, or 0 if not found.
  * ================================================================ */
+
+static uint32_t find_libusbd_base_safe(void)
+{
+    int fd, ret, attempt;
+    uint32_t found_base = 0;
+    uint64_t written;
+    uint32_t v;
+
+    /* Retry loop: libusbd may not be loaded yet at injection time.
+     * Full scan of 0x02000000-0xC0000000 (2.75GB) every 5s, up to 100s. */
+    for (attempt = 0; attempt < 20; attempt++) {
+
+        if (attempt > 0) sys_timer_usleep(5000000);
+
+        if (cellFsOpen("/dev_hdd0/plugins/mem_probe.tmp",
+                       CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
+                       &fd, NULL, 0) != CELL_OK) {
+            papertrail("[USB] FATAL: open failed"); return 0;
+        }
+
+        if (attempt == 0)
+            papertrail("[USB] Scan FULL 0x02000000-0xC0000000 (retry 5s, max 100s)...");
+        else {
+            char rmsg[24]; int ri=0; rmsg[ri++]='['; rmsg[ri++]='U'; rmsg[ri++]='S'; rmsg[ri++]='B';
+            rmsg[ri++]=']'; rmsg[ri++]=' '; rmsg[ri++]='R'; rmsg[ri++]='e'; rmsg[ri++]='t'; rmsg[ri++]='r';
+            rmsg[ri++]='y'; rmsg[ri++]=' ';
+            if(attempt>=10)rmsg[ri++]='0'+(attempt/10); rmsg[ri++]='0'+(attempt%10);
+            rmsg[ri++]=0; papertrail(rmsg);
+        }
+
+        found_base = 0;
+        { int progress = 0;
+        for (v = 0x02000000; v < 0xC0000000; v += 0x10000) {
+
+            uint32_t probe_addr = v + MODULE_INFO_OFFSET;
+            written = 0;
+            ret = cellFsWrite(fd, (const void*)(uintptr_t)probe_addr, 16, &written);
+
+            if (ret == CELL_OK && written == 16) {
+                const char *center = (const char*)(uintptr_t)probe_addr;
+                const char *ws = center - 48;
+                const char *we = center + 48;
+                const char *p;
+                for (p = ws; p <= we - 16; p++) {
+                    const char *t = "cellUsbd_Library";
+                    int i, match = 1;
+                    for (i = 0; i < 16; i++) {
+                        if (p[i] != t[i]) { match = 0; break; }
+                    }
+                    if (match) {
+                        found_base = v;
+                        break;
+                    }
+                }
+                if (found_base) break;
+
+                /* Fallback: match "cellUsbd" (8 chars) */
+                for (p = ws; p <= we - 8; p++) {
+                    const char *t = "cellUsbd";
+                    int i, match = 1;
+                    for (i = 0; i < 8; i++) {
+                        if (p[i] != t[i]) { match = 0; break; }
+                    }
+                    if (match) {
+                        found_base = v;
+                        break;
+                    }
+                }
+        }
+        /* else: unmapped page — safely skip to next boundary */
+
+        /* Progress log every 4MB (64 iterations) */
+        progress++;
+        if ((progress & 63) == 0) {
+            char pbuf[48];
+            int pi = 0;
+            const char *ps = "[USB] probing 0x";
+            while (*ps) pbuf[pi++] = *ps++;
+            { int sh; for (sh = 28; sh >= 0; sh -= 4) {
+                int n = ((v + 0x10000) >> sh) & 0xF;
+                pbuf[pi++] = n < 10 ? (char)('0' + n) : (char)('A' + n - 10);
+            }}
+            pbuf[pi] = 0;
+            papertrail(pbuf);
+        }
+    }  /* end for loop */
+    }  /* end progress block */
+
+    cellFsClose(fd);
+    cellFsUnlink("/dev_hdd0/plugins/mem_probe.tmp");
+
+    if (found_base) break;
+    } /* end retry loop */
+
+    if (!found_base) papertrail("[USB] All retries exhausted - libusbd not found");
+    return found_base;
+}
 
 int usb_hook_init(void)
 {
-    int ret;
-    uint32_t target_init = 0, target_openpipe = 0, target_transfer = 0, target_closepipe = 0;
+    uint32_t lib_base;
+    uint32_t target_openpipe, target_transfer, target_closepipe;
+    uint32_t target_getdevdesc, target_ctrlxfer;
 
     if (g_usb_hooks.initialized) return 0;
     memset(&g_usb_hooks, 0, sizeof(g_usb_hooks));
     g_usb_hooks.next_pipe_id = 0x1000;
 
-    /* Step 1: Validate cellUsbd imports via OPD extraction (SOFT fail).
+    /* ============================================================
+     * SELF-CONTAINED MODE (2026-07-28 v2): Safe pointer probe.
      *
-     * We extract the resolved code addresses from our own SPRX's OPD
-     * import entries. The SPRX is linked with -lusbd_stub, so CellOS
-     * resolves cellUsbd imports when our module is loaded. Casting
-     * the imported function symbol to a ppc_opd_t* gives us the real
-     * code address and TOC pointer.
+     * The SPRX uses cellFsWrite() as a safe memory radar to find
+     * libusbd.sprx in user-space shared memory (0x02000000+).
+     * cellFsWrite returns CELL_EFAULT for unmapped pages instead
+     * of crashing the process — no DSI exception risk.
      *
-     * IMPORTANT: On some CellOS PRX link setups, the extern imported
-     * symbols (cellUsbdInit, etc.) may point to import stub code in
-     * the SPRX's .text section rather than to OPD entries. In that
-     * case, casting to ppc_opd_t* and dereferencing code_addr reads
-     * the first instruction opcode as an address — which fails the
-     * range check and returns -1. This is NOT fatal because:
-     *
-     *   1. create_hook_trampoline() uses the OPDs of OUR OWN C hook
-     *      functions (my_cellUsbdInit, my_cellUsbdOpenPipe, etc.),
-     *      NOT the cellUsbd import OPDs. Our functions always have
-     *      valid OPDs in the SPRX's data section.
-     *
-     *   2. Passthrough calls (non-ToyPad USB traffic) just call
-     *      cellUsbdOpenPipe() directly from C. The compiler uses our
-     *      own GOT/TOC via the import stub — it doesn't read the OPD
-     *      manually. The import stub works fine even when the OPD
-     *      trick fails.
-     *
-     * So: if OPD extraction fails, log a warning and continue. The
-     * trampolines and passthrough calls will still work correctly. */
-    ret = find_cellusbd_functions_via_opd();
-    if (ret != 0) {
-        DEBUG_ERROR("[USB] OPD extraction soft-fail - continuing (trampolines use own OPDs)\n");
-        /* NOT returning -1 here! The hook mechanism works fine without
-         * cellUsbd import OPDs. Only the validation is skipped. */
+     * Once libusbd base is found, TARGET_* = base + offset is
+     * computed directly and written to the IPC file.  Node.js
+     * only needs to read IPC and fire MEMORY SET preambles.
+     * ============================================================ */
+
+    /* Step 1: Find libusbd.sprx base address safely.
+     * Retry loop: libusbd may be loaded lazily by the game
+     * (not present at "press start" screen). Keep scanning
+     * every 5 seconds until found or 30 retries exhausted. */
+    {
+    int retry;
+    for (retry = 0; retry < 30; retry++) {
+        lib_base = find_libusbd_base_safe();
+        if (lib_base != 0) break;
+        if (retry == 0) {
+            papertrail("[USB] libusbd not yet loaded — will retry every 5s...");
+        }
+        /* Scan from 0x30000000 (PRX region) on retries — faster */
+        sys_timer_sleep(5);
+    }
+    }
+    if (lib_base == 0) {
+        DEBUG_ERROR("[USB] Safe probe could not find libusbd after 30 retries!\n");
+        papertrail("[USB] FATAL: libusbd not found after 150s of retries!");
+        return -1;
     }
 
-    /* Step 2: Allocate executable trampoline page and install hooks */
+    /* Log the found base address */
+    {
+        char msg[64];
+        int j = 0;
+        const char *s = "[USB] libusbd base=0x";
+        while (*s) msg[j++] = *s++;
+        { int sh; for (sh = 28; sh >= 0; sh -= 4) {
+            int n = (lib_base >> sh) & 0xF;
+            msg[j++] = n < 10 ? (char)('0' + n) : (char)('A' + n - 10);
+        }}
+        msg[j] = 0;
+        papertrail(msg);
+        DEBUG_PRINT("[USB] %s\n", msg);
+    }
+
+    /* Step 2: Compute target addresses from offsets */
+    target_openpipe   = lib_base + LIBUSBD_OFFSET_OPENPIPE;
+    target_transfer   = lib_base + LIBUSBD_OFFSET_INTERRUPT_XFER;
+    target_closepipe  = lib_base + LIBUSBD_OFFSET_CLOSEPIPE;
+    target_getdevdesc = lib_base + LIBUSBD_OFFSET_GET_DEV_DESC;
+    target_ctrlxfer   = lib_base + LIBUSBD_OFFSET_CONTROL_XFER;
+
+    /* Step 3: Store passthrough addresses (skip preamble) */
+    g_real_openpipe_addr  = target_openpipe;
+    g_real_transfer_addr  = target_transfer;
+    g_real_closepipe_addr = target_closepipe;
+
+    /* Step 4: Allocate trampoline page and install 5 hooks */
     if (install_hooks() != 0) {
         DEBUG_ERROR("[USB] Hook installation failed\n");
         return -1;
     }
 
-    /* Step 3: Scan game memory for PLT stub addresses (TARGET_*).
-     *
-     * We scan the game's import stub table (.rodata) for NID triplets
-     * matching cellUsbdInit, cellUsbdOpenPipe, cellUsbdInterruptTransfer,
-     * and cellUsbdClosePipe. For each NID found, we read the associated
-     * GOT slot to obtain the PLT stub address.
-     *
-     * This is a best-effort scan. If a particular NID is not found
-     * (e.g., the game doesn't import that function, or the scanner
-     * range doesn't cover the game's .rodata), the target address
-     * is written as 0x00000000. The Node.js injector will skip that
-     * hook if the target is 0.
-     *
-     * ⚠ OPTION A CAVEAT: The *got_slot value is only the PLT stub
-     * if the GOT is unresolved. If the game has already called the
-     * function, *got_slot points to the real libusbd.sprx function.
-     * Future Option B (PLT-pattern scanner) should replace this.
-     * See get_game_plt_stub() documentation above. */
-
-    /* Step 3: PING-AND-SCAN GOT OVERWRITE (Expert-Recommended 2026-07-24).
-     * NID tables stripped at runtime. Use our SPRX's resolved imports.
-     *
-     * 3a. Ping cellUsbd functions → force SPRX GOT resolution.
-     * 3b. Parse import stubs → extract real OS addresses (0x30XXXXXX).
-     * 3c. Scan game data segment for those addresses → GOT slots.
-     * 3d. Direct overwrite each GOT slot with trampoline + cache sync. */
-    DEBUG_PRINT("[USB] === PING-AND-SCAN GOT OVERWRITE ===\n");
-    INIT_PROGRESS(61);
+    /* Step 4.5: Write preambles directly to libusbd .text targets.
+     * PS3MAPI MEMORY SET can't write to shared module memory,
+     * but the SPRX runs inside the game process. Raw pointer
+     * writes on CFW Cobra 8.5 should succeed. */
     {
-        uint32_t tramp_init     = g_usb_hooks.trampoline_base + g_usb_hooks.tramp_init_offset;
-        uint32_t tramp_openpipe = g_usb_hooks.trampoline_base + g_usb_hooks.tramp_open_pipe_offset;
-        uint32_t tramp_transfer = g_usb_hooks.trampoline_base + g_usb_hooks.tramp_transfer_offset;
-        uint32_t tramp_closepipe = g_usb_hooks.trampoline_base + g_usb_hooks.tramp_close_pipe_offset;
-        uint32_t real_init = 0, real_open = 0, real_transfer = 0, real_close = 0;
-        uint32_t *got_init = NULL, *got_open = NULL, *got_transfer = NULL, *got_close = NULL;
-        int hooks_installed = 0;
-
-        /* 3a: Ping to force lazy-binding resolution */
-        DEBUG_PRINT("[USB] ping: forcing SPRX import resolution...\n");
-        cellUsbdInit();
-        cellUsbdClosePipe(0xFFFFFFFF);
-
-        /* 3b: Extract real OS addresses from our SPRX's resolved GOT */
-        INIT_PROGRESS(62);
-        real_init     = get_real_os_address((void*)cellUsbdInit);
-        real_open     = get_real_os_address((void*)cellUsbdOpenPipe);
-        real_transfer = get_real_os_address((void*)cellUsbdInterruptTransfer);
-        real_close    = get_real_os_address((void*)cellUsbdClosePipe);
-
-        DEBUG_PRINT("[USB] ping result: init=0x%08X open=0x%08X xfer=0x%08X close=0x%08X\n",
-                    (unsigned)real_init, (unsigned)real_open,
-                    (unsigned)real_transfer, (unsigned)real_close);
-
-        if (!real_init || !real_open || !real_transfer || !real_close) {
-            DEBUG_ERROR("[USB] FAIL: Could not resolve %d/4 SPRX imports\n",
-                        (real_init?1:0)+(real_open?1:0)+(real_transfer?1:0)+(real_close?1:0));
-        } else {
-            /* 3c: Scan game memory for matching GOT slots */
-            INIT_PROGRESS(63);
-            DEBUG_PRINT("[USB] scan: searching game data for resolved addresses...\n");
-            got_init     = find_game_got_slot(real_init);
-            got_open     = find_game_got_slot(real_open);
-            got_transfer = find_game_got_slot(real_transfer);
-            got_close    = find_game_got_slot(real_close);
-
-            DEBUG_PRINT("[USB] scan result: init=%p open=%p xfer=%p close=%p\n",
-                        (void*)got_init, (void*)got_open,
-                        (void*)got_transfer, (void*)got_close);
-
-            /* 3d: Overwrite each GOT slot + cache sync */
-            INIT_PROGRESS(64);
-            if (got_init) {
-                target_init = (uint32_t)(uintptr_t)got_init;
-                DEBUG_PRINT("[USB] GOT INIT: *0x%08X = 0x%08X (was 0x%08X)\n",
-                            (unsigned)target_init, (unsigned)tramp_init, (unsigned)real_init);
-                *got_init = tramp_init;
-                __asm__ __volatile__ ("dcbst 0, %0\n\tsync\n\ticbi 0, %0\n\tisync" :: "r"(got_init) : "memory");
-                hooks_installed++;
-            } else { DEBUG_ERROR("[USB] GOT INIT: not found\n"); }
-
-            if (got_open) {
-                target_openpipe = (uint32_t)(uintptr_t)got_open;
-                DEBUG_PRINT("[USB] GOT OPEN: *0x%08X = 0x%08X\n",
-                            (unsigned)target_openpipe, (unsigned)tramp_openpipe);
-                *got_open = tramp_openpipe;
-                __asm__ __volatile__ ("dcbst 0, %0\n\tsync\n\ticbi 0, %0\n\tisync" :: "r"(got_open) : "memory");
-                hooks_installed++;
-            } else { DEBUG_ERROR("[USB] GOT OPEN: not found\n"); }
-
-            if (got_transfer) {
-                target_transfer = (uint32_t)(uintptr_t)got_transfer;
-                DEBUG_PRINT("[USB] GOT XFER: *0x%08X = 0x%08X\n",
-                            (unsigned)target_transfer, (unsigned)tramp_transfer);
-                *got_transfer = tramp_transfer;
-                __asm__ __volatile__ ("dcbst 0, %0\n\tsync\n\ticbi 0, %0\n\tisync" :: "r"(got_transfer) : "memory");
-                hooks_installed++;
-            } else { DEBUG_ERROR("[USB] GOT XFER: not found\n"); }
-
-            if (got_close) {
-                target_closepipe = (uint32_t)(uintptr_t)got_close;
-                DEBUG_PRINT("[USB] GOT CLOSE: *0x%08X = 0x%08X\n",
-                            (unsigned)target_closepipe, (unsigned)tramp_closepipe);
-                *got_close = tramp_closepipe;
-                __asm__ __volatile__ ("dcbst 0, %0\n\tsync\n\ticbi 0, %0\n\tisync" :: "r"(got_close) : "memory");
-                hooks_installed++;
-            } else { DEBUG_ERROR("[USB] GOT CLOSE: not found\n"); }
-
-            DEBUG_PRINT("[USB] %d/4 GOT slots overwritten via ping-and-scan\n", hooks_installed);
+        uint32_t tramp_base = g_usb_hooks.trampoline_base;
+        struct { uint32_t target; uint32_t tramp; const char *name; } hooks[] = {
+            {target_openpipe,   tramp_base + g_usb_hooks.tramp_open_pipe_offset,         "OpenPipe"},
+            {target_transfer,   tramp_base + g_usb_hooks.tramp_transfer_offset,          "Transfer"},
+            {target_closepipe,  tramp_base + g_usb_hooks.tramp_close_pipe_offset,        "ClosePipe"},
+            {target_getdevdesc, tramp_base + g_usb_hooks.tramp_get_device_desc_offset,   "GetDevDesc"},
+            {target_ctrlxfer,   tramp_base + g_usb_hooks.tramp_control_transfer_offset,  "CtrlXfer"},
+            {0, 0, NULL}
+        };
+        int i;
+        papertrail("[USB] Writing preambles directly to libusbd...");
+        for (i = 0; hooks[i].name; i++) {
+            uint32_t tgt = hooks[i].target;
+            uint32_t trp = hooks[i].tramp;
+            volatile uint32_t *dst = (volatile uint32_t*)(uintptr_t)tgt;
+            uint32_t hi = (trp >> 16) & 0xFFFF;
+            uint32_t lo = trp & 0xFFFF;
+            dst[0] = 0x3D600000 | hi;     /* lis r11, hi16(tramp) */
+            dst[1] = 0x616B0000 | lo;     /* ori r11, r11, lo16(tramp) */
+            dst[2] = 0x7D6903A6;          /* mtctr r11 */
+            dst[3] = 0x4E800420;          /* bctr */
+            { char buf[80]; int bi=0; const char *s="[USB]   ";while(*s)buf[bi++]=*s++;
+              s=hooks[i].name; while(*s)buf[bi++]=*s++; buf[bi++]=' ';buf[bi++]='@';buf[bi++]='0';buf[bi++]='x';
+              {int sh;for(sh=28;sh>=0;sh-=4){int n=(tgt>>sh)&0xF;buf[bi++]=n<10?'0'+n:'A'+n-10;}}
+              s=" -> 0x"; while(*s)buf[bi++]=*s++;
+              {int sh;for(sh=28;sh>=0;sh-=4){int n=(trp>>sh)&0xF;buf[bi++]=n<10?'0'+n:'A'+n-10;}}
+              buf[bi]=0; papertrail(buf);
+            }
         }
+        papertrail("[USB] Preambles written. Hooks are LIVE.");
     }
-    INIT_PROGRESS(67);
 
-    /* Step 4: Write IPC file for Node.js orchestrator.
-     *
-     * The IPC file contains:
-     *   - TRAMP_* addresses (trampoline locations in our R-W-X page)
-     *   - TARGET_* addresses (PLT stub locations in game .text)
-     *
-     * Node.js reads these, then writes 4-instruction preambles
-     * (lis/ori/mtctr/bctr) into the game's .text segment via
-     * PS3MAPI /write_process. Each preamble replaces a PLT stub
-     * and branches to the corresponding trampoline, which handles
-     * TOC save/restore and calls our C hook. */
-    write_ipc_file(target_init, target_openpipe, target_transfer, target_closepipe);
+    /* Step 5: Write full IPC file with real TARGET_* addresses */
+    write_ipc_file(target_openpipe, target_transfer, target_closepipe,
+                   target_getdevdesc, target_ctrlxfer);
 
-    if (target_init != 0) {
-        DEBUG_PRINT("[USB] TARGET_INIT=0x%08X -> TRAMP_INIT=0x%08X\n",
-                    (unsigned)target_init,
-                    (unsigned)(g_usb_hooks.trampoline_base + g_usb_hooks.tramp_init_offset));
-    } else {
-        DEBUG_PRINT("[USB] TARGET_INIT=0x00000000 (NID not found — injector will skip)\n");
-    }
-    if (target_openpipe != 0) {
-        DEBUG_PRINT("[USB] TARGET_OPENPIPE=0x%08X -> TRAMP_OPENPIPE=0x%08X\n",
-                    (unsigned)target_openpipe,
-                    (unsigned)(g_usb_hooks.trampoline_base + g_usb_hooks.tramp_open_pipe_offset));
-    }
-    if (target_transfer != 0) {
-        DEBUG_PRINT("[USB] TARGET_TRANSFER=0x%08X -> TRAMP_TRANSFER=0x%08X\n",
-                    (unsigned)target_transfer,
-                    (unsigned)(g_usb_hooks.trampoline_base + g_usb_hooks.tramp_transfer_offset));
-    }
-    if (target_closepipe != 0) {
-        DEBUG_PRINT("[USB] TARGET_CLOSEPIPE=0x%08X -> TRAMP_CLOSEPIPE=0x%08X\n",
-                    (unsigned)target_closepipe,
-                    (unsigned)(g_usb_hooks.trampoline_base + g_usb_hooks.tramp_close_pipe_offset));
-    }
+    papertrail("[USB] IPC written with real TARGET_* addresses");
+    DEBUG_PRINT("[USB] Trampoline page at 0x%08X, 5 hooks ready\n"
+                "[USB] TARGET_OPENPIPE=0x%08X TARGET_TRANSFER=0x%08X\n"
+                "[USB] TARGET_CLOSEPIPE=0x%08X TARGET_GETDEVDESC=0x%08X\n"
+                "[USB] TARGET_CTRLXFER=0x%08X\n",
+                (unsigned)g_usb_hooks.trampoline_base,
+                (unsigned)target_openpipe, (unsigned)target_transfer,
+                (unsigned)target_closepipe, (unsigned)target_getdevdesc,
+                (unsigned)target_ctrlxfer);
 
     g_usb_hooks.initialized = 1;
-    DEBUG_PRINT("[USB] All 4 hooks installed, awaiting Node.js preamble\n");
     return 0;
 }
 
