@@ -40,11 +40,22 @@ echo ""
 if [ "$EUID" -ne 0 ]; then
     echo -e "${RED}This script must run as root (sudo).${NC}"
     echo "  sudo ./deck_toypad.sh"
+    echo ""
+    echo "  If you don't have a sudo password set, run:  passwd"
     exit 1
 fi
 
 # ---------------------------------------------------------------------------
-# 2. Install Node.js if missing
+# 2. Disable read-only filesystem (SteamOS default)
+# ---------------------------------------------------------------------------
+if steamos-readonly status 2>/dev/null | grep -q enabled; then
+    echo -e "${YELLOW}Disabling SteamOS read-only mode (needed for pacman)...${NC}"
+    steamos-readonly disable
+    echo -e "${GREEN}  Read-only mode disabled.${NC}"
+fi
+
+# ---------------------------------------------------------------------------
+# 3. Install Node.js if missing
 # ---------------------------------------------------------------------------
 echo -e "${YELLOW}[1/5] Checking Node.js...${NC}"
 if ! command -v node &>/dev/null; then
