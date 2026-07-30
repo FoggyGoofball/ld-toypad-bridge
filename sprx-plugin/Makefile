@@ -22,14 +22,14 @@ TARGET   := ldtoypad
 BUILDDIR := build
 OBJDIR   := obj
 
-C_SRCS   := main.c compat.c network.c debug.c toypad_state.c usb_hooks.c trampoline_gen.c
+C_SRCS   := main.c compat.c network.c debug.c toypad_state.c usb_hooks.c trampoline_gen.c ldd_driver.c opd_hooks.c
 C_OBJS   := $(C_SRCS:%.c=$(OBJDIR)/%.o)
 # No .s assembly files needed — all trampolines generated dynamically at runtime
 
 INCLUDES := -I$(CELL_TARGET)/ppu/include
 
 CFLAGS := -mprx -std=gnu99 -O2 -g -fno-builtin -nodefaultlibs $(INCLUDES)
-LDFLAGS := -mprx -nodefaultlibs -llv2_stub -lfs_stub -lnet_stub -lusbd_stub
+LDFLAGS := -mprx -nodefaultlibs -llv2_stub -lfs_stub -lnet_stub -lusbd_stub -lsysmodule_stub
 
 # oscetool flags for SPRX signing
 # Note: -5 PRX per expert recommendation for injectable modules.

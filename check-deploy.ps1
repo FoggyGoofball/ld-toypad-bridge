@@ -1,5 +1,5 @@
 # Quick verification: compare local and remote SPRX sizes
-$PS3_IP = "192.168.0.47"
+$PS3_IP = "192.168.0.22"
 $localPath = "hello-plugin\build\helloworld.sprx"
 $remotePath = "/dev_hdd0/plugins/helloworld.sprx"
 $local = Get-Item $localPath

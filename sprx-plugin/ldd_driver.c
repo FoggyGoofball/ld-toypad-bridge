@@ -17,16 +17,20 @@
 #include <stdint.h>
 
 #include <cell/usbd.h>
+#include <cell/sysmodule.h>
 
 #include "ldd_driver.h"
 #include "debug.h"
 
+/* papertrail — defined in main.c, writes to boot log */
+extern int papertrail(const char *msg);
+
 #ifndef LDTP_TOYPAD_VID
-#define LDTP_TOYPAD_VID 0x0E6F
+#define LDTP_TOYPAD_VID 0x0781   /* SanDisk VID */
 #endif
 
 #ifndef LDTP_TOYPAD_PID
-#define LDTP_TOYPAD_PID 0x0241
+#define LDTP_TOYPAD_PID 0x5581   /* SanDisk PID */
 #endif
 
 /* Forward declarations */
@@ -62,13 +66,15 @@ struct ldd_global_state g_ldd;
 static int32_t ldd_probe(int32_t dev_id)
 {
     (void)dev_id;
-    DEBUG_VERBOSE("[LDD] probe dev_id=%d\n", dev_id);
+    papertrail("LDD: probe called — claiming device!");
+    DEBUG_PRINT("[LDD] *** PROBE dev_id=%d — CLAIMING ***\n", dev_id);
     return 0; /* claim — attach() will finalize */
 }
 
 static int32_t ldd_attach(int32_t dev_id)
 {
-    DEBUG_PRINT("[LDD] attach dev_id=%d\n", dev_id);
+    papertrail("LDD: *** ATTACH — ToyPad claimed! ***");
+    DEBUG_PRINT("[LDD] *** ATTACH dev_id=%d — TOYPAD CLAIMED ***\n", dev_id);
 
     memset(&g_ldd.device, 0, sizeof(g_ldd.device));
     g_ldd.device.claimed    = 1;
@@ -79,6 +85,7 @@ static int32_t ldd_attach(int32_t dev_id)
     g_ldd.device.pipe_out = dev_id | 0x200;
     g_ldd.device.raw_in_len = 0;
 
+    papertrail("LDD: ToyPad endpoints IN=0x81 OUT=0x01");
     DEBUG_PRINT("[LDD] Toy Pad attached: IN=0x%02X OUT=0x%02X\n",
                 g_ldd.device.ep_addr_in, g_ldd.device.ep_addr_out);
     return 0;
@@ -90,6 +97,7 @@ static int32_t ldd_detach(int32_t dev_id)
         return 0;
     }
 
+    papertrail("LDD: ToyPad DETACHED");
     DEBUG_PRINT("[LDD] Toy Pad detached from dev_id=%d\n", dev_id);
     memset(&g_ldd.device, 0, sizeof(g_ldd.device));
     return 0;
@@ -110,24 +118,41 @@ int ldd_driver_init(void)
 
     memset(&g_ldd, 0, sizeof(g_ldd));
 
-    /* Initialize USB subsystem (no handle returned in Sony SDK) */
-    ret = cellUsbdInit();
+    /* Load USB system module first — the game may not have loaded it yet.
+     * CELL_SYSMODULE_USBD must be active before cellUsbdInit can work.
+     * This is idempotent — safe to call even if already loaded. */
+    ret = cellSysmoduleLoadModule(CELL_SYSMODULE_USBD);
     if (ret != CELL_OK) {
+        DEBUG_ERROR("[LDD] cellSysmoduleLoadModule(USBD) failed: 0x%08X\n", ret);
+        return -1;
+    }
+    DEBUG_PRINT("[LDD] cellSysmoduleLoadModule(USBD) OK\n");
+
+    /* Initialize USB subsystem.  The game may have already called
+     * cellUsbdInit(), returning 0x80110002 (already initialized).
+     * Treat that as success and proceed to registration. */
+    ret = cellUsbdInit();
+    if (ret != CELL_OK && ret != 0x80110002) {
         DEBUG_ERROR("[LDD] cellUsbdInit failed: 0x%08X\n", ret);
         return -1;
     }
-    DEBUG_PRINT("[LDD] cellUsbdInit OK\n");
+    if (ret == 0x80110002) {
+        DEBUG_PRINT("[LDD] cellUsbdInit: USB already initialized, continuing\n");
+    } else {
+        DEBUG_PRINT("[LDD] cellUsbdInit OK\n");
+    }
 
 
-    /* Register Extra LDD for the Toy Pad VID/PID
-     * Signature: cellUsbdRegisterExtraLdd(ops, id_vendor, id_product) */
+    /* Register Extra LDD for the Toy Pad VID/PID.
+     * Accept any non-negative return — different CFW versions may
+     * return different success codes (CELL_OK, CELL_USBD_PROBE_SUCCEEDED,
+     * or custom values). */
     ret = cellUsbdRegisterExtraLdd(&g_ldd_ops,
                                    LDTP_TOYPAD_VID,
                                    LDTP_TOYPAD_PID);
-    if (ret != CELL_USBD_PROBE_SUCCEEDED) {
+    if (ret < 0) {
         DEBUG_ERROR("[LDD] cellUsbdRegisterExtraLdd failed: 0x%08X\n", ret);
-        DEBUG_PRINT("[LDD] Extra LDD not supported in this CFW.\n");
-        DEBUG_PRINT("[LDD] Plugin will operate in network-only mode.\n");
+        DEBUG_PRINT("[LDD] ToyPad LDD not registered (CFW may not support Extra LDD)\n");
         return -1;
     }
 

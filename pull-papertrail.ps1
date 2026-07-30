@@ -1,4 +1,4 @@
-param([string]$PS3IP = "192.168.0.47")
+param([string]$PS3IP = "192.168.0.22")
 
 $files = @(
     "/dev_hdd0/plugins/ldtoypad_boot.log",

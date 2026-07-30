@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+under advisement fro m the expert, i am#!/usr/bin/env bash
 set -euo pipefail
 
 SRC="/mnt/c/Users/Admin/source/repos/dimensions plugin/hello-plugin"

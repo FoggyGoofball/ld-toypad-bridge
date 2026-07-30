@@ -1,5 +1,5 @@
 # check-ps3-log.ps1 — Retrieve debug log from PS3
-param([string]$PS3IP = "192.168.0.47")
+param([string]$PS3IP = "192.168.0.22")
 try {
     $wc = New-Object System.Net.WebClient
     $wc.Credentials = New-Object System.Net.NetworkCredential("mike","mike")

@@ -566,6 +566,13 @@ int my_cellUsbdReg_0944(void *arg1, void *arg2, void *arg3,
         g_usb_hooks.ldd_ops_addr = (uint32_t)(uintptr_t)arg1;
         papertrail("[USB] *** STOLEN LddOps via 0x0944! ***");
     }
+    /* Silently swap ToyPad VID/PID to SanDisk before kernel sees them.
+     * This bypasses the kernel VID/PID filter without any EBOOT patching. */
+    if ((uint32_t)(uintptr_t)arg2 == TOYPAD_VID && (uint32_t)(uintptr_t)arg3 == TOYPAD_PID) {
+        arg2 = (void*)(uintptr_t)0x0781;  /* SanDisk VID */
+        arg3 = (void*)(uintptr_t)0x5581;  /* SanDisk PID */
+        papertrail("[USB] VID/PID swapped: ToyPad -> SanDisk");
+    }
     if (g_real_reg_0944_addr != 0) {
         ppc_opd_t real_opd;
         real_opd.code_addr = g_real_reg_0944_addr + 16;
@@ -588,6 +595,12 @@ int my_cellUsbdReg_0BB4(void *arg1, void *arg2, void *arg3,
         g_usb_hooks.ldd_ops_addr = (uint32_t)(uintptr_t)arg1;
         papertrail("[USB] *** STOLEN LddOps via 0x0BB4! ***");
     }
+    /* Silently swap ToyPad VID/PID to SanDisk before kernel sees them. */
+    if ((uint32_t)(uintptr_t)arg2 == TOYPAD_VID && (uint32_t)(uintptr_t)arg3 == TOYPAD_PID) {
+        arg2 = (void*)(uintptr_t)0x0781;
+        arg3 = (void*)(uintptr_t)0x5581;
+        papertrail("[USB] VID/PID swapped: ToyPad -> SanDisk");
+    }
     if (g_real_reg_0BB4_addr != 0) {
         ppc_opd_t real_opd;
         real_opd.code_addr = g_real_reg_0BB4_addr + 16;
@@ -609,6 +622,12 @@ int my_cellUsbdReg_0D00(void *arg1, void *arg2, void *arg3,
     if (arg1 != NULL && !g_usb_hooks.ldd_ops_addr) {
         g_usb_hooks.ldd_ops_addr = (uint32_t)(uintptr_t)arg1;
         papertrail("[USB] *** STOLEN LddOps via 0x0D00! ***");
+    }
+    /* Silently swap ToyPad VID/PID to SanDisk before kernel sees them. */
+    if ((uint32_t)(uintptr_t)arg2 == TOYPAD_VID && (uint32_t)(uintptr_t)arg3 == TOYPAD_PID) {
+        arg2 = (void*)(uintptr_t)0x0781;
+        arg3 = (void*)(uintptr_t)0x5581;
+        papertrail("[USB] VID/PID swapped: ToyPad -> SanDisk");
     }
     if (g_real_reg_0D00_addr != 0) {
         ppc_opd_t real_opd;
@@ -1361,55 +1380,6 @@ got_all:
                 papertrail("[USB] GOT FAILED — no libusbd OPD refs found.");
             }
 got_done:;
-        }
-
-        /* Write EBOOT memory dump to HDD for offline analysis */
-        {
-            int dfd; uint64_t dwr;
-            if (cellFsOpen("/dev_hdd0/plugins/eboot_dump.bin",
-                           CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
-                           &dfd, NULL, 0) == CELL_OK) {
-                cellFsWrite(dfd, (const void*)0x00010000, 0x1F0000, &dwr);
-                cellFsClose(dfd);
-                {char msg[64];int mi=0;const char *s="[USB] DUMP: wrote ";while(*s)msg[mi++]=*s++;{int n=(int)dwr/1024;msg[mi++]=n<10?'0'+n/10:'0'+n/10;if((n/10)>0)msg[mi++]='0'+n/10;msg[mi++]='0'+n%10;msg[mi++]='K';msg[mi++]='B';}s=" to eboot_dump.bin";while(*s)msg[mi++]=*s++;msg[mi]=0;papertrail(msg);}
-            } else {
-                papertrail("[USB] DUMP: failed to open eboot_dump.bin");
-            }
-        }
-
-        /* Passive diagnostic scan */
-        {
-            uint32_t *scan = (uint32_t*)0x00010000;
-            uint32_t *end  = (uint32_t*)0x02000000;
-            int logged = 0;
-
-            /* Log first 20 individual OPD pointers with valid stwu code */
-            for (; scan < end && logged < 20; scan++) {
-                uint32_t val = *scan;
-                if (val < 0x00010000 || val >= 0x02000000) continue;
-
-                /* Dereference as OPD: [0]=code, [1]=toc. Don't filter TOC. */
-                uint32_t code = ((uint32_t*)val)[0];
-                if (code < 0x00010000 || code >= 0x02000000) continue;
-
-                uint32_t insn = ((uint32_t*)code)[0];
-                if ((insn >> 16) != 0x9421) continue; /* must be stwu */
-
-                /* Check surrounding words for name-like pointer */
-                char ctx[32] = "";
-                if (scan > (uint32_t*)0x00010004) {
-                    uint32_t np = scan[-1];
-                    if (np >= 0x00010000 && np < 0x02000000) {
-                        char *nm = (char*)np;
-                        int ni = 0;
-                        while (ni < 16 && nm[ni] >= 0x20 && nm[ni] <= 0x7E) ctx[ni++] = nm[ni];
-                    }
-                }
-
-                logged++;
-                {char msg[100];int mi=0;const char *s="[USB] OPD #";while(*s)msg[mi++]=*s++;if(logged<10)msg[mi++]=' ';msg[mi++]='0'+logged/10;msg[mi++]='0'+logged%10;s=" at 0x";while(*s)msg[mi++]=*s++;{int sh;for(sh=28;sh>=0;sh-=4){int n=((uint32_t)(uintptr_t)scan>>sh)&0xF;msg[mi++]=n<10?'0'+n:'A'+n-10;}}s=" -> code=0x";while(*s)msg[mi++]=*s++;{int sh;for(sh=28;sh>=0;sh-=4){int n=(code>>sh)&0xF;msg[mi++]=n<10?'0'+n:'A'+n-10;}}if(ctx[0]){s=" name='";while(*s)msg[mi++]=*s++;for(int k=0;ctx[k];k++)msg[mi++]=ctx[k];msg[mi++]='\'';}msg[mi]=0;papertrail(msg);}
-            }
-            papertrail("[USB] PASSIVE OPD SCAN done.");
         }
     }
 

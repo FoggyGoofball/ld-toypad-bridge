@@ -19,6 +19,8 @@ NIDS = {
     0x1AB6D80B: "cellUsbdOpenPipe", 
     0x7B4436CE: "cellUsbdInterruptTransfer",
     0x2F82F1A5: "cellUsbdClosePipe",
+    0x9C8426F7: "cellUsbdGetDeviceDescriptor",
+    0x3219460D: "cellUsbdControlTransfer",
 }
 
 

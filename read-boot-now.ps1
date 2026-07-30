@@ -1,5 +1,5 @@
 # Download boot_plugins.txt from PS3 and inspect it byte-by-byte
-$PS3_IP = "192.168.0.47"
+$PS3_IP = "192.168.0.22"
 $outFile = Join-Path $PSScriptRoot "boot_plugins_downloaded.txt"
 
 try {
