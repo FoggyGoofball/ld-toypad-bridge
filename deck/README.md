@@ -32,6 +32,12 @@ Plug the cable between your Deck and a PC or phone. If the PC/phone shows a new 
 
 If you've never set one, in Konsole type `passwd`, press Enter, type a password twice. **Remember it** — you'll need it for every `sudo` command.
 
+**Forgot your password?** Reset it:
+1. Shut down the Deck
+2. Hold **Volume Up (+)** + **Power** → **Setup Utility** → **Boot from file** → `EFI` → `steamos` → `steamos.efi`
+3. Wait for SteamOS to boot, open Konsole, run `passwd` — no old password required
+4. Done. Reboot normally.
+
 ---
 
 ## Step-by-Step Setup
