@@ -70,7 +70,7 @@ const SPRX_PATH = (() => {
 const WAIT_SECONDS = (() => {
   const idx = process.argv.indexOf('--wait');
   if (idx !== -1 && process.argv[idx + 1]) return parseInt(process.argv[idx + 1], 10);
-  return 60;
+  return 5;  /* was 60 — game is already at ToyPad screen when we inject */
 })();
 
 const POLL_MS = (() => {

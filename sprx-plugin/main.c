@@ -124,6 +124,50 @@ int module_stop(void)
 }
 
 /* ================================================================
+ * call_game_opd — Invoke a game function through its OPD from SPRX
+ *
+ * The game's probe/attach OPDs contain {code_addr, toc_addr, env}.
+ * We save our SPRX TOC (r2), load the game's TOC, call via CTR,
+ * then restore our TOC. Returns the game function's return value.
+ * ================================================================ */
+static int call_game_opd(uint32_t opd_addr, int dev_id)
+{
+    uint32_t *opd = (uint32_t*)opd_addr;
+    uint32_t code = opd[0];
+    uint32_t toc  = opd[1];
+    int result;
+
+    __asm__ volatile (
+        "stwu   1, -0x80(1)\n\t"  /* Allocate stack frame */
+        "mflr   0\n\t"            /* Save Link Register */
+        "stw    0, 0x84(1)\n\t"   /* Store LR in caller's frame (+4) */
+
+        "stw    2, 0x28(1)\n\t"   /* CRITICAL: Save SPRX TOC to stack! (NOT r11 — volatile!) */
+
+        "mr     2, %1\n\t"        /* Load Game TOC into r2 */
+        "mtctr  %2\n\t"           /* Move target code address to CTR */
+        "mr     3, %3\n\t"        /* Move dev_id arg to r3 */
+
+        "bctrl\n\t"               /* Branch and Link to Game Function */
+
+        "lwz    2, 0x28(1)\n\t"   /* CRITICAL: Restore SPRX TOC from stack */
+
+        "lwz    0, 0x84(1)\n\t"   /* Restore Link Register */
+        "mtlr   0\n\t"            /* Move to LR */
+        "addi   1, 1, 0x80\n\t"   /* Deallocate stack frame */
+        "mr     %0, 3\n\t"        /* Capture return value from r3 */
+
+        : "=r"(result)
+        : "r"(toc), "r"(code), "r"(dev_id)
+
+        /* Tell the compiler the game destroys basically everything */
+        : "r0", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "r12",
+          "ctr", "lr", "cr0", "cr1", "cr2", "cr3", "cr4", "cr5", "cr6", "cr7", "memory"
+    );
+    return result;
+}
+
+/* ================================================================
  * worker_thread — full init chain + UDP main loop.
  *
  * Boot log confirmed this runs.  All subsystems initialized here.
@@ -193,14 +237,15 @@ static void worker_thread(uint64_t arg)
      * returning the ToyPad descriptor. The game's attach() callback
      * then fires, and our OpenPipe/InterruptTransfer hooks take over.
      *
-     * We try the trampoline-based usb_hook_init() first (5 hooks:
-     * Init, OpenPipe, InterruptTransfer, ClosePipe, GetDeviceDescriptor).
+     * We try the trampoline-based usb_hook_init() first (8 hooks:
+     * OpenPipe, InterruptTransfer, ClosePipe, GetDeviceDescriptor,
+     * ControlTransfer + 3 RegisterLdd capture hooks).
      * If it succeeds, we skip the older OPD-overwrite hooks entirely.
      * ── */
     ret = usb_hook_init();
     if (ret == 0) {
         papertrail("OK: usb_hook_init() returned success — check GOT count above");
-        papertrail("PLUG A USB FLASH DRIVE INTO THE PS3 NOW to trigger the game!");
+        /* LDD ops harvested during init — trigger deferred to main loop */
     } else {
         papertrail("NOTE: usb_hook_init() failed — falling back to OPD hooks");
         /* ── 5b. Fallback: OPD hooks ── */
@@ -226,12 +271,50 @@ static void worker_thread(uint64_t arg)
 
     int use_opd_fallback = (ret != 0);  /* ret is from usb_hook_init above */
     int hotplug_fired = 0;
+    int harvester_triggered = 0; /* Option 2: XMB rescan → RegisterLdd hook steals ops.
+                                   Deferred trigger fires probe(0x99)/attach(0x99) via call_game_opd. */
+    int loop_count = 0;
 
     while (!g_shutdown) {
         uint8_t buf[NET_PACKET_MAX_SIZE];
+        loop_count++;
 
-        /* 6a. Fire hotplug once server connects (OPD fallback only).
-         * NOT needed for Trojan Horse — physical USB device triggers it. */
+        /* 6a. Option 2 deferred trigger: wait 3s (60 ticks) for ops capture.
+         * g_usb_hooks.ldd_ops_addr is set by my_cellUsbdRegisterLdd_hook
+         * when user triggers XMB rescan. Must NOT be 0 (Harvester's false positive). */
+        if (!harvester_triggered && loop_count > 60 && g_usb_hooks.ldd_ops_addr) {
+            uint32_t *ops = (uint32_t*)g_usb_hooks.ldd_ops_addr;
+            uint32_t probe_opd  = ops[1]; /* CellUsbdLddOps.probe */
+            uint32_t attach_opd = ops[2]; /* CellUsbdLddOps.attach */
+            if (probe_opd >= 0x00010000 && probe_opd < 0x02000000 &&
+                attach_opd >= 0x00010000 && attach_opd < 0x02000000) {
+                /* SAFETY: verify probe code starts with stwu (0x94xxxxxx) */
+                uint32_t probe_code = ((uint32_t*)probe_opd)[0];
+                uint32_t first_insn = ((uint32_t*)probe_code)[0];
+                if ((first_insn >> 16) != 0x9421) {
+                    papertrail("[TRIGGER] ABORT: probe code not stwu — bad OPD, skipping");
+                    harvester_triggered = 1;
+                } else {
+                    papertrail("[TRIGGER] Calling probe(0x99)...");
+                    int r = call_game_opd(probe_opd, 0x99);
+                    {char msg[64];int mi=0;const char *s="[TRIGGER] probe returned ";while(*s)msg[mi++]=*s++;
+                     if(r>=0){s="SUCCESS";while(*s)msg[mi++]=*s++;}else{s="FAIL";while(*s)msg[mi++]=*s++;}
+                     msg[mi]=0;papertrail(msg);}
+                    if (r >= 0) {
+                        papertrail("[TRIGGER] Calling attach(0x99)...");
+                        r = call_game_opd(attach_opd, 0x99);
+                        {char msg[64];int mi=0;const char *s="[TRIGGER] attach returned ";while(*s)msg[mi++]=*s++;
+                         if(r>=0){s="SUCCESS";while(*s)msg[mi++]=*s++;}else{s="FAIL";while(*s)msg[mi++]=*s++;}
+                         msg[mi]=0;papertrail(msg);}
+                    }
+                    harvester_triggered = 1;
+                }
+            } else {
+                papertrail("[TRIGGER] ldd_ops_addr set but probes not in EBOOT range");
+            }
+        }
+
+        /* 6b. Fire hotplug once server connects (OPD fallback only). */
         if (use_opd_fallback && !hotplug_fired && opd_hooks_has_game_ops()) {
             papertrail("Attempting hotplug — firing game probe/attach...");
             int r = opd_hooks_fire_hotplug();

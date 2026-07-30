@@ -88,6 +88,14 @@ static uint32_t g_real_openpipe_addr = 0;
 static uint32_t g_real_transfer_addr = 0;
 static uint32_t g_real_closepipe_addr = 0;
 
+/* Real libusbd RegisterLdd/RegisterExtraLdd addresses for passthrough.
+ * We don't know which offset maps to which C symbol, so we call
+ * target+16 with the game's TOC and all 3 original args — safe because
+ * extra args in r4/r5 are harmlessly ignored by 1-arg functions. */
+static uint32_t g_real_reg_0944_addr = 0;
+static uint32_t g_real_reg_0BB4_addr = 0;
+static uint32_t g_real_reg_0D00_addr = 0;
+
 /* libusbd.sprx runtime base address (from sys_prx_get_module_id_by_name) */
 static uint32_t g_libusbd_base = 0;
 
@@ -230,6 +238,11 @@ static void log_trampoline_header(const char *label, uint32_t base)
                 (unsigned)p[2], (unsigned)p[3]);
 }
 
+/* Forward declarations for registration hooks used by install_hooks() */
+int my_cellUsbdReg_0944(void *arg1, void *arg2, void *arg3, uint32_t game_toc);
+int my_cellUsbdReg_0BB4(void *arg1, void *arg2, void *arg3, uint32_t game_toc);
+int my_cellUsbdReg_0D00(void *arg1, void *arg2, void *arg3, uint32_t game_toc);
+
 static int install_hooks(void)
 {
     sys_memory_container_t container;
@@ -272,51 +285,41 @@ static int install_hooks(void)
     g_usb_hooks.tramp_close_pipe_offset = 2 * TRAMPOLINE_BLOCK_SIZE;
     g_usb_hooks.tramp_get_device_desc_offset = 3 * TRAMPOLINE_BLOCK_SIZE;
     g_usb_hooks.tramp_control_transfer_offset = 4 * TRAMPOLINE_BLOCK_SIZE;
+    g_usb_hooks.tramp_reg_0944_offset = 5 * TRAMPOLINE_BLOCK_SIZE;
+    g_usb_hooks.tramp_reg_0BB4_offset = 6 * TRAMPOLINE_BLOCK_SIZE;
+    g_usb_hooks.tramp_reg_0D00_offset = 7 * TRAMPOLINE_BLOCK_SIZE;
 
-    /* Heartbeat counter at offset 320 (after 5 x 64-byte trampolines). */
-    g_usb_hooks.heartbeat = (volatile uint32_t*)(uintptr_t)(base_addr + 320);
-    DEBUG_PRINT("[USB] Heartbeat counter at 0x%08X\n",
-                (unsigned)(base_addr + 256));
+    /* Heartbeat counter at offset 512 (after 8 x 64-byte trampolines). */
+    g_usb_hooks.heartbeat = (volatile uint32_t*)(uintptr_t)(base_addr + 512);
 
-    /* Step 2: Generate trampolines using create_hook_trampoline(). */
-    /* Init hook REMOVED — calling cellUsbdInit() from SPRX context
-     * after game USB init can destabilize the active stack.
-     * Start directly with OpenPipe at offset 0. */
-
+    /* Step 2: Generate trampolines. */
     create_hook_trampoline(
         (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_open_pipe_offset),
         (void*)my_cellUsbdOpenPipe, TOC_REG_OPENPIPE);
-    DEBUG_PRINT("[USB] OpenPipe trampoline at 0x%08X\n",
-                (unsigned)(base_addr + g_usb_hooks.tramp_open_pipe_offset));
-    log_trampoline_header("OpenPipe", (unsigned)(base_addr + g_usb_hooks.tramp_open_pipe_offset));
-
     create_hook_trampoline(
         (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_transfer_offset),
         (void*)my_cellUsbdInterruptTransfer, TOC_REG_TRANSFER);
-    DEBUG_PRINT("[USB] Transfer trampoline at 0x%08X\n",
-                (unsigned)(base_addr + g_usb_hooks.tramp_transfer_offset));
-    log_trampoline_header("Transfer", (unsigned)(base_addr + g_usb_hooks.tramp_transfer_offset));
-
     create_hook_trampoline(
         (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_close_pipe_offset),
         (void*)my_cellUsbdClosePipe, TOC_REG_CLOSEPIPE);
-    DEBUG_PRINT("[USB] ClosePipe trampoline at 0x%08X\n",
-                (unsigned)(base_addr + g_usb_hooks.tramp_close_pipe_offset));
-    log_trampoline_header("ClosePipe", (unsigned)(base_addr + g_usb_hooks.tramp_close_pipe_offset));
-
     create_hook_trampoline(
         (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_get_device_desc_offset),
         (void*)my_cellUsbdGetDeviceDescriptor, TOC_REG_GET_DEVICE_DESC);
-    DEBUG_PRINT("[USB] GetDeviceDescriptor trampoline at 0x%08X\n",
-                (unsigned)(base_addr + g_usb_hooks.tramp_get_device_desc_offset));
-    log_trampoline_header("GetDevDesc", (unsigned)(base_addr + g_usb_hooks.tramp_get_device_desc_offset));
-
     create_hook_trampoline(
         (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_control_transfer_offset),
         (void*)my_cellUsbdControlTransfer, TOC_REG_CONTROL_TRANSFER);
-    DEBUG_PRINT("[USB] ControlTransfer trampoline at 0x%08X\n",
-                (unsigned)(base_addr + g_usb_hooks.tramp_control_transfer_offset));
-    log_trampoline_header("CtrlXfer", (unsigned)(base_addr + g_usb_hooks.tramp_control_transfer_offset));
+
+    /* Registration hooks — TOC in r4 (1-arg RegisterLdd) or r6 (3-arg
+     * RegisterExtraLdd). We use r6 for all to be safe. */
+    create_hook_trampoline(
+        (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_reg_0944_offset),
+        (void*)my_cellUsbdReg_0944, 6);
+    create_hook_trampoline(
+        (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_reg_0BB4_offset),
+        (void*)my_cellUsbdReg_0BB4, 6);
+    create_hook_trampoline(
+        (uint32_t*)(uintptr_t)(base_addr + g_usb_hooks.tramp_reg_0D00_offset),
+        (void*)my_cellUsbdReg_0D00, 6);
 
     DEBUG_PRINT("[USB] Trampoline page at 0x%08X (size=%u)\n",
                 (unsigned)base_addr, (unsigned)TRAMPOLINE_PAGE_SIZE);
@@ -339,7 +342,9 @@ static int install_hooks(void)
 
 static int write_ipc_file(uint32_t target_openpipe,
                           uint32_t target_transfer, uint32_t target_closepipe,
-                          uint32_t target_getdevdesc, uint32_t target_ctrlxfer)
+                          uint32_t target_getdevdesc, uint32_t target_ctrlxfer,
+                          uint32_t target_reg_0944, uint32_t target_reg_0BB4,
+                          uint32_t target_reg_0D00)
 {
     int fd;
     uint64_t written;
@@ -393,6 +398,12 @@ static int write_ipc_file(uint32_t target_openpipe,
         g_usb_hooks.trampoline_base + g_usb_hooks.tramp_get_device_desc_offset);
     WRITE_ADDR_LINE("TRAMP_CTRLXFER",
         g_usb_hooks.trampoline_base + g_usb_hooks.tramp_control_transfer_offset);
+    WRITE_ADDR_LINE("TRAMP_REG_0944",
+        g_usb_hooks.trampoline_base + g_usb_hooks.tramp_reg_0944_offset);
+    WRITE_ADDR_LINE("TRAMP_REG_0BB4",
+        g_usb_hooks.trampoline_base + g_usb_hooks.tramp_reg_0BB4_offset);
+    WRITE_ADDR_LINE("TRAMP_REG_0D00",
+        g_usb_hooks.trampoline_base + g_usb_hooks.tramp_reg_0D00_offset);
 
     /* Game PLT stub addresses (from NID scan) for preamble installation */
     WRITE_ADDR_LINE("TARGET_OPENPIPE", target_openpipe);
@@ -401,9 +412,17 @@ static int write_ipc_file(uint32_t target_openpipe,
     WRITE_ADDR_LINE("TARGET_GETDEVDESC", target_getdevdesc);
     WRITE_ADDR_LINE("TARGET_CTRLXFER", target_ctrlxfer);
 
+    /* Registration hook targets */
+    WRITE_ADDR_LINE("TARGET_REG_0944", target_reg_0944);
+    WRITE_ADDR_LINE("TARGET_REG_0BB4", target_reg_0BB4);
+    WRITE_ADDR_LINE("TARGET_REG_0D00", target_reg_0D00);
+
     /* Heartbeat offset — Node.js injector reads this to locate the
      * heartbeat counter in the trampoline page. NOT hardcoded! */
-    WRITE_ADDR_LINE("HEARTBEAT_OFFSET", 320);
+    WRITE_ADDR_LINE("HEARTBEAT_OFFSET", 512);
+
+    /* LDD ops struct address — captured by RegisterLdd hook (XMB rescan) */
+    WRITE_ADDR_LINE("LDD_OPS", g_usb_hooks.ldd_ops_addr);
 
 #undef WRITE_ADDR_LINE
 
@@ -526,6 +545,81 @@ static uint8_t extract_ep_addr(const void *ep_descriptor)
 {
     if (ep_descriptor == NULL) return 0;
     return ((const uint8_t *)ep_descriptor)[2];
+}
+
+/* ================================================================
+ * HOOK: my_cellUsbdReg_0944 — cellUsbdRegisterLdd via XMB Rescan
+ *
+ * Steals the CellUsbdLddOps pointer from r3, then passes through
+ * to the real libusbd function at target+16 with the game's TOC.
+ * Uses the ppc_opd_t trick (same as OpenPipe passthrough) to
+ * correctly restore game TOC before calling.
+ *
+ * We pass ALL 3 original args (arg1, arg2, arg3) — extra args in
+ * r4/r5 are harmlessly ignored if the real function is the 1-arg
+ * cellUsbdRegisterLdd rather than 3-arg RegisterExtraLdd.
+ * ================================================================ */
+int my_cellUsbdReg_0944(void *arg1, void *arg2, void *arg3,
+                         uint32_t game_toc)
+{
+    if (arg1 != NULL && !g_usb_hooks.ldd_ops_addr) {
+        g_usb_hooks.ldd_ops_addr = (uint32_t)(uintptr_t)arg1;
+        papertrail("[USB] *** STOLEN LddOps via 0x0944! ***");
+    }
+    if (g_real_reg_0944_addr != 0) {
+        ppc_opd_t real_opd;
+        real_opd.code_addr = g_real_reg_0944_addr + 16;
+        real_opd.toc_addr  = game_toc;
+        real_opd.env_ptr   = 0;
+        int (*real_fn)(void*, void*, void*) =
+            (int(*)(void*,void*,void*))&real_opd;
+        return real_fn(arg1, arg2, arg3);
+    }
+    return CELL_USBD_ERROR_FAILED;
+}
+
+/* ================================================================
+ * HOOK: my_cellUsbdReg_0BB4 — cellUsbdRegisterExtraLdd? @0x0BB4
+ * ================================================================ */
+int my_cellUsbdReg_0BB4(void *arg1, void *arg2, void *arg3,
+                         uint32_t game_toc)
+{
+    if (arg1 != NULL && !g_usb_hooks.ldd_ops_addr) {
+        g_usb_hooks.ldd_ops_addr = (uint32_t)(uintptr_t)arg1;
+        papertrail("[USB] *** STOLEN LddOps via 0x0BB4! ***");
+    }
+    if (g_real_reg_0BB4_addr != 0) {
+        ppc_opd_t real_opd;
+        real_opd.code_addr = g_real_reg_0BB4_addr + 16;
+        real_opd.toc_addr  = game_toc;
+        real_opd.env_ptr   = 0;
+        int (*real_fn)(void*, void*, void*) =
+            (int(*)(void*,void*,void*))&real_opd;
+        return real_fn(arg1, arg2, arg3);
+    }
+    return CELL_USBD_ERROR_FAILED;
+}
+
+/* ================================================================
+ * HOOK: my_cellUsbdReg_0D00 — cellUsbdRegisterExtraLdd? @0x0D00
+ * ================================================================ */
+int my_cellUsbdReg_0D00(void *arg1, void *arg2, void *arg3,
+                         uint32_t game_toc)
+{
+    if (arg1 != NULL && !g_usb_hooks.ldd_ops_addr) {
+        g_usb_hooks.ldd_ops_addr = (uint32_t)(uintptr_t)arg1;
+        papertrail("[USB] *** STOLEN LddOps via 0x0D00! ***");
+    }
+    if (g_real_reg_0D00_addr != 0) {
+        ppc_opd_t real_opd;
+        real_opd.code_addr = g_real_reg_0D00_addr + 16;
+        real_opd.toc_addr  = game_toc;
+        real_opd.env_ptr   = 0;
+        int (*real_fn)(void*, void*, void*) =
+            (int(*)(void*,void*,void*))&real_opd;
+        return real_fn(arg1, arg2, arg3);
+    }
+    return CELL_USBD_ERROR_FAILED;
 }
 
 /* ================================================================
@@ -959,6 +1053,9 @@ static int find_cellusbd_functions_via_opd(void)
 #define LIBUSBD_OFFSET_CLOSEPIPE      0x00000380
 #define LIBUSBD_OFFSET_GET_DEV_DESC   0x0000061C
 #define LIBUSBD_OFFSET_CONTROL_XFER   0x000007C8
+#define LIBUSBD_OFFSET_REG_0944       0x00000944  /* cellUsbdRegisterLdd */
+#define LIBUSBD_OFFSET_REG_0BB4       0x00000BB4  /* cellUsbdRegisterExtraLdd? */
+#define LIBUSBD_OFFSET_REG_0D00       0x00000D00  /* cellUsbdRegisterExtraLdd? */
 
 /* Offset of "cellUsbd_Library" string within libusbd.sprx sceModuleInfo */
 #define MODULE_INFO_OFFSET            0x94EC
@@ -1080,6 +1177,7 @@ int usb_hook_init(void)
     uint32_t lib_base;
     uint32_t target_openpipe, target_transfer, target_closepipe;
     uint32_t target_getdevdesc, target_ctrlxfer;
+    uint32_t target_reg_0944, target_reg_0BB4, target_reg_0D00;
 
     if (g_usb_hooks.initialized) return 0;
     memset(&g_usb_hooks, 0, sizeof(g_usb_hooks));
@@ -1141,68 +1239,197 @@ int usb_hook_init(void)
     target_closepipe  = lib_base + LIBUSBD_OFFSET_CLOSEPIPE;
     target_getdevdesc = lib_base + LIBUSBD_OFFSET_GET_DEV_DESC;
     target_ctrlxfer   = lib_base + LIBUSBD_OFFSET_CONTROL_XFER;
+    target_reg_0944   = lib_base + LIBUSBD_OFFSET_REG_0944;
+    target_reg_0BB4   = lib_base + LIBUSBD_OFFSET_REG_0BB4;
+    target_reg_0D00   = lib_base + LIBUSBD_OFFSET_REG_0D00;
 
     /* Step 3: Store passthrough addresses (skip preamble) */
     g_real_openpipe_addr  = target_openpipe;
     g_real_transfer_addr  = target_transfer;
     g_real_closepipe_addr = target_closepipe;
+    g_real_reg_0944_addr  = target_reg_0944;
+    g_real_reg_0BB4_addr  = target_reg_0BB4;
+    g_real_reg_0D00_addr  = target_reg_0D00;
 
-    /* Step 4: Allocate trampoline page and install 5 hooks */
+    /* Step 4: Allocate trampoline page and install 8 hooks */
     if (install_hooks() != 0) {
         DEBUG_ERROR("[USB] Hook installation failed\n");
         return -1;
     }
 
-    /* Step 4.5: Write preambles directly to libusbd .text targets.
-     * PS3MAPI MEMORY SET can't write to shared module memory,
-     * but the SPRX runs inside the game process. Raw pointer
-     * writes on CFW Cobra 8.5 should succeed. */
+    /* Step 4.5: GOT PATCHING — redirect game's PLT to our trampolines.
+     * libusbd's .text is MMU write-protected, but the game EBOOT's GOT
+     * entries (in .data) are writable. Each GOT entry contains a pointer
+     * to a libusbd OPD. We overwrite it with a pointer to our OPD in
+     * the trampoline page. */
     {
+        /* GOT SCAN: search for libusbd symbols used by EBOOT */
         uint32_t tramp_base = g_usb_hooks.trampoline_base;
-        struct { uint32_t target; uint32_t tramp; const char *name; } hooks[] = {
-            {target_openpipe,   tramp_base + g_usb_hooks.tramp_open_pipe_offset,         "OpenPipe"},
-            {target_transfer,   tramp_base + g_usb_hooks.tramp_transfer_offset,          "Transfer"},
-            {target_closepipe,  tramp_base + g_usb_hooks.tramp_close_pipe_offset,        "ClosePipe"},
-            {target_getdevdesc, tramp_base + g_usb_hooks.tramp_get_device_desc_offset,   "GetDevDesc"},
-            {target_ctrlxfer,   tramp_base + g_usb_hooks.tramp_control_transfer_offset,  "CtrlXfer"},
+        uint32_t opd_base   = tramp_base + 576;  /* after 8 trampolines + heartbeat */
+
+        /* Get SPRX TOC from our hook function's OPD */
+        uint32_t sprx_toc = ((uint32_t*)my_cellUsbdOpenPipe)[1];
+
+        /* Create 5 OPDs pointing to our trampolines */
+        volatile uint32_t *opd = (volatile uint32_t*)(uintptr_t)opd_base;
+        struct { uint32_t tramp_offset; uint32_t libusbd_opd; const char *name; } hooks[] = {
+            {g_usb_hooks.tramp_open_pipe_offset,         target_openpipe,   "OpenPipe"},
+            {g_usb_hooks.tramp_transfer_offset,          target_transfer,   "Transfer"},
+            {g_usb_hooks.tramp_close_pipe_offset,        target_closepipe,  "ClosePipe"},
+            {g_usb_hooks.tramp_get_device_desc_offset,   target_getdevdesc, "GetDevDesc"},
+            {g_usb_hooks.tramp_control_transfer_offset,  target_ctrlxfer,   "CtrlXfer"},
+            {g_usb_hooks.tramp_reg_0944_offset,          target_reg_0944,   "RegLdd@0944"},
+            {g_usb_hooks.tramp_reg_0BB4_offset,          target_reg_0BB4,   "RegLdd@0BB4"},
+            {g_usb_hooks.tramp_reg_0D00_offset,          target_reg_0D00,   "RegLdd@0D00"},
             {0, 0, NULL}
         };
         int i;
-        papertrail("[USB] Writing preambles directly to libusbd...");
         for (i = 0; hooks[i].name; i++) {
-            uint32_t tgt = hooks[i].target;
-            uint32_t trp = hooks[i].tramp;
-            volatile uint32_t *dst = (volatile uint32_t*)(uintptr_t)tgt;
-            uint32_t hi = (trp >> 16) & 0xFFFF;
-            uint32_t lo = trp & 0xFFFF;
-            dst[0] = 0x3D600000 | hi;     /* lis r11, hi16(tramp) */
-            dst[1] = 0x616B0000 | lo;     /* ori r11, r11, lo16(tramp) */
-            dst[2] = 0x7D6903A6;          /* mtctr r11 */
-            dst[3] = 0x4E800420;          /* bctr */
-            { char buf[80]; int bi=0; const char *s="[USB]   ";while(*s)buf[bi++]=*s++;
-              s=hooks[i].name; while(*s)buf[bi++]=*s++; buf[bi++]=' ';buf[bi++]='@';buf[bi++]='0';buf[bi++]='x';
-              {int sh;for(sh=28;sh>=0;sh-=4){int n=(tgt>>sh)&0xF;buf[bi++]=n<10?'0'+n:'A'+n-10;}}
-              s=" -> 0x"; while(*s)buf[bi++]=*s++;
-              {int sh;for(sh=28;sh>=0;sh-=4){int n=(trp>>sh)&0xF;buf[bi++]=n<10?'0'+n:'A'+n-10;}}
-              buf[bi]=0; papertrail(buf);
+            opd[i*3+0] = tramp_base + hooks[i].tramp_offset;
+            opd[i*3+1] = sprx_toc;
+            opd[i*3+2] = 0;
+        }
+        {char msg[80];int mi=0;const char *s;for(s="[USB] OPDs at 0x";*s;msg[mi++]=*s++);{int sh;for(sh=28;sh>=0;sh-=4){int n=((unsigned)opd_base>>sh)&0xF;msg[mi++]=n<10?'0'+n:'A'+n-10;}}s=", TOC=0x";while(*s)msg[mi++]=*s++;{int sh;for(sh=28;sh>=0;sh-=4){int n=(sprx_toc>>sh)&0xF;msg[mi++]=n<10?'0'+n:'A'+n-10;}}msg[mi]=0;papertrail(msg);}
+
+        /* Scan game heap for libusbd OPD pointer values and replace.
+         * Use cellFsWrite as a safe page probe before reading each 64KB
+         * chunk — avoids DSI on unmapped pages (same technique proven
+         * by find_libusbd_base_safe). Single pass scans all 5 needles. */
+        {
+            int probe_fd, patched = 0;
+            if (cellFsOpen("/dev_hdd0/plugins/mem_probe.tmp",
+                           CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
+                           &probe_fd, NULL, 0) != CELL_OK) {
+                papertrail("[USB] GOT: probe file open failed");
+                goto got_done;
+            }
+
+            struct { uint32_t start; uint32_t end; } ranges[] = {
+                {0x00010000, 0x02000000},
+                {0x02000000, 0x10000000},
+                {0x10000000, 0x20000000},
+                {0, 0}
+            };
+            int found[8] = {0,0,0,0,0,0,0,0};
+            int ri;
+            for (ri = 0; ranges[ri].end; ri++) {
+                uint32_t page;
+                for (page = ranges[ri].start; page < ranges[ri].end; page += 0x10000) {
+                    /* Safe probe: cellFsWrite returns CELL_EFAULT for unmapped */
+                    uint64_t wr;
+                    if (cellFsWrite(probe_fd, (const void*)(uintptr_t)page, 4, &wr) != CELL_OK)
+                        continue;  /* unmapped — skip */
+
+                    /* Page is mapped — scan for all 5 needles */
+                    uint32_t *scan = (uint32_t*)(uintptr_t)page;
+                    uint32_t *end  = (uint32_t*)(uintptr_t)(page + 0x10000);
+                    int all_done = 1;
+                    for (i = 0; i < 8; i++) all_done &= (found[i] >= 2);
+                    if (all_done) goto got_all;
+
+                    for (; scan < end; scan++) {
+                        uint32_t val = *scan;
+                        for (i = 0; i < 8; i++) {
+                            if (found[i] < 2 && val == hooks[i].libusbd_opd) {
+                                *(volatile uint32_t*)scan = opd_base + (uint32_t)(i * 12);
+                                __asm__ volatile (
+                                    "dcbst 0, %0\n\tsync\n\t"
+                                    "icbi 0, %0\n\tisync"
+                                    :: "r"(scan) : "memory"
+                                );
+                                found[i]++;
+                            }
+                        }
+                    }
+                }
+            }
+got_all:
+            cellFsClose(probe_fd);
+            cellFsUnlink("/dev_hdd0/plugins/mem_probe.tmp");
+
+            for (i = 0; i < 8; i++) {
+                patched += found[i];
+                if (found[i] > 0) {
+                    {char msg[64];int mi=0;const char *s="[USB] GOT ";while(*s)msg[mi++]=*s++;s=hooks[i].name;while(*s)msg[mi++]=*s++;msg[mi++]=':';msg[mi++]=' ';msg[mi++]='0'+found[i];msg[mi++]=' ';msg[mi++]='e';msg[mi++]='n';msg[mi++]='t';msg[mi++]=0;papertrail(msg);}
+                } else {
+                    {char msg[64];int mi=0;const char *s="[USB] GOT ";while(*s)msg[mi++]=*s++;s=hooks[i].name;while(*s)msg[mi++]=*s++;s=": NOT FOUND";while(*s)msg[mi++]=*s++;msg[mi]=0;papertrail(msg);}
+                }
+            }
+            if (patched > 0) {
+                {char msg[64];int mi=0;const char *s="[USB] GOT done: ";while(*s)msg[mi++]=*s++;msg[mi++]='0'+patched;s=" entries. LIVE.";while(*s)msg[mi++]=*s++;msg[mi]=0;papertrail(msg);}
+            } else {
+                papertrail("[USB] GOT FAILED — no libusbd OPD refs found.");
+            }
+got_done:;
+        }
+
+        /* Write EBOOT memory dump to HDD for offline analysis */
+        {
+            int dfd; uint64_t dwr;
+            if (cellFsOpen("/dev_hdd0/plugins/eboot_dump.bin",
+                           CELL_FS_O_WRONLY | CELL_FS_O_CREAT | CELL_FS_O_TRUNC,
+                           &dfd, NULL, 0) == CELL_OK) {
+                cellFsWrite(dfd, (const void*)0x00010000, 0x1F0000, &dwr);
+                cellFsClose(dfd);
+                {char msg[64];int mi=0;const char *s="[USB] DUMP: wrote ";while(*s)msg[mi++]=*s++;{int n=(int)dwr/1024;msg[mi++]=n<10?'0'+n/10:'0'+n/10;if((n/10)>0)msg[mi++]='0'+n/10;msg[mi++]='0'+n%10;msg[mi++]='K';msg[mi++]='B';}s=" to eboot_dump.bin";while(*s)msg[mi++]=*s++;msg[mi]=0;papertrail(msg);}
+            } else {
+                papertrail("[USB] DUMP: failed to open eboot_dump.bin");
             }
         }
-        papertrail("[USB] Preambles written. Hooks are LIVE.");
+
+        /* Passive diagnostic scan */
+        {
+            uint32_t *scan = (uint32_t*)0x00010000;
+            uint32_t *end  = (uint32_t*)0x02000000;
+            int logged = 0;
+
+            /* Log first 20 individual OPD pointers with valid stwu code */
+            for (; scan < end && logged < 20; scan++) {
+                uint32_t val = *scan;
+                if (val < 0x00010000 || val >= 0x02000000) continue;
+
+                /* Dereference as OPD: [0]=code, [1]=toc. Don't filter TOC. */
+                uint32_t code = ((uint32_t*)val)[0];
+                if (code < 0x00010000 || code >= 0x02000000) continue;
+
+                uint32_t insn = ((uint32_t*)code)[0];
+                if ((insn >> 16) != 0x9421) continue; /* must be stwu */
+
+                /* Check surrounding words for name-like pointer */
+                char ctx[32] = "";
+                if (scan > (uint32_t*)0x00010004) {
+                    uint32_t np = scan[-1];
+                    if (np >= 0x00010000 && np < 0x02000000) {
+                        char *nm = (char*)np;
+                        int ni = 0;
+                        while (ni < 16 && nm[ni] >= 0x20 && nm[ni] <= 0x7E) ctx[ni++] = nm[ni];
+                    }
+                }
+
+                logged++;
+                {char msg[100];int mi=0;const char *s="[USB] OPD #";while(*s)msg[mi++]=*s++;if(logged<10)msg[mi++]=' ';msg[mi++]='0'+logged/10;msg[mi++]='0'+logged%10;s=" at 0x";while(*s)msg[mi++]=*s++;{int sh;for(sh=28;sh>=0;sh-=4){int n=((uint32_t)(uintptr_t)scan>>sh)&0xF;msg[mi++]=n<10?'0'+n:'A'+n-10;}}s=" -> code=0x";while(*s)msg[mi++]=*s++;{int sh;for(sh=28;sh>=0;sh-=4){int n=(code>>sh)&0xF;msg[mi++]=n<10?'0'+n:'A'+n-10;}}if(ctx[0]){s=" name='";while(*s)msg[mi++]=*s++;for(int k=0;ctx[k];k++)msg[mi++]=ctx[k];msg[mi++]='\'';}msg[mi]=0;papertrail(msg);}
+            }
+            papertrail("[USB] PASSIVE OPD SCAN done.");
+        }
     }
 
     /* Step 5: Write full IPC file with real TARGET_* addresses */
     write_ipc_file(target_openpipe, target_transfer, target_closepipe,
-                   target_getdevdesc, target_ctrlxfer);
+                   target_getdevdesc, target_ctrlxfer,
+                   target_reg_0944, target_reg_0BB4, target_reg_0D00);
 
     papertrail("[USB] IPC written with real TARGET_* addresses");
-    DEBUG_PRINT("[USB] Trampoline page at 0x%08X, 5 hooks ready\n"
+    DEBUG_PRINT("[USB] Trampoline page at 0x%08X, 8 hooks ready\n"
                 "[USB] TARGET_OPENPIPE=0x%08X TARGET_TRANSFER=0x%08X\n"
                 "[USB] TARGET_CLOSEPIPE=0x%08X TARGET_GETDEVDESC=0x%08X\n"
-                "[USB] TARGET_CTRLXFER=0x%08X\n",
+                "[USB] TARGET_CTRLXFER=0x%08X\n"
+                "[USB] TARGET_REG_0944=0x%08X TARGET_REG_0BB4=0x%08X TARGET_REG_0D00=0x%08X\n",
                 (unsigned)g_usb_hooks.trampoline_base,
                 (unsigned)target_openpipe, (unsigned)target_transfer,
                 (unsigned)target_closepipe, (unsigned)target_getdevdesc,
-                (unsigned)target_ctrlxfer);
+                (unsigned)target_ctrlxfer,
+                (unsigned)target_reg_0944, (unsigned)target_reg_0BB4,
+                (unsigned)target_reg_0D00);
 
     g_usb_hooks.initialized = 1;
     return 0;
