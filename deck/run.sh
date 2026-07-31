@@ -82,7 +82,7 @@ else
     exit 1
 fi
 
-# 3. Berny23 emulator + our professional UI overlay
+# 3. Berny23 emulator
 echo -e "${YELLOW}[3/4] Emulator...${NC}"
 if [ ! -d "$BERNY_DIR" ]; then
     echo "  Cloning Berny23/LD-ToyPad-Emulator..."
@@ -90,18 +90,10 @@ if [ ! -d "$BERNY_DIR" ]; then
 fi
 cd "$BERNY_DIR"
 
-# Overlay our professional UI (replace Berny23's default)
-echo "  Applying LD-ToyPad Bridge UI..."
-curl -sSL "$OVERLAY_BASE/index.html" -o server/index.html
-curl -sSL "$OVERLAY_BASE/main.css" -o server/stylesheets/main.css
-curl -sSL "$OVERLAY_BASE/main.js" -o server/scripts/main.js
-mkdir -p server/images
-
-# Image sync — runs every start, only downloads missing/corrupt
-echo "  Syncing toy images..."
-curl -sSL "$OVERLAY_BASE/sync-images.js" -o sync-images.js
-node sync-images.js
-rm -f sync-images.js
+# Restore Berny23's original UI (skip our custom overlay for now)
+if [ -d .git ]; then
+    git checkout -- server/index.html server/stylesheets/main.css server/scripts/main.js 2>/dev/null || true
+fi
 
 echo "  UI ready."
 
