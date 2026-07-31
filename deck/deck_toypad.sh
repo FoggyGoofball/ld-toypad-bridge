@@ -88,59 +88,64 @@ echo -e "${YELLOW}[2/5] Setting up USB gadget...${NC}"
 # Load kernel module
 modprobe libcomposite 2>/dev/null || true
 
-# Tear down any existing gadget
+# Tear down any existing gadget (handle both hid.usb0 and hid.g0 names)
 if [ -d "$GADGET_DIR" ]; then
     echo "  Tearing down existing gadget..."
     if [ -f "$GADGET_DIR/UDC" ]; then
         echo "" > "$GADGET_DIR/UDC" 2>/dev/null || true
     fi
-    for f in "$GADGET_DIR"/configs/*/hid.usb0; do
-        if [ -L "$f" ]; then
-            rm -f "$f" 2>/dev/null || true
-        fi
+    for f in "$GADGET_DIR"/configs/*/hid.*; do
+        if [ -L "$f" ]; then rm -f "$f" 2>/dev/null || true; fi
     done
     rmdir "$GADGET_DIR"/configs/c.1/strings/0x409 2>/dev/null || true
     rmdir "$GADGET_DIR"/configs/c.1 2>/dev/null || true
+    rmdir "$GADGET_DIR"/functions/hid.g0 2>/dev/null || true
     rmdir "$GADGET_DIR"/functions/hid.usb0 2>/dev/null || true
     rmdir "$GADGET_DIR"/strings/0x409 2>/dev/null || true
     rmdir "$GADGET_DIR" 2>/dev/null || true
+    echo "  Old gadget removed."
 fi
 
 # Create gadget
 mkdir -p "$GADGET_DIR"
 cd "$GADGET_DIR"
 
-# USB device identifiers — MUST match the real LEGO ToyPad
-echo 0x0e6f > idVendor   # PDP/Logic3
-echo 0x0241 > idProduct  # LEGO Dimensions Toy Pad
+# USB device identifiers
+echo 0x0e6f > idVendor
+echo 0x0241 > idProduct
 echo 0x0100 > bcdDevice
 echo 0x0200 > bcdUSB
 
-# Device strings
+# Device strings — MUST match real ToyPad exactly (verified against Berny23)
 mkdir -p strings/0x409
-echo "0000000001"          > strings/0x409/serialnumber
-echo "PDP"                 > strings/0x409/manufacturer
-echo "LEGO ToyPad"         > strings/0x409/product
+echo "P.D.P.000000"        > strings/0x409/serialnumber
+echo "PDP LIMITED. "       > strings/0x409/manufacturer
+echo "LEGO READER V2.10"   > strings/0x409/product
 
 # Configuration
 mkdir -p configs/c.1/strings/0x409
-echo "Config 1"            > configs/c.1/strings/0x409/configuration
+echo "LEGO READER V2.10"   > configs/c.1/strings/0x409/configuration
 echo 250                   > configs/c.1/MaxPower
 
-# HID function
-mkdir -p functions/hid.usb0
-echo 0 > functions/hid.usb0/protocol
-echo 0 > functions/hid.usb0/subclass
-echo 80 > functions/hid.usb0/report_length
+# HID function — use hid.g0 to match Berny23's known-working setup
+mkdir -p functions/hid.g0
+echo 0 > functions/hid.g0/protocol
+echo 0 > functions/hid.g0/subclass
+echo 32 > functions/hid.g0/report_length
 
-# HID Report Descriptor — critical for PS3 to recognize the ToyPad
-# Usage Page: FF00 (vendor), 80-byte input, 8-byte output
-echo -ne "\x06\x00\xFF\x09\x01\xA1\x01\x09\x02\x15\x00\x26\xFF\x00\x75\x08\x95\x50\x81\x02\x09\x03\x75\x08\x95\x08\x91\x02\xC0" > functions/hid.usb0/report_desc
+# HID Report Descriptor — VERIFIED against Berny23's usb_setup_script.sh
+# Usage Page: 0xFF00 (vendor), 32-byte INPUT (Array), 32-byte OUTPUT (Array)
+printf '\x06\x00\xFF\x09\x01\xA1\x01\x19\x01\x29\x20\x15\x00\x26\xFF\x00\x75\x08\x95\x20\x81\x00\x19\x01\x29\x20\x91\x00\xC0' > functions/hid.g0/report_desc
 
-# Link function to config and bind
-ln -sf functions/hid.usb0 configs/c.1/
+# Verify descriptor was written correctly (must be 27 bytes)
+ACTUAL_SIZE=$(wc -c < functions/hid.g0/report_desc)
+echo "  HID descriptor: $ACTUAL_SIZE bytes (expected 27)"
 
-# Find and bind the UDC (USB Device Controller)
+# Link function to config
+ln -sf functions/hid.g0 configs/c.1/
+
+# Find and bind the UDC
+echo "  Available UDCs: $(ls /sys/class/udc 2>/dev/null | tr '\n' ' ')"
 UDC=$(ls /sys/class/udc 2>/dev/null | head -1)
 if [ -z "$UDC" ]; then
     echo -e "${RED}  No UDC found! Is USB Dual-Role set to DRD in BIOS?${NC}"
@@ -148,10 +153,28 @@ if [ -z "$UDC" ]; then
     exit 1
 fi
 echo "$UDC" > UDC
-echo -e "${GREEN}  USB gadget bound to $UDC${NC}"
+sleep 1  # Wait for kernel to create /dev/hidg0
 
-# Give user access
-chmod 666 /dev/hidg0 2>/dev/null || true
+# Verify gadget is live
+if [ -e /dev/hidg0 ]; then
+    chmod 666 /dev/hidg0
+    echo -e "${GREEN}  USB gadget LIVE — /dev/hidg0 ready${NC}"
+    echo "  VID/PID: 0e6f/0241  Product: LEGO READER V2.10"
+else
+    echo -e "${RED}  /dev/hidg0 did not appear after binding $UDC!${NC}"
+    echo "  Try: unplug USB-C cable, wait 5s, plug back in"
+    echo "  Then check: ls -la /dev/hidg*"
+fi
+
+echo -e "${YELLOW}  REMINDER: PS3 must be rebooted with Deck plugged in!${NC}"
+echo -e "${YELLOW}  The PS3 only scans USB devices at boot time.${NC}"
+    echo -e "${RED}  /dev/hidg0 did not appear after binding $UDC!${NC}"
+    echo "  Try: unplug USB-C cable, wait 5s, plug back in"
+    echo "  Then check: ls -la /dev/hidg*"
+fi
+
+echo -e "${YELLOW}  REMINDER: PS3 must be rebooted with Deck plugged in!${NC}"
+echo -e "${YELLOW}  The PS3 only scans USB devices at boot time.${NC}"
 
 # ---------------------------------------------------------------------------
 # 4. Clone / Update Emulator
