@@ -39,16 +39,20 @@ async function getImageUrl(pageTitle) {
 }
 
 async function downloadImage(url, filepath) {
-  if (fs.existsSync(filepath)) return 'skipped';
+  // Skip only if file exists AND is non-empty (retry 0-byte corrupt downloads)
+  if (fs.existsSync(filepath) && fs.statSync(filepath).size > 0) return 'skipped';
+  // Remove empty/corrupt file before retry
+  try { fs.unlinkSync(filepath); } catch {}
   return new Promise((resolve, reject) => {
     https.get(url, { headers: { 'User-Agent': 'ld-toypad-sync/1.0' } }, res => {
       if (res.statusCode === 301 || res.statusCode === 302) {
         return downloadImage(res.headers.location, filepath).then(resolve).catch(reject);
       }
+      if (res.statusCode !== 200) { resolve('fail'); return; }
       const file = fs.createWriteStream(filepath);
       res.pipe(file);
       file.on('finish', () => { file.close(); resolve('ok'); });
-    }).on('error', reject);
+    }).on('error', () => resolve('fail'));
   });
 }
 
@@ -69,7 +73,8 @@ async function main() {
 
   for (const toy of all) {
     const filepath = path.join(IMAGES_DIR, `${toy.id}.png`);
-    if (fs.existsSync(filepath)) { skipped++; continue; }
+    // Skip only valid (non-empty) existing files — retry empty/corrupt ones
+    if (fs.existsSync(filepath) && fs.statSync(filepath).size > 0) { skipped++; continue; }
 
     const title = toy.name.replace(/ /g, '_');
     const url = await getImageUrl(title);
