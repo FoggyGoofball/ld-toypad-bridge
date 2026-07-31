@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LD-ToyPad Bridge</title>
+  <link rel="stylesheet" href="/stylesheets/main.css">
+</head>
+<body>
+  <main class="app">
+    <header>
+      <h1>LD-ToyPad Bridge</h1>
+      <p id="meta">Connecting to PS3...</p>
+    </header>
+
+    <section class="panel zones-strip">
+      <h2>ToyPad</h2>
+      <div id="zones" class="zones"></div>
+    </section>
+
+    <div class="app-layout">
+      <section class="panel catalog-panel">
+        <h2>Catalog</h2>
+        <div class="row">
+          <input id="toyFilter" type="search" placeholder="Search by name, world, or ID..." class="search-field">
+        </div>
+        <div class="catalog-tabs">
+          <div><h3>Type</h3><div id="typeTabs" class="tab-row"></div></div>
+          <div><h3>World</h3><div id="worldTabs" class="tab-row"></div></div>
+          <div><h3>Release</h3><div id="releaseTabs" class="tab-row"></div></div>
+        </div>
+        <div id="catalog" class="catalog-grid"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/scripts/main.js"></script>
+</body>
+</html>
