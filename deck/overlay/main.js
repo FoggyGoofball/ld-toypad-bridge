@@ -1,185 +1,129 @@
-// LD-ToyPad Bridge — Steam Deck UI
-// Talks to Berny23's Express/Socket.io backend
-
+// LD-ToyPad Bridge — Steam Deck UI v2
 const socket = io();
-let characters = [];
-let vehicles = [];
-let allToys = [];
-let selectedType = 'character';
-let selectedWorld = 'All';
-let selectedRelease = 'All';
-let padState = { 1: null, 2: null, 3: null, 4: null, 5: null, 6: null, 7: null };
-let gameConnected = false;
+let chars = [], vehs = [], allToys = [], type = 'character', world = 'All';
+let toyBox = {}, padSlots = {1:null,2:null,3:null,4:null,5:null,6:null,7:null};
+const PAD_MAP = { left:[1,4,5], center:[2], right:[3,6,7] };
 
-const RELEASE_LABELS = { All: 'All', year1: 'Year 1', year2: 'Year 2' };
-const YEAR_ONE_WORLDS = new Set(['dc comics','doctor who','ghostbusters','jurrasic park','legends of chima','lord of the rings','midway arcade','ninjago','portal 2','scooby-doo','the lego movie','the simpsons','wizard of oz','back to the future']);
-const YEAR_ONE_CHAR_MAX = 46, YEAR_ONE_TOKEN_MAX = 1172;
-
-// ── Load catalog ──────────────────────────────────────────────
-async function loadCatalog() {
+async function init() {
   const [cm, tm] = await Promise.all([
-    fetch('/json/charactermap.json').then(r => r.json()),
-    fetch('/json/tokenmap.json').then(r => r.json())
+    fetch('/json/charactermap.json').then(r=>r.json()),
+    fetch('/json/tokenmap.json').then(r=>r.json())
   ]);
-  characters = cm.filter(c => c.name && c.name !== 'Unknown');
-  vehicles = tm.filter(v => v.name && v.name !== 'Unknown');
-  buildToyList();
-  renderTypeTabs();
-  renderWorldTabs();
-  renderReleaseTabs();
-  applyFilter();
-  renderZones();
-  document.getElementById('meta').textContent = gameConnected ? 'Connected to PS3' : 'Waiting for PS3...';
+  chars = cm.filter(c=>c.name&&c.name!=='Unknown').map(c=>({...c,type:'character',img:`/images/${c.id}.png`}));
+  vehs = tm.filter(v=>v.name&&v.name!=='Unknown').map(v=>({...v,type:'token',img:`/images/${v.id}.png`}));
+  allToys = [...chars, ...vehs];
+  renderTabs(); applyFilter(); syncToyBox();
 }
 
-function buildToyList() {
-  allToys = [
-    ...characters.map(c => ({ ...c, type: 'character', releaseYear: inferRelease(c, 'character'), image: `/images/${c.id}.png` })),
-    ...vehicles.map(v => ({ ...v, type: 'token', releaseYear: inferRelease(v, 'token'), image: `/images/${v.id}.png` }))
-  ];
-}
-
-function inferRelease(toy, type) {
-  const n = Number(toy.id);
-  if (Number.isFinite(n)) return type === 'character' ? (n <= YEAR_ONE_CHAR_MAX ? 'year1' : 'year2') : (n <= YEAR_ONE_TOKEN_MAX ? 'year1' : 'year2');
-  return YEAR_ONE_WORLDS.has(String(toy.world||'').toLowerCase()) ? 'year1' : 'year2';
-}
-
-// ── Tabs ──────────────────────────────────────────────────────
-function renderTypeTabs() {
-  const root = document.getElementById('typeTabs');
-  root.innerHTML = '';
-  ['character','token'].forEach(type => {
-    const b = document.createElement('button');
-    b.className = 'tab-button' + (type === selectedType ? ' active' : '');
-    b.textContent = type === 'character' ? 'Characters' : 'Vehicles/Items';
-    b.onclick = () => { selectedType = type; selectedWorld = 'All'; renderWorldTabs(); applyFilter(); };
-    root.appendChild(b);
+function renderTabs() {
+  document.getElementById('typeTabs').innerHTML = '';
+  [{k:'character',l:'Chars'},{k:'token',l:'Vehicles'}].forEach(t=>{
+    const b = el('button','tab-button'+(type===t.k?' active':''),t.l);
+    b.onclick=()=>{type=t.k;world='All';renderTabs();applyFilter();};
+    document.getElementById('typeTabs').appendChild(b);
+  });
+  document.getElementById('worldTabs').innerHTML = '';
+  ['All',...new Set(allToys.filter(t=>t.type===type).map(t=>t.world))].sort().forEach(w=>{
+    const b = el('button','tab-button'+(world===w?' active':''),w);
+    b.onclick=()=>{world=w;applyFilter();};
+    document.getElementById('worldTabs').appendChild(b);
   });
 }
 
-function renderWorldTabs() {
-  const root = document.getElementById('worldTabs');
-  const worlds = ['All', ...new Set(allToys.filter(t => t.type === selectedType).map(t => t.world))].sort();
-  root.innerHTML = '';
-  worlds.forEach(w => {
-    const b = document.createElement('button');
-    b.className = 'tab-button' + (w === selectedWorld ? ' active' : '');
-    b.textContent = w;
-    b.onclick = () => { selectedWorld = w; applyFilter(); };
-    root.appendChild(b);
-  });
-}
-
-function renderReleaseTabs() {
-  const root = document.getElementById('releaseTabs');
-  root.innerHTML = '';
-  ['All','year1','year2'].forEach(r => {
-    const b = document.createElement('button');
-    b.className = 'tab-button' + (r === selectedRelease ? ' active' : '');
-    b.textContent = RELEASE_LABELS[r];
-    b.onclick = () => { selectedRelease = r; applyFilter(); };
-    root.appendChild(b);
-  });
-}
-
-// ── Filter ────────────────────────────────────────────────────
 function applyFilter() {
-  const q = (document.getElementById('toyFilter').value || '').toLowerCase();
-  let toys = allToys.filter(t => t.type === selectedType);
-  if (selectedWorld !== 'All') toys = toys.filter(t => t.world === selectedWorld);
-  if (selectedRelease !== 'All') toys = toys.filter(t => t.releaseYear === selectedRelease);
-  if (q) toys = toys.filter(t => (t.name||'').toLowerCase().includes(q) || String(t.id).includes(q) || (t.world||'').toLowerCase().includes(q));
-  renderCatalog(toys);
+  const q = (document.getElementById('toyFilter').value||'').toLowerCase();
+  let toys = allToys.filter(t=>t.type===type);
+  if (world!=='All') toys = toys.filter(t=>t.world===world);
+  if (q) toys = toys.filter(t=>(t.name||'').toLowerCase().includes(q)||String(t.id).includes(q)||(t.world||'').toLowerCase().includes(q));
+  const g = document.getElementById('catalog'); g.innerHTML = '';
+  toys.forEach(toy=>{
+    const c = el('button','toy-card');
+    c.innerHTML = `<img src="${toy.img}" alt="${toy.name}" loading="lazy" onerror="this.style.display='none'"><span>${toy.name}</span>`;
+    c.onclick = () => createToy(toy);
+    g.appendChild(c);
+  });
 }
-
 document.getElementById('toyFilter').addEventListener('input', applyFilter);
 
-// ── Catalog grid ──────────────────────────────────────────────
-function renderCatalog(toys) {
-  const root = document.getElementById('catalog');
-  root.innerHTML = '';
-  toys.forEach(toy => {
-    const card = document.createElement('button');
-    card.className = 'toy-card';
-    card.innerHTML = `<img src="${toy.image}" alt="${toy.name}" loading="lazy" onerror="this.style.display='none'"><span>${toy.name}</span><small>${toy.world||''} #${toy.id}</small>`;
-    card.onclick = () => placeToy(toy);
-    root.appendChild(card);
+// ── Create → Toy Box ──────────────────────────────────────────
+async function createToy(toy) {
+  const ep = toy.type==='character'?'/character':'/vehicle';
+  await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:toy.id})});
+  setTimeout(syncToyBox, 500);
+}
+
+async function syncToyBox() {
+  try {
+    const tags = await fetch('/json/toytags.json').then(r=>r.json());
+    toyBox = {}; padSlots = {1:null,2:null,3:null,4:null,5:null,6:null,7:null};
+    tags.forEach(t=>{
+      const info = allToys.find(a=>String(a.id)===String(t.id))||{};
+      if (t.index==='-1'||!t.index) toyBox[t.uid]={name:t.name||info.name,id:t.id,uid:t.uid,type:t.type};
+      else padSlots[parseInt(t.index)]={name:t.name||info.name,id:t.id,uid:t.uid,type:t.type};
+    });
+    renderToyBox(); renderPad();
+  } catch(e){}
+}
+
+// ── Toy Box ───────────────────────────────────────────────────
+function renderToyBox() {
+  const box = document.getElementById('toybox'); box.innerHTML = '';
+  const entries = Object.values(toyBox);
+  document.getElementById('toyboxCount').textContent = entries.length?`(${entries.length})`:'';
+  if (!entries.length) { box.innerHTML = '<p class="muted">Click a character or vehicle below to add it here, then click it to place on the pad.</p>'; return; }
+  entries.forEach(tb=>{
+    const info = allToys.find(a=>String(a.id)===String(tb.id))||{};
+    const c = el('button','toybox-item');
+    c.innerHTML = `<img src="${info.img||''}" alt="${tb.name}" onerror="this.style.display='none'"><span>${tb.name}</span>`;
+    c.onclick = ()=>{
+      const slot = prompt('Place on slot?\nLeft: 1,4,5 | Center: 2 | Right: 3,6,7','2');
+      if (slot) placeToy(tb, parseInt(slot));
+    };
+    box.appendChild(c);
   });
 }
 
-// ── Place / Remove ────────────────────────────────────────────
-async function placeToy(toy) {
-  const pad = prompt('Pad slot (1-7)?\n1-3=Center  4-5=Left  6-7=Right', '1');
-  if (!pad) return;
-  const index = parseInt(pad);
-  if (index < 1 || index > 7) return alert('Slot must be 1-7');
+async function placeToy(tb, index) {
+  await fetch('/place',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:tb.uid,id:tb.id,position:1,index})});
+  setTimeout(syncToyBox, 300);
+}
 
-  // Create the toy first
-  const endpoint = toy.type === 'character' ? '/character' : '/vehicle';
-  try {
-    await fetch(endpoint, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ id: toy.id }) });
-    // Wait briefly then place
-    setTimeout(async () => {
-      await fetch('/place', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ uid: '', id: toy.id, position: 1, index }) });
-    }, 300);
-  } catch(e) {
-    console.error(e);
-  }
+// ── ToyPad ────────────────────────────────────────────────────
+function renderPad() {
+  document.querySelectorAll('.pad-slots').forEach(el=>{
+    const slots = el.dataset.slots.split(',').map(Number);
+    el.innerHTML = '';
+    slots.forEach(s=>{
+      const d = el('div','pad-slot');
+      const toy = padSlots[s];
+      if (toy) {
+        const info = allToys.find(a=>String(a.id)===String(toy.id))||{};
+        d.innerHTML = `<img src="${info.img||''}" alt="${toy.name}" onerror="this.style.display='none'"><span>${toy.name}</span>`;
+        const rm = el('button','pad-remove','✕');
+        rm.onclick = async e=>{e.stopPropagation();await removeToy(s);};
+        d.appendChild(rm);
+      } else {
+        d.innerHTML = `<span class="empty-slot">Slot ${s}</span>`;
+      }
+      el.appendChild(d);
+    });
+  });
 }
 
 async function removeToy(index) {
-  await fetch('/remove', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ index, uid: '' }) });
+  const toy = padSlots[index];
+  if (!toy) return;
+  await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index,uid:toy.uid})});
+  setTimeout(syncToyBox, 300);
 }
 
-// ── Zones display ─────────────────────────────────────────────
-function renderZones() {
-  const root = document.getElementById('zones');
-  root.innerHTML = '';
-  const groups = [
-    { name: 'Center', slots: [2] },
-    { name: 'Left', slots: [1,4,5] },
-    { name: 'Right', slots: [3,6,7] }
-  ];
-  groups.forEach(g => {
-    const card = document.createElement('article');
-    card.className = 'zone';
-    card.innerHTML = `<div class="zone-top"><h3>${g.name}</h3></div>`;
-    const grid = document.createElement('div');
-    grid.className = 'zone-slot-grid';
-    g.slots.forEach(slot => {
-      const s = document.createElement('div');
-      s.className = 'zone-slot';
-      const toy = padState[slot];
-      s.innerHTML = toy
-        ? `<img src="/images/${toy}.png" alt="${toy}" onerror="this.style.display='none'"><span>${toy}</span><button class="zone-remove" onclick="removeToy(${slot})">✕</button>`
-        : `<span class="zone-empty">Slot ${slot} — empty</span>`;
-      grid.appendChild(s);
-    });
-    card.appendChild(grid);
-    root.appendChild(card);
-  });
-}
-
-// ── Socket.io events ──────────────────────────────────────────
-socket.on('Connection True', () => {
-  gameConnected = true;
+// ── Socket ────────────────────────────────────────────────────
+socket.on('Connection True', ()=>{
   document.getElementById('meta').textContent = 'Connected to PS3 ✓';
+  document.getElementById('meta').style.color = '#3cc47c';
 });
+socket.on('refreshTokens', syncToyBox);
+socket.on('syncToyPad', syncToyBox);
 
-socket.on('refreshTokens', () => {
-  fetch('/json/toytags.json').then(r => r.json()).then(tags => {
-    tags.forEach(t => { if (t.index !== '-1') padState[parseInt(t.index)] = t.name || t.id; });
-    renderZones();
-  }).catch(() => {});
-});
-
-socket.on('syncToyPad', () => {
-  fetch('/json/toytags.json').then(r => r.json()).then(tags => {
-    tags.forEach(t => { if (t.index !== '-1') padState[parseInt(t.index)] = t.name || t.id; });
-    renderZones();
-  }).catch(() => {});
-});
-
-// Start
-loadCatalog();
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text)e.textContent=text;return e;}
+init(); syncToyBox();

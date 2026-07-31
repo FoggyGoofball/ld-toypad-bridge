@@ -2,38 +2,34 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
   <title>LD-ToyPad Bridge</title>
   <link rel="stylesheet" href="/stylesheets/main.css">
 </head>
 <body>
   <main class="app">
-    <header>
-      <h1>LD-ToyPad Bridge</h1>
-      <p id="meta">Connecting to PS3...</p>
-    </header>
+    <header><h1>LD-ToyPad Bridge</h1><p id="meta">Connecting to PS3...</p></header>
 
-    <section class="panel zones-strip">
-      <h2>ToyPad</h2>
-      <div id="zones" class="zones"></div>
+    <section class="panel toypad-row">
+      <div id="toypad" class="toypad">
+        <div class="pad-zone"><h3>Left</h3><div class="pad-slots" data-slots="1,4,5"></div></div>
+        <div class="pad-zone"><h3>Center</h3><div class="pad-slots" data-slots="2"></div></div>
+        <div class="pad-zone"><h3>Right</h3><div class="pad-slots" data-slots="3,6,7"></div></div>
+      </div>
     </section>
 
-    <div class="app-layout">
-      <section class="panel catalog-panel">
-        <h2>Catalog</h2>
-        <div class="row">
-          <input id="toyFilter" type="search" placeholder="Search by name, world, or ID..." class="search-field">
-        </div>
-        <div class="catalog-tabs">
-          <div><h3>Type</h3><div id="typeTabs" class="tab-row"></div></div>
-          <div><h3>World</h3><div id="worldTabs" class="tab-row"></div></div>
-          <div><h3>Release</h3><div id="releaseTabs" class="tab-row"></div></div>
-        </div>
-        <div id="catalog" class="catalog-grid"></div>
-      </section>
-    </div>
-  </main>
+    <section class="panel toybox-row">
+      <h2>Toy Box <span id="toyboxCount"></span></h2>
+      <div id="toybox" class="toybox"></div>
+    </section>
 
+    <section class="panel catalog-panel">
+      <h2>Catalog</h2>
+      <div class="row"><input id="toyFilter" type="search" placeholder="Search..."></div>
+      <div class="tabs"><div id="typeTabs" class="tab-row"></div><div id="worldTabs" class="tab-row"></div></div>
+      <div id="catalog" class="catalog-grid"></div>
+    </section>
+  </main>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/scripts/main.js"></script>
 </body>

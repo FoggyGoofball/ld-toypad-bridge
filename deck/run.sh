@@ -82,13 +82,19 @@ else
     exit 1
 fi
 
-# 3. Berny23 emulator — guaranteed clean vanilla clone
+# 3. Berny23 emulator
 echo -e "${YELLOW}[3/4] Emulator...${NC}"
-echo "  Removing old install..."
-rm -rf "$BERNY_DIR"
-echo "  Cloning Berny23/LD-ToyPad-Emulator (vanilla)..."
-git clone --depth 1 https://github.com/Berny23/LD-ToyPad-Emulator.git "$BERNY_DIR"
+if [ ! -d "$BERNY_DIR" ]; then
+    echo "  Cloning Berny23/LD-ToyPad-Emulator..."
+    git clone --depth 1 https://github.com/Berny23/LD-ToyPad-Emulator.git "$BERNY_DIR"
+fi
 cd "$BERNY_DIR"
+
+# Apply our custom UI overlay
+echo "  Applying LD-ToyPad Bridge UI..."
+curl -sSL "$OVERLAY_BASE/index.html" -o server/index.html
+curl -sSL "$OVERLAY_BASE/main.css" -o server/stylesheets/main.css
+curl -sSL "$OVERLAY_BASE/main.js" -o server/scripts/main.js
 
 echo "  UI ready."
 
