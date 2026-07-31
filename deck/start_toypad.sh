@@ -2,8 +2,15 @@
 # =============================================================================
 # start_toypad.sh — Steam Deck LEGO Dimensions ToyPad (Auto-Update + Run)
 # =============================================================================
-# One-click launcher: checks for updates, installs if needed, starts the server.
-# Run from anywhere:  chmod +x start_toypad.sh && sudo ./start_toypad.sh
+# Save this anywhere on your Steam Deck. Run it every time you want to play:
+#   chmod +x start_toypad.sh && sudo ./start_toypad.sh
+#
+# It will:
+#   1. Check GitHub for updates (auto-installs if newer release found)
+#   2. Install system deps if missing (node, git, build tools)
+#   3. Create USB gadget matching real LEGO Dimensions ToyPad
+#   4. Clone/update Berny23's emulator, install deps, start server
+#   5. Open http://localhost on Deck browser → drag characters to ToyPad
 # =============================================================================
 
 # Keep window open on exit so you can read any errors
@@ -55,7 +62,6 @@ echo -e "${CYAN}>>> STEP 3: CHECKING FOR UPDATES <<<${NC}"
 NEEDS_RESTART=false
 
 if [ -d "$REPO_DIR/.git" ]; then
-    echo "  Checking for newer release..."
     cd "$REPO_DIR"
     git fetch origin main 2>/dev/null
     LOCAL=$(git rev-parse HEAD 2>/dev/null)
@@ -68,21 +74,21 @@ if [ -d "$REPO_DIR/.git" ]; then
         echo -e "  ${GREEN}Already up to date.${NC}"
     fi
 else
-    echo "  First run — cloning ld-toypad-bridge..."
+    echo "  First run — downloading ld-toypad-bridge..."
     git clone "$REPO_URL" "$REPO_DIR" 2>/dev/null || {
-        echo "  Clone via git failed, trying download..."
+        echo "  Git failed, trying direct download..."
         rm -rf "$REPO_DIR" 2>/dev/null
         mkdir -p "$REPO_DIR"
-        curl -sSL "https://github.com/FoggyGoofball/ld-toypad-bridge/archive/refs/heads/main.tar.gz" | tar xz -C "$REPO_DIR" --strip-components=1
+        curl -sSL "https://github.com/FoggyGoofball/ld-toypad-bridge/archive/refs/heads/main.tar.gz" | sudo tar xz -C "$REPO_DIR" --strip-components=1
     }
     NEEDS_RESTART=true
 fi
 
-# If we just updated, re-exec the new version
-if [ "$NEEDS_RESTART" = true ] && [ -f "$REPO_DIR/deck/deck_toypad.sh" ]; then
-    echo -e "  ${YELLOW}Update complete. Restarting with latest script...${NC}"
+# Re-exec after update so we run the latest version of this script
+if [ "$NEEDS_RESTART" = true ] && [ -f "$REPO_DIR/deck/start_toypad.sh" ]; then
+    echo -e "  ${YELLOW}Restarting with latest version...${NC}"
     echo ""
-    exec sudo "$REPO_DIR/deck/deck_toypad.sh"
+    exec sudo "$REPO_DIR/deck/start_toypad.sh"
 fi
 
 echo ""
@@ -113,62 +119,74 @@ fi
 echo ""
 
 # ===========================================================================
-# STEP 5: USB GADGET SETUP
+# STEP 5: USB GADGET — must match real ToyPad exactly
 # ===========================================================================
-echo -e "${CYAN}>>> STEP 5: USB GADGET SETUP <<<${NC}"
+echo -e "${CYAN}>>> STEP 5: USB GADGET (LEGO READER V2.10) <<<${NC}"
 
 sudo modprobe libcomposite 2>/dev/null || true
 
-if [ ! -d "$GADGET_DIR" ]; then
-    echo "  Creating LEGO READER V2.10 gadget..."
-
-    # Tear down any leftover
-    if [ -d "$GADGET_DIR" ]; then
-        [ -f "$GADGET_DIR/UDC" ] && echo "" | sudo tee "$GADGET_DIR/UDC" > /dev/null 2>&1 || true
-        rm -f "$GADGET_DIR"/configs/*/hid.* 2>/dev/null || true
-        rmdir "$GADGET_DIR"/configs/c.1/strings/0x409 2>/dev/null || true
-        rmdir "$GADGET_DIR"/configs/c.1 2>/dev/null || true
-        rmdir "$GADGET_DIR"/functions/hid.g0 2>/dev/null || true
-        rmdir "$GADGET_DIR"/strings/0x409 2>/dev/null || true
-        rmdir "$GADGET_DIR" 2>/dev/null || true
-    fi
-
-    sudo mkdir -p "$GADGET_DIR"
-    cd "$GADGET_DIR"
-
-    echo 0x0e6f | sudo tee idVendor > /dev/null
-    echo 0x0241 | sudo tee idProduct > /dev/null
-    echo 0x0100 | sudo tee bcdDevice > /dev/null
-    echo 0x0200 | sudo tee bcdUSB > /dev/null
-
-    sudo mkdir -p strings/0x409
-    echo "P.D.P.000000"      | sudo tee strings/0x409/serialnumber > /dev/null
-    echo "PDP LIMITED. "     | sudo tee strings/0x409/manufacturer > /dev/null
-    echo "LEGO READER V2.10" | sudo tee strings/0x409/product > /dev/null
-
-    sudo mkdir -p configs/c.1/strings/0x409
-    echo "LEGO READER V2.10" | sudo tee configs/c.1/strings/0x409/configuration > /dev/null
-    echo 250                 | sudo tee configs/c.1/MaxPower > /dev/null
-
-    sudo mkdir -p functions/hid.g0
-    echo 0  | sudo tee functions/hid.g0/protocol > /dev/null
-    echo 0  | sudo tee functions/hid.g0/subclass > /dev/null
-    echo 32 | sudo tee functions/hid.g0/report_length > /dev/null
-
-    # Verified HID descriptor (27 bytes — matches Berny23 usb_setup_script.sh)
-    printf '\x06\x00\xFF\x09\x01\xA1\x01\x19\x01\x29\x20\x15\x00\x26\xFF\x00\x75\x08\x95\x20\x81\x00\x19\x01\x29\x20\x91\x00\xC0' | sudo tee functions/hid.g0/report_desc > /dev/null
-
-    sudo ln -sf functions/hid.g0 configs/c.1/
-    UDC=$(ls /sys/class/udc 2>/dev/null | head -1)
-    [ -n "$UDC" ] && echo "$UDC" | sudo tee UDC > /dev/null
-    sleep 1
-    echo -e "${GREEN}  Gadget created.${NC}"
-else
-    echo -e "${GREEN}  USB gadget already configured.${NC}"
+# Tear down existing gadget so we start fresh every time
+if [ -d "$GADGET_DIR" ]; then
+    echo "  Removing old gadget..."
+    [ -f "$GADGET_DIR/UDC" ] && echo "" | sudo tee "$GADGET_DIR/UDC" > /dev/null 2>&1 || true
+    for f in "$GADGET_DIR"/configs/*/hid.*; do
+        [ -L "$f" ] && sudo rm -f "$f" 2>/dev/null || true
+    done
+    sudo rmdir "$GADGET_DIR"/configs/c.1/strings/0x409 2>/dev/null || true
+    sudo rmdir "$GADGET_DIR"/configs/c.1 2>/dev/null || true
+    sudo rmdir "$GADGET_DIR"/functions/hid.g0 2>/dev/null || true
+    sudo rmdir "$GADGET_DIR"/functions/hid.usb0 2>/dev/null || true
+    sudo rmdir "$GADGET_DIR"/strings/0x409 2>/dev/null || true
+    sudo rmdir "$GADGET_DIR" 2>/dev/null || true
 fi
 
-# Ensure /dev/hidg0 is accessible
-[ -e /dev/hidg0 ] && sudo chmod 666 /dev/hidg0 && echo -e "${GREEN}  /dev/hidg0 ready.${NC}" || echo -e "${RED}  WARNING: /dev/hidg0 not found. Is DRD set in BIOS?${NC}"
+echo "  Creating new gadget..."
+sudo mkdir -p "$GADGET_DIR"
+cd "$GADGET_DIR"
+
+# USB identifiers — exact match for LEGO Dimensions ToyPad
+echo 0x0e6f | sudo tee idVendor > /dev/null
+echo 0x0241 | sudo tee idProduct > /dev/null
+echo 0x0100 | sudo tee bcdDevice > /dev/null
+echo 0x0200 | sudo tee bcdUSB > /dev/null
+
+# Device strings — verified against Berny23's usb_setup_script.sh
+sudo mkdir -p strings/0x409
+echo "P.D.P.000000"      | sudo tee strings/0x409/serialnumber > /dev/null
+echo "PDP LIMITED. "     | sudo tee strings/0x409/manufacturer > /dev/null
+echo "LEGO READER V2.10" | sudo tee strings/0x409/product > /dev/null
+
+# Configuration
+sudo mkdir -p configs/c.1/strings/0x409
+echo "LEGO READER V2.10" | sudo tee configs/c.1/strings/0x409/configuration > /dev/null
+echo 250                 | sudo tee configs/c.1/MaxPower > /dev/null
+
+# HID function — 32-byte INPUT + 32-byte OUTPUT (Array type)
+sudo mkdir -p functions/hid.g0
+echo 0  | sudo tee functions/hid.g0/protocol > /dev/null
+echo 0  | sudo tee functions/hid.g0/subclass > /dev/null
+echo 32 | sudo tee functions/hid.g0/report_length > /dev/null
+
+# HID descriptor — 27 bytes, verified byte-for-byte against Berny23
+printf '\x06\x00\xFF\x09\x01\xA1\x01\x19\x01\x29\x20\x15\x00\x26\xFF\x00\x75\x08\x95\x20\x81\x00\x19\x01\x29\x20\x91\x00\xC0' | sudo tee functions/hid.g0/report_desc > /dev/null
+
+sudo ln -sf functions/hid.g0 configs/c.1/
+
+# Bind UDC — this activates the gadget so PS3 can see it
+UDC=$(ls /sys/class/udc 2>/dev/null | head -1)
+if [ -z "$UDC" ]; then
+    echo -e "${RED}  ERROR: No UDC found! Is DRD enabled in BIOS?${NC}"
+    exit 1
+fi
+echo "$UDC" | sudo tee UDC > /dev/null
+sleep 1
+
+if [ -e /dev/hidg0 ]; then
+    sudo chmod 666 /dev/hidg0
+    echo -e "${GREEN}  Gadget LIVE — /dev/hidg0 ready, PS3 will see LEGO READER V2.10${NC}"
+else
+    echo -e "${RED}  WARNING: /dev/hidg0 not created. Check DRD mode in BIOS.${NC}"
+fi
 echo ""
 
 # ===========================================================================
@@ -179,19 +197,13 @@ echo -e "${CYAN}>>> STEP 6: EMULATOR SETUP <<<${NC}"
 if [ ! -d "$BERNY_DIR" ]; then
     echo "  Cloning Berny23/LD-ToyPad-Emulator..."
     cd ~
-    git clone "$BERNY_URL" "$BERNY_DIR" || { echo -e "${RED}ERROR: Clone failed.${NC}"; exit 1; }
+    git clone "$BERNY_URL" "$BERNY_DIR" || { echo -e "${RED}ERROR: Clone failed. Check internet.${NC}"; exit 1; }
 fi
 
 cd "$BERNY_DIR"
 
-# Ensure touchscreen drag-and-drop works
-if [ ! -f server/jquery.ui.touch-punch.min.js ]; then
-    echo "  Adding touchscreen support..."
-    curl -sSL "https://raw.githubusercontent.com/furf/jquery-ui-touch-punch/master/jquery.ui.touch-punch.min.js" -o server/jquery.ui.touch-punch.min.js 2>/dev/null || true
-fi
-
 echo "  Installing npm dependencies..."
-npm install --no-audit --no-fund 2>&1 | grep -E "(added|error|ERR|WARN)" || true
+npm install --no-audit --no-fund 2>&1 | grep -E "(added|error|ERR)" || true
 echo -e "${GREEN}  Emulator ready.${NC}"
 echo ""
 
@@ -202,15 +214,13 @@ echo -e "${GREEN}==========================================================${NC}
 echo -e "${GREEN}  ALL SYSTEMS GO!${NC}"
 echo -e "${GREEN}==========================================================${NC}"
 echo ""
-echo -e "  ${YELLOW}On the Deck browser:${NC}  ${GREEN}http://localhost${NC}"
+echo -e "  ${YELLOW}Deck browser:${NC}  ${GREEN}http://localhost${NC}"
 echo ""
 echo -e "  ${YELLOW}To play:${NC}"
-echo "    1. Plug Deck (USB-C) -> PS3 (USB-A) with DATA cable"
-echo "    2. REBOOT the PS3 (USB only scanned at boot)"
-echo "    3. Boot LEGO Dimensions (original, unmodified)"
-echo "    4. Create characters & drag to ToyPad slots"
-echo ""
-echo -e "  ${YELLOW}Touchscreen:${NC} long-press a character, then drag to a pad slot"
+echo "    1. Plug Deck (USB-C) → PS3 (USB-A) with DATA cable"
+echo "    2. ${RED}REBOOT THE PS3${NC} (USB only scanned at boot)"
+echo "    3. Boot LEGO Dimensions (original disc/ISO)"
+echo "    4. Create characters → drag to ToyPad slots on touchscreen"
 echo ""
 echo -e "  ${RED}Press Ctrl+C to stop${NC}"
 echo ""
