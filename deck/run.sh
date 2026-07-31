@@ -82,18 +82,12 @@ else
     exit 1
 fi
 
-# 3. Berny23 emulator
+# 3. Berny23 emulator (clean vanilla — no custom UI)
 echo -e "${YELLOW}[3/4] Emulator...${NC}"
-if [ ! -d "$BERNY_DIR" ]; then
-    echo "  Cloning Berny23/LD-ToyPad-Emulator..."
-    git clone https://github.com/Berny23/LD-ToyPad-Emulator.git "$BERNY_DIR"
-fi
+rm -rf "$BERNY_DIR"
+echo "  Cloning Berny23/LD-ToyPad-Emulator..."
+git clone https://github.com/Berny23/LD-ToyPad-Emulator.git "$BERNY_DIR"
 cd "$BERNY_DIR"
-
-# Restore Berny23's original UI (skip our custom overlay for now)
-if [ -d .git ]; then
-    git checkout -- server/index.html server/stylesheets/main.css server/scripts/main.js 2>/dev/null || true
-fi
 
 echo "  UI ready."
 
