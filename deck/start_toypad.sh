@@ -60,28 +60,39 @@ echo ""
 echo -e "${CYAN}>>> STEP 3: CHECKING FOR UPDATES <<<${NC}"
 
 NEEDS_RESTART=false
+GIT_TIMEOUT=10  # seconds — don't hang forever if GitHub is slow
 
 if [ -d "$REPO_DIR/.git" ]; then
+    echo "  Checking for newer release..."
     cd "$REPO_DIR"
-    git fetch origin main 2>/dev/null
-    LOCAL=$(git rev-parse HEAD 2>/dev/null)
-    REMOTE=$(git rev-parse origin/main 2>/dev/null)
-    if [ "$LOCAL" != "$REMOTE" ] && [ -n "$REMOTE" ]; then
-        echo -e "  ${YELLOW}New release found! Updating...${NC}"
-        git pull origin main
+    timeout $GIT_TIMEOUT git fetch origin main 2>/dev/null && {
+        LOCAL=$(git rev-parse HEAD 2>/dev/null)
+        REMOTE=$(git rev-parse origin/main 2>/dev/null)
+        if [ "$LOCAL" != "$REMOTE" ] && [ -n "$REMOTE" ]; then
+            echo -e "  ${YELLOW}New release found! Updating...${NC}"
+            timeout 30 git pull origin main 2>/dev/null
+            NEEDS_RESTART=true
+        else
+            echo -e "  ${GREEN}Already up to date.${NC}"
+        fi
+    } || echo -e "  ${YELLOW}Network check skipped (offline or slow). Continuing...${NC}"
+elif [ -d "$REPO_DIR" ]; then
+    echo -e "  ${YELLOW}Existing folder found (no git). Skipping update check.${NC}"
+else
+    echo "  First run — downloading..."
+    if timeout $GIT_TIMEOUT git clone "$REPO_URL" "$REPO_DIR" 2>/dev/null; then
         NEEDS_RESTART=true
     else
-        echo -e "  ${GREEN}Already up to date.${NC}"
-    fi
-else
-    echo "  First run — downloading ld-toypad-bridge..."
-    git clone "$REPO_URL" "$REPO_DIR" 2>/dev/null || {
-        echo "  Git failed, trying direct download..."
+        echo "  Git timed out, trying direct download..."
         rm -rf "$REPO_DIR" 2>/dev/null
         mkdir -p "$REPO_DIR"
-        curl -sSL "https://github.com/FoggyGoofball/ld-toypad-bridge/archive/refs/heads/main.tar.gz" | sudo tar xz -C "$REPO_DIR" --strip-components=1
-    }
-    NEEDS_RESTART=true
+        if curl -sSL --connect-timeout 10 "https://github.com/FoggyGoofball/ld-toypad-bridge/archive/refs/heads/main.tar.gz" 2>/dev/null | sudo tar xz -C "$REPO_DIR" --strip-components=1 2>/dev/null; then
+            NEEDS_RESTART=true
+        else
+            echo -e "  ${RED}Download failed. Check internet and retry.${NC}"
+            exit 1
+        fi
+    fi
 fi
 
 # Re-exec after update so we run the latest version of this script
