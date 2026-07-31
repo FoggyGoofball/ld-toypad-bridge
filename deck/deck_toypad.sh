@@ -4,18 +4,17 @@
 # =============================================================================
 # One-script setup: turns your Steam Deck into a USB ToyPad for PS3/PS4/Wii U.
 #
-# Usage:
-#   1. Set USB Dual-Role to DRD in BIOS first (Vol-Up + Power → Setup → Advanced → USB)
-#   2. Boot Desktop Mode, open Konsole
-#   3. Run:  chmod +x deck_toypad.sh && sudo ./deck_toypad.sh
+# Quick Start:
+#   1. BIOS: Vol-Up + Power → Setup → Advanced → USB → DRD → Save & Exit
+#   2. Desktop Mode → Konsole
+#   3. chmod +x deck_toypad.sh && sudo ./deck_toypad.sh
 #
 # What this does:
-#   - Installs Node.js if missing (pacman)
-#   - Creates USB gadget with LEGO ToyPad VID/PID and HID descriptor
-#   - Clones Berny23's LD-ToyPad-Emulator
-#   - Installs npm dependencies
-#   - Starts the emulator server
-#   - Opens the web UI
+#   - Installs Node.js + build tools (pacman)
+#   - Creates USB gadget matching real ToyPad (VID 0x0E6F, PID 0x0241)
+#   - Clones Berny23/LD-ToyPad-Emulator
+#   - Installs npm dependencies (including native node-ld)
+#   - Starts server on port 80 (open http://localhost on Deck browser)
 # =============================================================================
 
 set -e
@@ -55,42 +54,44 @@ if steamos-readonly status 2>/dev/null | grep -q enabled; then
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Install Node.js if missing
+# 3. Install prerequisites
 # ---------------------------------------------------------------------------
-echo -e "${YELLOW}[1/5] Checking Node.js...${NC}"
+echo -e "${YELLOW}[1/5] Installing prerequisites...${NC}"
+
+# Node.js and npm
 if ! command -v node &>/dev/null; then
-    echo "  Node.js not found. Installing via pacman..."
-    if ! command -v pacman &>/dev/null; then
-        echo -e "${RED}pacman not found — are you on SteamOS/Arch?${NC}"
-        exit 1
-    fi
+    echo "  Installing Node.js..."
     pacman -Sy --noconfirm nodejs npm 2>/dev/null || {
-        echo "  pacman -Sy failed, trying with key init..."
         pacman-key --init 2>/dev/null || true
         pacman-key --populate archlinux 2>/dev/null || true
         pacman -Sy --noconfirm nodejs npm
     }
-    echo -e "${GREEN}  Node.js installed.${NC}"
-else
-    echo -e "${GREEN}  Node.js found: $(node --version)${NC}"
 fi
+echo -e "${GREEN}  Node.js: $(node --version)${NC}"
 
+# git
 if ! command -v git &>/dev/null; then
     echo "  Installing git..."
     pacman -S --noconfirm git 2>/dev/null || true
 fi
 
+# Build tools (needed for node-ld native C++ compilation)
+if ! command -v make &>/dev/null; then
+    echo "  Installing build tools (needed for node-ld)..."
+    pacman -S --noconfirm base-devel 2>/dev/null || true
+fi
+
 # ---------------------------------------------------------------------------
-# 3. USB Gadget Setup
+# 4. USB Gadget Setup
 # ---------------------------------------------------------------------------
 echo -e "${YELLOW}[2/5] Setting up USB gadget...${NC}"
 
 # Load kernel module
 modprobe libcomposite 2>/dev/null || true
 
-# Tear down any existing gadget (handle both hid.usb0 and hid.g0 names)
+# Tear down any existing gadget
 if [ -d "$GADGET_DIR" ]; then
-    echo "  Tearing down existing gadget..."
+    echo "  Removing old gadget..."
     if [ -f "$GADGET_DIR/UDC" ]; then
         echo "" > "$GADGET_DIR/UDC" 2>/dev/null || true
     fi
@@ -103,20 +104,19 @@ if [ -d "$GADGET_DIR" ]; then
     rmdir "$GADGET_DIR"/functions/hid.usb0 2>/dev/null || true
     rmdir "$GADGET_DIR"/strings/0x409 2>/dev/null || true
     rmdir "$GADGET_DIR" 2>/dev/null || true
-    echo "  Old gadget removed."
 fi
 
 # Create gadget
 mkdir -p "$GADGET_DIR"
 cd "$GADGET_DIR"
 
-# USB device identifiers
+# USB identifiers — exact match for LEGO Dimensions ToyPad
 echo 0x0e6f > idVendor
 echo 0x0241 > idProduct
 echo 0x0100 > bcdDevice
 echo 0x0200 > bcdUSB
 
-# Device strings — MUST match real ToyPad exactly (verified against Berny23)
+# Device strings — verified against Berny23's usb_setup_script.sh
 mkdir -p strings/0x409
 echo "P.D.P.000000"        > strings/0x409/serialnumber
 echo "PDP LIMITED. "       > strings/0x409/manufacturer
@@ -127,61 +127,41 @@ mkdir -p configs/c.1/strings/0x409
 echo "LEGO READER V2.10"   > configs/c.1/strings/0x409/configuration
 echo 250                   > configs/c.1/MaxPower
 
-# HID function — use hid.g0 to match Berny23's known-working setup
+# HID function
 mkdir -p functions/hid.g0
 echo 0 > functions/hid.g0/protocol
 echo 0 > functions/hid.g0/subclass
 echo 32 > functions/hid.g0/report_length
 
-# HID Report Descriptor — VERIFIED against Berny23's usb_setup_script.sh
-# Usage Page: 0xFF00 (vendor), 32-byte INPUT (Array), 32-byte OUTPUT (Array)
+# HID Report Descriptor — verified byte-for-byte against Berny23
 printf '\x06\x00\xFF\x09\x01\xA1\x01\x19\x01\x29\x20\x15\x00\x26\xFF\x00\x75\x08\x95\x20\x81\x00\x19\x01\x29\x20\x91\x00\xC0' > functions/hid.g0/report_desc
 
-# Verify descriptor was written correctly (must be 27 bytes)
-ACTUAL_SIZE=$(wc -c < functions/hid.g0/report_desc)
-echo "  HID descriptor: $ACTUAL_SIZE bytes (expected 27)"
+echo "  HID descriptor: $(wc -c < functions/hid.g0/report_desc) bytes (expect 27)"
 
-# Link function to config
+# Link and bind
 ln -sf functions/hid.g0 configs/c.1/
-
-# Find and bind the UDC
-echo "  Available UDCs: $(ls /sys/class/udc 2>/dev/null | tr '\n' ' ')"
 UDC=$(ls /sys/class/udc 2>/dev/null | head -1)
 if [ -z "$UDC" ]; then
     echo -e "${RED}  No UDC found! Is USB Dual-Role set to DRD in BIOS?${NC}"
-    echo "  Reboot → Vol-Up + Power → Setup → Advanced → USB → DRD"
     exit 1
 fi
 echo "$UDC" > UDC
-sleep 1  # Wait for kernel to create /dev/hidg0
+sleep 1
 
-# Verify gadget is live
+# Verify
 if [ -e /dev/hidg0 ]; then
     chmod 666 /dev/hidg0
     echo -e "${GREEN}  USB gadget LIVE — /dev/hidg0 ready${NC}"
-    echo "  VID/PID: 0e6f/0241  Product: LEGO READER V2.10"
 else
-    echo -e "${RED}  /dev/hidg0 did not appear after binding $UDC!${NC}"
-    echo "  Try: unplug USB-C cable, wait 5s, plug back in"
-    echo "  Then check: ls -la /dev/hidg*"
+    echo -e "${RED}  /dev/hidg0 did not appear! Check: ls /dev/hidg*${NC}"
 fi
-
-echo -e "${YELLOW}  REMINDER: PS3 must be rebooted with Deck plugged in!${NC}"
-echo -e "${YELLOW}  The PS3 only scans USB devices at boot time.${NC}"
-    echo -e "${RED}  /dev/hidg0 did not appear after binding $UDC!${NC}"
-    echo "  Try: unplug USB-C cable, wait 5s, plug back in"
-    echo "  Then check: ls -la /dev/hidg*"
-fi
-
-echo -e "${YELLOW}  REMINDER: PS3 must be rebooted with Deck plugged in!${NC}"
-echo -e "${YELLOW}  The PS3 only scans USB devices at boot time.${NC}"
 
 # ---------------------------------------------------------------------------
-# 4. Clone / Update Emulator
+# 5. Clone / Update Emulator
 # ---------------------------------------------------------------------------
 echo -e "${YELLOW}[3/5] Setting up emulator...${NC}"
 if [ -d "$REPO_DIR" ]; then
-    echo "  Repo exists, pulling latest..."
+    echo "  Updating existing repo..."
     cd "$REPO_DIR"
     git pull --ff-only 2>/dev/null || true
 else
@@ -191,8 +171,40 @@ else
 fi
 
 cd "$REPO_DIR"
-npm install --no-audit --no-fund 2>&1 | tail -1
-echo -e "${GREEN}  Dependencies installed.${NC}"
+
+# Ensure touch-punch is available for touchscreen drag-and-drop
+if [ ! -f server/jquery.ui.touch-punch.min.js ]; then
+    echo "  Downloading touch-punch for touchscreen support..."
+    curl -sSL "https://raw.githubusercontent.com/furf/jquery-ui-touch-punch/master/jquery.ui.touch-punch.min.js" -o server/jquery.ui.touch-punch.min.js 2>/dev/null || true
+fi
+
+echo -e "${YELLOW}[4/5] Installing npm dependencies (this may take a minute)...${NC}"
+npm install --no-audit --no-fund 2>&1 | grep -E "(added|error|ERR)" || true
+echo -e "${GREEN}  Dependencies ready.${NC}"
+
+# ---------------------------------------------------------------------------
+# 6. Start Server
+# ---------------------------------------------------------------------------
+echo ""
+echo -e "${GREEN}============================================${NC}"
+echo -e "${GREEN}  ToyPad emulator STARTING${NC}"
+echo -e "${GREEN}============================================${NC}"
+echo ""
+echo -e "  ${YELLOW}On the Steam Deck browser:${NC}"
+echo -e "     ${GREEN}http://localhost${NC}"
+echo ""
+echo -e "  ${YELLOW}To play:${NC}"
+echo "     1. Plug USB-C → PS3 with DATA cable"
+echo "     2. REBOOT the PS3 (USB only scanned at boot)"
+echo "     3. Boot LEGO Dimensions (original, unmodified)"
+echo "     4. Create characters on Deck touchscreen → drag to ToyPad slots"
+echo ""
+echo -e "  ${YELLOW}Touchscreen tip:${NC} Long-press a character, then drag to a pad slot"
+echo ""
+echo -e "  ${RED}Press Ctrl+C to stop${NC}"
+echo ""
+
+exec node index.js
 
 # ---------------------------------------------------------------------------
 # 5. Start Server
