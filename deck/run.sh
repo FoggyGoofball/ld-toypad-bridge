@@ -82,11 +82,12 @@ else
     exit 1
 fi
 
-# 3. Berny23 emulator (clean vanilla — no custom UI)
+# 3. Berny23 emulator — guaranteed clean vanilla clone
 echo -e "${YELLOW}[3/4] Emulator...${NC}"
+echo "  Removing old install..."
 rm -rf "$BERNY_DIR"
-echo "  Cloning Berny23/LD-ToyPad-Emulator..."
-git clone https://github.com/Berny23/LD-ToyPad-Emulator.git "$BERNY_DIR"
+echo "  Cloning Berny23/LD-ToyPad-Emulator (vanilla)..."
+git clone --depth 1 https://github.com/Berny23/LD-ToyPad-Emulator.git "$BERNY_DIR"
 cd "$BERNY_DIR"
 
 echo "  UI ready."
