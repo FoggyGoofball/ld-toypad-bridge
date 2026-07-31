@@ -41,3 +41,12 @@ header h1 { font-size:1.1rem; }
 .toy-card span { line-height:1.1; word-break:break-word; }
 
 h2 { font-size:0.85rem; margin-bottom:3px; }
+
+/* ── Placement Modal ── */
+.modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:100; }
+.modal[hidden] { display:none; }
+.modal-content { background:var(--panel); border:1px solid #2d4650; border-radius:8px; padding:16px; text-align:center; min-width:200px; }
+.modal-content p { margin-bottom:10px; font-size:0.9rem; }
+.place-btn { display:block; width:100%; padding:10px; margin:6px 0; background:var(--pad-bg); border:1px solid var(--accent); border-radius:6px; color:var(--text); font-size:1rem; cursor:pointer; }
+.place-btn:hover { background:var(--accent); color:#000; }
+.cancel-btn { display:block; width:100%; padding:8px; margin-top:8px; background:transparent; border:1px solid #444; border-radius:6px; color:var(--muted); font-size:0.8rem; cursor:pointer; }

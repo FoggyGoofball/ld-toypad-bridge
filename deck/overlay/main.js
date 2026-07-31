@@ -1,8 +1,10 @@
-// LD-ToyPad Bridge — Steam Deck UI v2
+// LD-ToyPad Bridge — Steam Deck UI v3 (touch-friendly modal + FIFO)
 const socket = io();
 let chars = [], vehs = [], allToys = [], type = 'character', world = 'All';
 let toyBox = {}, padSlots = {1:null,2:null,3:null,4:null,5:null,6:null,7:null};
-const PAD_MAP = { left:[1,4,5], center:[2], right:[3,6,7] };
+let pendingToy = null; // toy being placed via modal
+const PAD = { left:[1,4,5], center:[2], right:[3,6,7] };
+const PLACE_ORDER = { left:[], center:[], right:[] }; // FIFO tracking
 
 async function init() {
   const [cm, tm] = await Promise.all([
@@ -52,14 +54,22 @@ async function createToy(toy) {
   setTimeout(syncToyBox, 500);
 }
 
+// ── Sync from server ─────────────────────────────────────────
 async function syncToyBox() {
   try {
     const tags = await fetch('/json/toytags.json').then(r=>r.json());
     toyBox = {}; padSlots = {1:null,2:null,3:null,4:null,5:null,6:null,7:null};
+    PLACE_ORDER.left = []; PLACE_ORDER.center = []; PLACE_ORDER.right = [];
     tags.forEach(t=>{
       const info = allToys.find(a=>String(a.id)===String(t.id))||{};
       if (t.index==='-1'||!t.index) toyBox[t.uid]={name:t.name||info.name,id:t.id,uid:t.uid,type:t.type};
-      else padSlots[parseInt(t.index)]={name:t.name||info.name,id:t.id,uid:t.uid,type:t.type};
+      else {
+        const idx = parseInt(t.index);
+        padSlots[idx] = {name:t.name||info.name,id:t.id,uid:t.uid,type:t.type};
+        for (const [zone, slots] of Object.entries(PAD)) {
+          if (slots.includes(idx)) PLACE_ORDER[zone].push(idx);
+        }
+      }
     });
     renderToyBox(); renderPad();
   } catch(e){}
@@ -70,23 +80,50 @@ function renderToyBox() {
   const box = document.getElementById('toybox'); box.innerHTML = '';
   const entries = Object.values(toyBox);
   document.getElementById('toyboxCount').textContent = entries.length?`(${entries.length})`:'';
-  if (!entries.length) { box.innerHTML = '<p class="muted">Click a character or vehicle below to add it here, then click it to place on the pad.</p>'; return; }
+  if (!entries.length) { box.innerHTML = '<p class="muted">Click a character or vehicle below → it appears here → click it → pick a pad zone.</p>'; return; }
   entries.forEach(tb=>{
     const info = allToys.find(a=>String(a.id)===String(tb.id))||{};
     const c = el('button','toybox-item');
     c.innerHTML = `<img src="${info.img||''}" alt="${tb.name}" onerror="this.style.display='none'"><span>${tb.name}</span>`;
-    c.onclick = ()=>{
-      const slot = prompt('Place on slot?\nLeft: 1,4,5 | Center: 2 | Right: 3,6,7','2');
-      if (slot) placeToy(tb, parseInt(slot));
-    };
+    c.onclick = () => openPlaceModal(tb);
     box.appendChild(c);
   });
 }
 
-async function placeToy(tb, index) {
-  await fetch('/place',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:tb.uid,id:tb.id,position:1,index})});
+// ── Placement Modal (touch-friendly buttons) ──────────────────
+function openPlaceModal(tb) {
+  pendingToy = tb;
+  document.getElementById('placeModalName').textContent = `Place ${tb.name} on:`;
+  document.getElementById('placeModal').hidden = false;
+}
+
+function closeModal() { pendingToy = null; document.getElementById('placeModal').hidden = true; }
+
+async function placeOnZone(zone) {
+  if (!pendingToy) return;
+  const tb = pendingToy;
+  closeModal();
+
+  const slots = PAD[zone];
+  // Find first empty slot
+  let target = slots.find(s => !padSlots[s]);
+  if (target === undefined) {
+    // FIFO: remove oldest, place in that slot
+    target = PLACE_ORDER[zone].shift();
+    if (target !== undefined && padSlots[target]) {
+      await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:target,uid:padSlots[target].uid})});
+    }
+    target = slots.find(s => !padSlots[s]) || slots[0]; // fallback
+  }
+
+  await fetch('/place',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:tb.uid,id:tb.id,position:1,index:target})});
   setTimeout(syncToyBox, 300);
 }
+
+// Wire up modal buttons
+document.querySelectorAll('.place-btn').forEach(b => {
+  b.onclick = () => placeOnZone(b.dataset.zone);
+});
 
 // ── ToyPad ────────────────────────────────────────────────────
 function renderPad() {

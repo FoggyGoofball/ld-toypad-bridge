@@ -30,6 +30,15 @@
       <div id="catalog" class="catalog-grid"></div>
     </section>
   </main>
+  <div id="placeModal" class="modal" hidden>
+    <div class="modal-content">
+      <p id="placeModalName"></p>
+      <button class="place-btn" data-zone="left">⬅ Left</button>
+      <button class="place-btn" data-zone="center">⬆ Center</button>
+      <button class="place-btn" data-zone="right">➡ Right</button>
+      <button class="cancel-btn" onclick="closeModal()">Cancel</button>
+    </div>
+  </div>
   <script src="/socket.io/socket.io.js"></script>
   <script src="/scripts/main.js"></script>
 </body>
