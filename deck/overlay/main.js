@@ -1,10 +1,10 @@
-// LD-ToyPad Bridge — Steam Deck UI v3 (touch-friendly modal + FIFO)
+// LD-ToyPad Bridge — Steam Deck UI v4 (pad move/remove modal)
 const socket = io();
 let chars = [], vehs = [], allToys = [], type = 'character', world = 'All';
 let toyBox = {}, padSlots = {1:null,2:null,3:null,4:null,5:null,6:null,7:null};
-let pendingToy = null; // toy being placed via modal
+let pendingToy = null, pendingSlot = null;
 const PAD = { left:[1,4,5], center:[2], right:[3,6,7] };
-const PLACE_ORDER = { left:[], center:[], right:[] }; // FIFO tracking
+const PLACE_ORDER = { left:[], center:[], right:[] };
 
 async function init() {
   const [cm, tm] = await Promise.all([
@@ -54,7 +54,7 @@ async function createToy(toy) {
   setTimeout(syncToyBox, 500);
 }
 
-// ── Sync from server ─────────────────────────────────────────
+// ── Sync ──────────────────────────────────────────────────────
 async function syncToyBox() {
   try {
     const tags = await fetch('/json/toytags.json').then(r=>r.json());
@@ -66,9 +66,8 @@ async function syncToyBox() {
       else {
         const idx = parseInt(t.index);
         padSlots[idx] = {name:t.name||info.name,id:t.id,uid:t.uid,type:t.type};
-        for (const [zone, slots] of Object.entries(PAD)) {
+        for (const [zone, slots] of Object.entries(PAD))
           if (slots.includes(idx)) PLACE_ORDER[zone].push(idx);
-        }
       }
     });
     renderToyBox(); renderPad();
@@ -90,40 +89,66 @@ function renderToyBox() {
   });
 }
 
-// ── Placement Modal (touch-friendly buttons) ──────────────────
+// ── Place Modal (from Toy Box) ────────────────────────────────
 function openPlaceModal(tb) {
   pendingToy = tb;
   document.getElementById('placeModalName').textContent = `Place ${tb.name} on:`;
   document.getElementById('placeModal').hidden = false;
 }
-
-function closeModal() { pendingToy = null; document.getElementById('placeModal').hidden = true; }
+function closePlaceModal() { pendingToy = null; document.getElementById('placeModal').hidden = true; }
 
 async function placeOnZone(zone) {
-  if (!pendingToy) return;
-  const tb = pendingToy;
-  closeModal();
-
+  const tb = pendingToy; if (!tb) return;
+  closePlaceModal();
   const slots = PAD[zone];
-  // Find first empty slot
   let target = slots.find(s => !padSlots[s]);
   if (target === undefined) {
-    // FIFO: remove oldest, place in that slot
     target = PLACE_ORDER[zone].shift();
-    if (target !== undefined && padSlots[target]) {
+    if (target !== undefined && padSlots[target])
       await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:target,uid:padSlots[target].uid})});
-    }
-    target = slots.find(s => !padSlots[s]) || slots[0]; // fallback
+    target = slots.find(s => !padSlots[s]) || slots[0];
   }
-
   await fetch('/place',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:tb.uid,id:tb.id,position:1,index:target})});
   setTimeout(syncToyBox, 300);
 }
 
-// Wire up modal buttons
-document.querySelectorAll('.place-btn').forEach(b => {
+document.querySelectorAll('#placeModal .place-btn').forEach(b => {
   b.onclick = () => placeOnZone(b.dataset.zone);
 });
+
+// ── Pad Modal (move/remove from pad) ──────────────────────────
+function openPadModal(slot) {
+  const toy = padSlots[slot];
+  if (!toy) return;
+  pendingSlot = slot;
+  document.getElementById('padModalName').textContent = `${toy.name} (slot ${slot})`;
+  document.getElementById('padModal').hidden = false;
+}
+function closePadModal() { pendingSlot = null; document.getElementById('padModal').hidden = true; }
+
+async function moveFromPad(zone) {
+  const slot = pendingSlot; if (!slot || !padSlots[slot]) return;
+  const toy = padSlots[slot];
+  closePadModal();
+  // Remove from current slot
+  await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:slot,uid:toy.uid})});
+  await sleep(200);
+  // Place in new zone (same as placeOnZone but with the existing toy)
+  pendingToy = toy;
+  await placeOnZone(zone);
+}
+
+async function removeFromPad() {
+  const slot = pendingSlot; if (!slot || !padSlots[slot]) return;
+  await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:slot,uid:padSlots[slot].uid})});
+  closePadModal();
+  setTimeout(syncToyBox, 300);
+}
+
+document.querySelectorAll('#padModal .place-btn').forEach(b => {
+  b.onclick = () => moveFromPad(b.dataset.zone);
+});
+document.querySelector('#padModal .remove-btn').onclick = removeFromPad;
 
 // ── ToyPad ────────────────────────────────────────────────────
 function renderPad() {
@@ -136,22 +161,14 @@ function renderPad() {
       if (toy) {
         const info = allToys.find(a=>String(a.id)===String(toy.id))||{};
         d.innerHTML = `<img src="${info.img||''}" alt="${toy.name}" onerror="this.style.display='none'"><span>${toy.name}</span>`;
-        const rm = el('button','pad-remove','✕');
-        rm.onclick = async e=>{e.stopPropagation();await removeToy(s);};
-        d.appendChild(rm);
+        d.style.cursor = 'pointer';
+        d.onclick = () => openPadModal(s);
       } else {
         d.innerHTML = `<span class="empty-slot">Slot ${s}</span>`;
       }
       el.appendChild(d);
     });
   });
-}
-
-async function removeToy(index) {
-  const toy = padSlots[index];
-  if (!toy) return;
-  await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index,uid:toy.uid})});
-  setTimeout(syncToyBox, 300);
 }
 
 // ── Socket ────────────────────────────────────────────────────
@@ -163,4 +180,5 @@ socket.on('refreshTokens', syncToyBox);
 socket.on('syncToyPad', syncToyBox);
 
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text)e.textContent=text;return e;}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 init(); syncToyBox();

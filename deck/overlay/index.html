@@ -36,7 +36,17 @@
       <button class="place-btn" data-zone="left">⬅ Left</button>
       <button class="place-btn" data-zone="center">⬆ Center</button>
       <button class="place-btn" data-zone="right">➡ Right</button>
-      <button class="cancel-btn" onclick="closeModal()">Cancel</button>
+      <button class="cancel-btn" onclick="closePlaceModal()">Cancel</button>
+    </div>
+  </div>
+  <div id="padModal" class="modal" hidden>
+    <div class="modal-content">
+      <p id="padModalName"></p>
+      <button class="place-btn" data-zone="left">⬅ Move Left</button>
+      <button class="place-btn" data-zone="center">⬆ Move Center</button>
+      <button class="place-btn" data-zone="right">➡ Move Right</button>
+      <button class="remove-btn">✕ Remove from Pad</button>
+      <button class="cancel-btn" onclick="closePadModal()">Cancel</button>
     </div>
   </div>
   <script src="/socket.io/socket.io.js"></script>
