@@ -97,13 +97,11 @@ curl -sSL "$OVERLAY_BASE/main.css" -o server/stylesheets/main.css
 curl -sSL "$OVERLAY_BASE/main.js" -o server/scripts/main.js
 mkdir -p server/images
 
-# Image sync on first run (standalone, no dependencies)
-if [ ! -f server/images/.synced ]; then
-    echo "  Downloading toy images (this takes ~5 min on first run)..."
-    curl -sSL "$OVERLAY_BASE/sync-images.js" -o sync-images.js
-    node sync-images.js && touch server/images/.synced || echo "  Image sync skipped (will retry next run)"
-    rm -f sync-images.js
-fi
+# Image sync — runs every start, only downloads missing/corrupt
+echo "  Syncing toy images..."
+curl -sSL "$OVERLAY_BASE/sync-images.js" -o sync-images.js
+node sync-images.js
+rm -f sync-images.js
 
 echo "  UI ready."
 
