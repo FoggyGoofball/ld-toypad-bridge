@@ -81,16 +81,11 @@ else
     exit 1
 fi
 
-# 3. Berny23 emulator (vanilla — no custom UI)
+# 3. Berny23 emulator — ALWAYS fresh vanilla clone
 echo -e "${YELLOW}[3/4] Emulator...${NC}"
-if [ ! -d "$BERNY_DIR" ]; then
-    echo "  Cloning Berny23/LD-ToyPad-Emulator..."
-    git clone --depth 1 https://github.com/Berny23/LD-ToyPad-Emulator.git "$BERNY_DIR"
-fi
+rm -rf "$BERNY_DIR"
+git clone --depth 1 https://github.com/Berny23/LD-ToyPad-Emulator.git "$BERNY_DIR"
 cd "$BERNY_DIR"
-
-# Force-restore vanilla files in case a previous run left overlay junk
-git checkout -- server/index.html server/stylesheets/main.css server/scripts/main.js 2>/dev/null || true
 
 echo "  npm install..."
 npm install --no-audit --no-fund 2>&1 | grep -E "(added|error|ERR)" || true
