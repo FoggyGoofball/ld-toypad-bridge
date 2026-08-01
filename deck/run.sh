@@ -94,10 +94,15 @@ npm install --no-audit --no-fund 2>&1 | grep -E "(added|error|ERR)" || true
 echo ""
 echo -e "${GREEN}==========================================${NC}"
 echo -e "${GREEN}  Starting — open http://localhost${NC}"
+echo -e "${GREEN}  If you see the old UI: Ctrl+Shift+R (hard refresh)${NC}"
 echo -e "${GREEN}==========================================${NC}"
 echo -e "  ${YELLOW}1. Plug Deck → PS3 with DATA cable${NC}"
 echo -e "  ${YELLOW}2. REBOOT the PS3${NC}"
 echo -e "  ${YELLOW}3. Start LEGO Dimensions${NC}"
 echo ""
+
+# Kill any old server that might still be running
+sudo pkill -f "node index.js" 2>/dev/null || true
+sleep 1
 
 exec sudo node index.js
