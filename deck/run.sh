@@ -89,6 +89,9 @@ if [ ! -d "$BERNY_DIR" ]; then
 fi
 cd "$BERNY_DIR"
 
+# Force-restore vanilla files in case a previous run left overlay junk
+git checkout -- server/index.html server/stylesheets/main.css server/scripts/main.js 2>/dev/null || true
+
 echo "  npm install..."
 npm install --no-audit --no-fund 2>&1 | grep -E "(added|error|ERR)" || true
 
