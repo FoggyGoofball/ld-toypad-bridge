@@ -8,7 +8,6 @@ set -e
 GADGET_DIR=/sys/kernel/config/usb_gadget/g1
 DECK_HOME=/home/deck
 BERNY_DIR="$DECK_HOME/LD-ToyPad-Emulator"
-OVERLAY_BASE="https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/main/deck/overlay"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
 echo -e "${GREEN}=== Steam Deck LEGO Dimensions ToyPad ===${NC}"
@@ -82,21 +81,13 @@ else
     exit 1
 fi
 
-# 3. Berny23 emulator
+# 3. Berny23 emulator (vanilla — no custom UI)
 echo -e "${YELLOW}[3/4] Emulator...${NC}"
 if [ ! -d "$BERNY_DIR" ]; then
     echo "  Cloning Berny23/LD-ToyPad-Emulator..."
     git clone --depth 1 https://github.com/Berny23/LD-ToyPad-Emulator.git "$BERNY_DIR"
 fi
 cd "$BERNY_DIR"
-
-# Apply our custom UI overlay
-echo "  Applying LD-ToyPad Bridge UI..."
-curl -sSL "$OVERLAY_BASE/index.html" -o server/index.html
-curl -sSL "$OVERLAY_BASE/main.css" -o server/stylesheets/main.css
-curl -sSL "$OVERLAY_BASE/main.js" -o server/scripts/main.js
-
-echo "  UI ready."
 
 echo "  npm install..."
 npm install --no-audit --no-fund 2>&1 | grep -E "(added|error|ERR)" || true
