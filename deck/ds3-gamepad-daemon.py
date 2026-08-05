@@ -266,6 +266,20 @@ def main():
     l4_pressed = False
     r4_pressed = False
 
+    # ── Control socket drain thread ──────────────────────────────
+    # PS3 sends rumble/LED SET_REPORT packets over PSM 0x11. If we
+    # don't recv() them, the L2CAP buffer fills → PS3 drops connection
+    # after 5-10 minutes. We blindly drain — no parsing needed for now.
+    def ctrl_drain_loop():
+        while True:
+            try:
+                sock_ctrl.recv(1024)  # discard rumble/LED commands
+            except Exception as e:
+                print(f"  Control channel closed: {e}")
+                break
+
+    threading.Thread(target=ctrl_drain_loop, daemon=True).start()
+
     # ── Write thread (L2CAP — 0xA1 HID header, 100Hz) ──────────
     def write_loop():
         """Stream DS3 reports over raw L2CAP interrupt channel at 100Hz.
