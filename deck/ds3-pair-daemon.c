@@ -48,7 +48,7 @@
 #define USB_VID         0x054C
 #define USB_PID         0x0268
 #define USB_BCD_DEVICE  0x0100
-#define USB_BCD_USB     0x0110  /* USB 1.1 — matches genuine DualShock 3 */
+#define USB_BCD_USB     0x0200  /* USB 2.0 — matches RosettaPad working reference */
 
 /* ── DS3 Feature Report IDs ─────────────────────────────────────── */
 #define DS3_REPORT_CAPS         0x01
@@ -82,11 +82,12 @@ static uint8_t report_01[64] = {
 };
 
 /* Report 0xF2 — Controller Bluetooth MAC (bytes 4-9) */
+/* Matches RosettaPad report_f2 byte-for-byte (was shifted by 2 bytes) */
 static uint8_t report_f2[64] = {
     0xF2, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 0x50, 0x81,
-    0xD8, 0x01, 0x8A, 0x13, 0x00, 0x00, 0x00, 0x00,
-    0x04, 0x00, 0x02, 0x02, 0x02, 0x02, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x03, 0x50, 0x81, 0xD8, 0x01,
+    0x8A, 0x13, 0x00, 0x00, 0x00, 0x00, 0x04, 0x00,
+    0x02, 0x02, 0x02, 0x02, 0x00, 0x00, 0x00, 0x04,
     0x00, 0x04, 0x04, 0x04, 0x04, 0x00, 0x00, 0x04,
     0x00, 0x01, 0x02, 0x07, 0x00, 0x17, 0x00, 0x00,
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -512,31 +513,36 @@ int main(int argc, char **argv) {
     write(g_ep0_fd, &ffs_descriptors, sizeof(ffs_descriptors));
     write(g_ep0_fd, &ffs_strings, sizeof(ffs_strings));
 
-    /* Bind to UDC */
-    printf("Step 4/5: Finding UDC...\n"); fflush(stdout);
-    char *udc = find_udc();
-    if (!udc) { fprintf(stderr, "No UDC found!\n"); teardown_configfs(); return 1; }
-    printf("Step 5/5: Binding to UDC: %s\n", udc); fflush(stdout);
-
-    char udc_path[256];
-    snprintf(udc_path, sizeof(udc_path), "%s/UDC", GADGET_DIR);
-    int fd = open(udc_path, O_WRONLY);
-    if (fd < 0 || write(fd, udc, strlen(udc)) < 0) {
-        printf("ERROR: Failed to bind to UDC (may be in use by another gadget).\n");
-        printf("  Run: for d in /sys/kernel/config/usb_gadget/*/UDC; do echo '' | sudo tee \"$d\"; done\n");
-        if (fd >= 0) close(fd);
-        teardown_configfs();
-        return 1;
-    }
-    close(fd);
-
-    /* Start threads */
+    /* Start control thread BEFORE binding UDC (RosettaPad order).
+     * If we bind first, PS3 enumerates immediately and sends ep0 transfers
+     * that get silently dropped because the control thread isn't listening yet.
+     * This was the "silly mistake" — same class as menu script terminating early. */
+    printf("Step 4/5: Starting control thread (before UDC bind)...\n"); fflush(stdout);
     pthread_t ctrl_tid, in_tid;
     pthread_create(&ctrl_tid, NULL, control_thread, NULL);
     pthread_create(&in_tid, NULL, input_thread, NULL);
+    usleep(100000); /* Let threads initialize */
+
+    /* Now bind to UDC — control thread is already listening */
+    printf("Step 5/5: Binding to UDC...\n"); fflush(stdout);
+    char *udc = find_udc();
+    if (!udc) { fprintf(stderr, "No UDC found!\n"); teardown_configfs(); return 1; }
+    printf("  UDC: %s\n", udc); fflush(stdout);
+
+    char udc_path[256];
+    snprintf(udc_path, sizeof(udc_path), "%s/UDC", GADGET_DIR);
+    int udc_fd = open(udc_path, O_WRONLY);
+    if (udc_fd < 0 || write(udc_fd, udc, strlen(udc)) < 0) {
+        printf("ERROR: Failed to bind to UDC (may be in use by another gadget).\n");
+        printf("  Run: for d in /sys/kernel/config/usb_gadget/*/UDC; do echo '' | sudo tee \"$d\"; done\n");
+        if (udc_fd >= 0) close(udc_fd);
+        teardown_configfs();
+        return 1;
+    }
+    close(udc_fd);
 
     printf("\n========================================\n");
-    printf("  DS3 Pairing Daemon v9.3.6\n");
+    printf("  DS3 Pairing Daemon v9.3.9\n");
     printf("  Descriptor size: %zu bytes\n", sizeof(ffs_descriptors));
     printf("  Plug USB-C cable into PS3 now.\n");
     printf("  Ctrl+C to exit.\n");
