@@ -15,7 +15,7 @@
 set -e  # exit on error (except menu reads — those use /dev/tty)
 
 DECK_HOME="/home/deck"
-GITHUB_BASE="https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/v9.3.7/deck"
+GITHUB_BASE="https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/v9.3.8/deck"
 LOCAL_DIR="/tmp/ldtoypad"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 BOLD='\033[1m'
@@ -25,7 +25,7 @@ BOLD='\033[1m'
 # All scripts live in $LOCAL_DIR with known absolute paths.
 # Cache with version stamp — re-download if version changed
 VERSION_STAMP="$LOCAL_DIR/.version"
-EXPECTED_VERSION="v9.3.7"
+EXPECTED_VERSION="v9.3.8"
 if [ ! -f "$VERSION_STAMP" ] || [ "$(cat "$VERSION_STAMP")" != "$EXPECTED_VERSION" ]; then
     echo "  Downloading scripts ($EXPECTED_VERSION)..."
     rm -rf "$LOCAL_DIR"

@@ -322,7 +322,11 @@ static int setup_configfs(void) {
     system("modprobe libcomposite 2>/dev/null");
     system("modprobe usb_f_fs 2>/dev/null");
 
-    /* Tear down existing */
+    /* Unbind ALL gadgets from UDC first (ToyPad g1 may be holding it) */
+    printf("  Unbinding any existing gadgets from UDC...\n"); fflush(stdout);
+    system("for d in /sys/kernel/config/usb_gadget/*/UDC; do [ -f \"$d\" ] && echo '' > \"$d\" 2>/dev/null; done; sleep 1");
+
+    /* Tear down our specific gadget if it exists */
     char cmd[256];
     snprintf(cmd, sizeof(cmd), "if [ -f %s/UDC ]; then echo '' > %s/UDC 2>/dev/null; fi", GADGET_DIR, GADGET_DIR);
     system(cmd);
@@ -516,7 +520,15 @@ int main(int argc, char **argv) {
 
     char udc_path[256];
     snprintf(udc_path, sizeof(udc_path), "%s/UDC", GADGET_DIR);
-    write_file(udc_path, udc);
+    int fd = open(udc_path, O_WRONLY);
+    if (fd < 0 || write(fd, udc, strlen(udc)) < 0) {
+        printf("ERROR: Failed to bind to UDC (may be in use by another gadget).\n");
+        printf("  Run: for d in /sys/kernel/config/usb_gadget/*/UDC; do echo '' | sudo tee \"$d\"; done\n");
+        if (fd >= 0) close(fd);
+        teardown_configfs();
+        return 1;
+    }
+    close(fd);
 
     /* Start threads */
     pthread_t ctrl_tid, in_tid;
