@@ -37,6 +37,7 @@
 #include <sys/mount.h>
 #include <sys/types.h>
 #include <dirent.h>
+#include <time.h>
 #include <linux/usb/functionfs.h>
 
 /* ── Configuration ──────────────────────────────────────────────── */
@@ -47,7 +48,7 @@
 #define USB_VID         0x054C
 #define USB_PID         0x0268
 #define USB_BCD_DEVICE  0x0100
-#define USB_BCD_USB     0x0200
+#define USB_BCD_USB     0x0110  /* USB 1.1 — matches genuine DualShock 3 */
 
 /* ── DS3 Feature Report IDs ─────────────────────────────────────── */
 #define DS3_REPORT_CAPS         0x01
@@ -64,6 +65,7 @@ static volatile int g_running = 1;
 static int g_ep0_fd = -1;
 static uint8_t g_ps3_mac[6] = {0};
 static int g_ps3_mac_valid = 0;
+static int g_usb_enabled = 0;
 static int g_handshake_complete = 0;
 
 /* ── DS3 Feature Report Templates ───────────────────────────────── */
@@ -436,7 +438,8 @@ static void *control_thread(void *arg) {
             break;
         }
         case FUNCTIONFS_ENABLE:
-            printf("  FFS ENABLE — gadget bound to UDC\n");
+            printf("  FFS ENABLE — PS3 enumerated the device\n");
+            g_usb_enabled = 1;
             break;
         case FUNCTIONFS_DISABLE:
             printf("  FFS DISABLE — gadget unbound\n");
@@ -517,14 +520,32 @@ int main(int argc, char **argv) {
     pthread_create(&in_tid, NULL, input_thread, NULL);
 
     printf("\n========================================\n");
-    printf("  DS3 Pairing Daemon — waiting for PS3\n");
+    printf("  DS3 Pairing Daemon v9.3.4\n");
+    printf("  Descriptor size: %zu bytes\n", sizeof(ffs_descriptors));
     printf("  Plug USB-C cable into PS3 now.\n");
-    printf("  Press Ctrl+C to exit.\n");
+    printf("  Ctrl+C to exit.\n");
     printf("========================================\n\n");
 
-    /* Wait for handshake */
-    while (g_running && !g_handshake_complete) {
+    /* Wait for FFS_ENABLE (gadget bound to UDC and PS3 enumerated it) */
+    printf("Waiting for PS3 to enumerate device...\n");
+    time_t start = time(NULL);
+    while (g_running && !g_usb_enabled && (time(NULL) - start) < 30) {
         usleep(200000);
+    }
+    if (!g_usb_enabled) {
+        printf("\nTIMEOUT: PS3 did not enumerate the device within 30 seconds.\n");
+        printf("Check: USB cable (data, not charge-only), PS3 powered on, BIOS DRD mode.\n");
+        g_running = 0;
+        goto cleanup;
+    }
+    printf("PS3 enumerated device — waiting for handshake...\n");
+
+    /* Wait for handshake */
+    while (g_running && !g_handshake_complete && (time(NULL) - start) < 60) {
+        usleep(200000);
+    }
+    if (!g_handshake_complete && g_running) {
+        printf("\nTIMEOUT: Handshake did not complete within 60 seconds.\n");
     }
 
     if (g_handshake_complete && g_ps3_mac_valid) {
@@ -536,7 +557,7 @@ int main(int argc, char **argv) {
         save_pairing(deck_mac, g_ps3_mac);
     }
 
-    /* Cleanup */
+cleanup:
     g_running = 0;
     pthread_join(in_tid, NULL);
     pthread_join(ctrl_tid, NULL);
