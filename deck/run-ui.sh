@@ -66,7 +66,15 @@ echo "  Applying custom UI..."
 curl -sSL "$OVERLAY_BASE/index.html" -o server/index.html
 curl -sSL "$OVERLAY_BASE/main.css" -o server/stylesheets/main.css
 curl -sSL "$OVERLAY_BASE/main.js" -o server/scripts/main.js
+curl -sSL "$OVERLAY_BASE/sync-images.js" -o server/sync-images.js
+curl -sSL "$OVERLAY_BASE/sync-api.js" -o server/sync-api.js
 mkdir -p server/images
+# Inject sync-api endpoint into root index.js (where app = express() is defined)
+if ! grep -q "sync-api" index.js 2>/dev/null; then
+  echo "" >> index.js
+  echo "// Injected by LD-ToyPad Bridge overlay — on-demand image sync endpoint" >> index.js
+  echo "try { require('./server/sync-api')(app); } catch(e) { console.error('sync-api load failed:', e.message); }" >> index.js
+fi
 echo "  npm install..."
 npm install --no-audit --no-fund 2>&1|grep -E "(added|error|ERR)"||true
 

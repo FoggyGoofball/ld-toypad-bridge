@@ -7,9 +7,14 @@ const fs = require('fs');
 const https = require('https');
 const path = require('path');
 
-const IMAGES_DIR = path.join(__dirname, 'server', 'images');
-const CHAR_MAP = path.join(__dirname, 'server', 'json', 'charactermap.json');
-const TOKEN_MAP = path.join(__dirname, 'server', 'json', 'tokenmap.json');
+// Paths resolve relative to script location.
+// When deployed (server/sync-images.js): __dirname = .../server/
+// When standalone (deck/overlay/sync-images.js): need server/ subdir
+const IS_DEPLOYED = fs.existsSync(path.join(__dirname, 'json'));
+const BASE = IS_DEPLOYED ? __dirname : path.join(__dirname, 'server');
+const IMAGES_DIR = path.join(BASE, 'images');
+const CHAR_MAP = path.join(BASE, 'json', 'charactermap.json');
+const TOKEN_MAP = path.join(BASE, 'json', 'tokenmap.json');
 const DELAY_MS = 1500; // be nice to the wiki
 const API = 'https://lego-dimensions.fandom.com/api.php';
 

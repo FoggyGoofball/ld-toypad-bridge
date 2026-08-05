@@ -1,11 +1,12 @@
-// LD-ToyPad Bridge — Steam Deck UI v5 (Berny23-matching filters)
+// LD-ToyPad Bridge — Steam Deck UI v6 (1:1 Berny23 parity, 80px cards, sticky pad, collapsible toybox)
 const socket = io();
 let chars = [], vehs = [], allToys = [], type = 'character', world = 'All';
 let toyBox = {}, padSlots = {1:null,2:null,3:null,4:null,5:null,6:null,7:null};
 let pendingToy = null, pendingSlot = null;
 const PAD = { left:[1,4,5], center:[2], right:[3,6,7] };
+// 🔴 FIXED: zone→position mapping (center=1, left=2, right=3 per Berny23's pad-num)
+const ZONE_TO_POSITION = { left: 2, center: 1, right: 3 };
 const PLACE_ORDER = { left:[], center:[], right:[] };
-// Berny23's ignored worlds
 const IGNORED_WORLDS = new Set(['15','16','17','18','19','20','N/A','Unknown']);
 
 // ── Berny23-matching filters ──────────────────────────────────
@@ -22,6 +23,11 @@ async function init() {
   vehs = tm.filter(isValidVeh).map(v=>({...v,type:'token',img:`/images/${v.id}.png`}));
   allToys = [...chars, ...vehs];
   renderTabs(); applyFilter(); syncToyBox();
+  // 🔴 FIXED: emit connectionStatus + syncToyPad on page load (1:1 Berny23)
+  socket.emit('connectionStatus');
+  socket.emit('syncToyPad');
+  // Start keystone glow decay timer
+  setInterval(decayGlow, 1500);
 }
 
 function renderTabs() {
@@ -47,18 +53,27 @@ function applyFilter() {
   const g = document.getElementById('catalog'); g.innerHTML = '';
   toys.forEach(toy=>{
     const c = el('button','toy-card');
-    c.innerHTML = `<img src="${toy.img}" alt="${toy.name}" loading="lazy" onerror="this.style.display='none'"><span>${toy.name}</span>`;
+    // 🟡 FIXED: image fallback initials (restored from original)
+    const initials = String(toy.name||'?').slice(0,2).toUpperCase();
+    c.innerHTML = `<img src="${toy.img}" alt="${toy.name}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <div class="toy-card-fallback" style="display:none">${initials}</div>
+      <span>${toy.name}</span>`;
     c.onclick = () => createToy(toy);
     g.appendChild(c);
   });
+  // 🟡 FIXED: catalog count (restored from original)
+  document.getElementById('toyCount').textContent = `(${toys.length})`;
 }
 document.getElementById('toyFilter').addEventListener('input', applyFilter);
 
 // ── Create → Toy Box ──────────────────────────────────────────
 async function createToy(toy) {
   const ep = toy.type==='character'?'/character':'/vehicle';
-  await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:toy.id})});
-  setTimeout(syncToyBox, 500);
+  try {
+    await fetch(ep,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:toy.id})});
+    setStatus(`Created ${toy.name}`, 'ok');
+    setTimeout(syncToyBox, 500);
+  } catch(e) { setStatus(`Failed to create ${toy.name}`, 'error'); }
 }
 
 // ── Sync ──────────────────────────────────────────────────────
@@ -78,7 +93,7 @@ async function syncToyBox() {
       }
     });
     renderToyBox(); renderPad();
-  } catch(e){}
+  } catch(e){ console.error('syncToyBox failed:', e); }
 }
 
 // ── Toy Box ───────────────────────────────────────────────────
@@ -95,6 +110,16 @@ function renderToyBox() {
     box.appendChild(c);
   });
 }
+
+// ── Collapsible Toy Box ───────────────────────────────────────
+document.getElementById('toyboxToggle').addEventListener('click', () => {
+  const row = document.querySelector('.toybox-row');
+  const tog = document.getElementById('toyboxToggle');
+  row.classList.toggle('collapsed');
+  tog.textContent = row.classList.contains('collapsed')
+    ? '▶ Toy Box ' + document.getElementById('toyboxCount').textContent
+    : '▼ Toy Box ' + document.getElementById('toyboxCount').textContent;
+});
 
 // ── Place Modal (from Toy Box) ────────────────────────────────
 function openPlaceModal(tb) {
@@ -115,7 +140,11 @@ async function placeOnZone(zone) {
       await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:target,uid:padSlots[target].uid})});
     target = slots.find(s => !padSlots[s]) || slots[0];
   }
-  await fetch('/place',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:tb.uid,id:tb.id,position:1,index:target})});
+  // 🔴 FIXED: use ZONE_TO_POSITION mapping (was hardcoded position:1)
+  try {
+    await fetch('/place',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:tb.uid,id:tb.id,position:ZONE_TO_POSITION[zone],index:target})});
+    setStatus(`Placed ${tb.name} on ${zone.toUpperCase()}`, 'ok');
+  } catch(e) { setStatus(`Place failed: ${tb.name}`, 'error'); }
   setTimeout(syncToyBox, 300);
 }
 
@@ -135,14 +164,20 @@ function closePadModal() { pendingSlot = null; document.getElementById('padModal
 async function moveFromPad(zone) {
   const slot = pendingSlot; if (!slot || !padSlots[slot]) return;
   const toy = padSlots[slot]; closePadModal();
-  await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:slot,uid:toy.uid})});
-  await sleep(200);
+  try {
+    await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:slot,uid:toy.uid})});
+  } catch(e) { setStatus(`Remove failed: ${toy.name}`, 'error'); return; }
+  await sleep(500); // 🟡 FIXED: 500ms delay matches upstream (was 200ms)
   pendingToy = toy;
   await placeOnZone(zone);
 }
 async function removeFromPad() {
   const slot = pendingSlot; if (!slot || !padSlots[slot]) return;
-  await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:slot,uid:padSlots[slot].uid})});
+  const name = padSlots[slot].name;
+  try {
+    await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:slot,uid:padSlots[slot].uid})});
+    setStatus(`Removed ${name}`, 'ok');
+  } catch(e) { setStatus(`Remove failed: ${name}`, 'error'); }
   closePadModal(); setTimeout(syncToyBox, 300);
 }
 
@@ -161,7 +196,10 @@ function renderPad() {
       const toy = padSlots[s];
       if (toy) {
         const info = allToys.find(a=>String(a.id)===String(toy.id))||{};
-        d.innerHTML = `<img src="${info.img||''}" alt="${toy.name}" onerror="this.style.display='none'"><span>${toy.name}</span>`;
+        const initials = String(toy.name||'?').slice(0,2).toUpperCase();
+        d.innerHTML = `<img src="${info.img||''}" alt="${toy.name}" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+          <div class="pad-slot-fallback" style="display:none">${initials}</div>
+          <span>${toy.name}</span>`;
         d.style.cursor = 'pointer';
         d.onclick = () => openPadModal(s);
       } else {
@@ -172,14 +210,127 @@ function renderPad() {
   });
 }
 
+// ── Status feedback (restored from original) ──────────────────
+function setStatus(msg, cls) {
+  const sl = document.getElementById('statusLine');
+  sl.textContent = msg; sl.className = cls || '';
+  if (cls === 'ok') setTimeout(() => { if (sl.textContent === msg) sl.textContent = ''; }, 3000);
+}
+
+// ── Keystone Glow (restored from original) ────────────────────
+const litTimestamps = { left:0, center:0, right:0 };
+
+function applyZoneGlow(zoneName) {
+  const now = Date.now();
+  litTimestamps[zoneName] = now;
+  const el = document.querySelector(`.pad-zone[data-zone="${zoneName}"]`);
+  if (!el) return;
+  el.classList.add('zone-lit');
+  el.classList.remove('zone-lit-sustain');
+}
+
+function decayGlow() {
+  const now = Date.now();
+  for (const [zone, ts] of Object.entries(litTimestamps)) {
+    if (!ts) continue;
+    const el = document.querySelector(`.pad-zone[data-zone="${zone}"]`);
+    if (!el) continue;
+    const age = now - ts;
+    if (age > 3000) {
+      el.classList.remove('zone-lit', 'zone-lit-sustain');
+      litTimestamps[zone] = 0;
+    } else if (age > 2000) {
+      el.classList.remove('zone-lit');
+      el.classList.add('zone-lit-sustain');
+    }
+  }
+}
+
+// LED socket handlers (1:1 Berny23 pattern — single array argument indexed like upstream)
+// Upstream emits: io.emit("event", [array]) → client receives single arg e; access via e[0], e[1], ...
+socket.on('Color One', (e) => {
+  // e = [pad, color]
+  const pad = e[0];
+  const zoneNames = ['','center','left','right'];
+  if (pad >= 1 && pad <= 3) applyZoneGlow(zoneNames[pad]);
+  updatePortalTelemetry();
+});
+socket.on('Color All', (e) => {
+  // e = [centerColor, leftColor, rightColor]  (CMD_COLALL)
+  // or e = [sameColor, sameColor, sameColor] (CMD_COL pad=0)
+  if (e[0]) applyZoneGlow('center');
+  if (e[1]) applyZoneGlow('left');
+  if (e[2]) applyZoneGlow('right');
+  updatePortalTelemetry();
+});
+socket.on('Fade One', (e) => {
+  // e = [pad, speed, cycles, color]
+  const pad = e[0];
+  const zoneNames = ['','center','left','right'];
+  if (pad >= 1 && pad <= 3) applyZoneGlow(zoneNames[pad]);
+  updatePortalTelemetry();
+});
+socket.on('Fade All', (e) => {
+  // e = [topSpeed, topCycles, topColor, leftSpeed, leftCycles, leftColor, rightSpeed, rightCycles, rightColor]
+  // per Berny23 original: center=e[2], left=e[5], right=e[8]
+  if (e[2]) applyZoneGlow('center');
+  if (e[5]) applyZoneGlow('left');
+  if (e[8]) applyZoneGlow('right');
+  updatePortalTelemetry();
+});
+
+function updatePortalTelemetry() {
+  const active = [];
+  const now = Date.now();
+  for (const [zone, ts] of Object.entries(litTimestamps))
+    if (ts && (now - ts) < 3000) active.push(zone.toUpperCase());
+  const el = document.getElementById('portalTelemetry');
+  el.textContent = active.length
+    ? `Portal lights inferred: ${active.join(', ')}`
+    : 'Portal lights: waiting for packet data...';
+}
+
 // ── Socket ────────────────────────────────────────────────────
 socket.on('Connection True', ()=>{
   document.getElementById('meta').textContent = 'Connected to PS3 ✓';
   document.getElementById('meta').style.color = '#3cc47c';
 });
-socket.on('refreshTokens', syncToyBox);
-socket.on('syncToyPad', syncToyBox);
+socket.on('refreshTokens', () => setTimeout(syncToyBox, 1000));
 
+// ── Image Sync (on-demand from UI) ────────────────────────────
+document.getElementById('syncImagesBtn').addEventListener('click', async () => {
+  const modal = document.getElementById('syncModal');
+  const progress = document.getElementById('syncProgress');
+  const bar = document.getElementById('syncBarFill');
+  modal.hidden = false; progress.textContent = 'Starting...'; bar.style.width = '0%';
+  try {
+    const res = await fetch('/api/sync-images', { method: 'POST' });
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      const lines = buf.split('\n');
+      buf = lines.pop();
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const d = JSON.parse(line);
+          progress.textContent = d.msg || d.status || line;
+          if (d.pct !== undefined) bar.style.width = d.pct + '%';
+        } catch { progress.textContent = line; }
+      }
+    }
+    progress.textContent = 'Sync complete.';
+    bar.style.width = '100%';
+  } catch(e) {
+    progress.textContent = 'Sync failed: ' + e.message;
+  }
+});
+
+// ── Helpers ───────────────────────────────────────────────────
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text)e.textContent=text;return e;}
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 init(); syncToyBox();

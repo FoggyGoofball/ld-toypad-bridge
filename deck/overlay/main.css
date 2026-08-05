@@ -1,7 +1,7 @@
-/* LD-ToyPad Bridge — Steam Deck optimized */
+/* LD-ToyPad Bridge — Steam Deck optimized (1:1 Berny23 parity) */
 :root { --bg:#0e1519; --panel:#162127; --text:#e8f0ed; --muted:#95a8a1; --accent:#3cc47c; --danger:#ff6b6b; --pad-bg:#1a2a31; }
 * { box-sizing:border-box; margin:0; padding:0; }
-body { font-family:"Segoe UI",Tahoma,sans-serif; background:var(--bg); color:var(--text); font-size:13px; }
+body { font-family:"Segoe UI",Tahoma,sans-serif; background:radial-gradient(circle at top right, #1f3138, var(--bg)); color:var(--text); font-size:13px; }
 .app { max-width:100%; padding:6px; }
 header { margin-bottom:4px; }
 header h1 { font-size:1.1rem; }
@@ -9,18 +9,51 @@ header h1 { font-size:1.1rem; }
 
 .panel { background:var(--panel); border:1px solid #2b3c44; border-radius:6px; padding:6px; margin-bottom:4px; }
 
-/* ── ToyPad ── */
+/* ── Sticky ToyPad (restored from original) ── */
+.zones-strip {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(22, 33, 39, 0.96);
+  backdrop-filter: blur(6px);
+}
+
+.portal-telemetry {
+  margin: 0 0 6px 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
 .toypad { display:flex; gap:4px; }
-.pad-zone { flex:1; background:var(--pad-bg); border-radius:4px; padding:4px; }
+.pad-zone { flex:1; background:var(--pad-bg); border-radius:4px; padding:4px; border:1px solid #2d4650; transition: box-shadow 0.3s, border-color 0.3s; }
 .pad-zone h3 { font-size:0.75rem; margin-bottom:2px; color:var(--muted); }
 .pad-slots { display:flex; flex-direction:column; gap:2px; min-height:36px; }
-.pad-slot { display:flex; align-items:center; gap:4px; padding:2px 4px; background:#0f1a1f; border-radius:3px; min-height:28px; font-size:0.7rem; }
+.pad-slot { display:flex; align-items:center; gap:4px; padding:2px 4px; background:#0f1a1f; border-radius:3px; border:1px solid #294149; min-height:28px; font-size:0.7rem; }
 .pad-slot img { width:24px; height:24px; object-fit:contain; border-radius:2px; }
 .pad-slot span { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.7rem; }
-.pad-remove { background:var(--danger); color:#fff; border:none; border-radius:3px; width:18px; height:18px; font-size:0.6rem; cursor:pointer; line-height:1; padding:0; }
+.pad-slot-fallback { width:24px; height:24px; display:flex; align-items:center; justify-content:center; background:#0f1b20; border-radius:2px; color:var(--muted); font-size:0.55rem; font-weight:700; }
 .empty-slot { color:var(--muted); font-size:0.65rem; }
 
-/* ── Toy Box ── */
+/* ── Keystone Glow (restored 1:1 from original) ── */
+@keyframes keystone-glow {
+  0%   { box-shadow: 0 0 6px 2px rgba(255, 204, 0, 0.25); border-color: #998200; }
+  50%  { box-shadow: 0 0 18px 6px rgba(255, 204, 0, 0.60); border-color: #ffcc00; }
+  100% { box-shadow: 0 0 6px 2px rgba(255, 204, 0, 0.25); border-color: #998200; }
+}
+.pad-zone.zone-lit {
+  animation: keystone-glow 1.5s ease-in-out infinite;
+  border-color: #ffcc00;
+}
+.pad-zone.zone-lit-sustain {
+  box-shadow: 0 0 10px 3px rgba(255, 204, 0, 0.30);
+  border-color: #998200;
+}
+
+/* ── Collapsible Toy Box ── */
+.toybox-toggle { cursor:pointer; user-select:none; }
+.toybox-toggle:hover { color:var(--accent); }
+.toybox-row.collapsed #toyboxWrap { display:none; }
+
 .toybox { display:flex; flex-wrap:wrap; gap:4px; min-height:24px; }
 .toybox-item { display:flex; align-items:center; gap:3px; background:var(--pad-bg); border:1px solid #2d4650; border-radius:4px; padding:2px 4px; cursor:pointer; color:var(--text); font-size:0.7rem; }
 .toybox-item:hover { border-color:var(--accent); }
@@ -30,20 +63,29 @@ header h1 { font-size:1.1rem; }
 /* ── Catalog ── */
 .row { margin-bottom:4px; }
 #toyFilter { width:100%; padding:4px 6px; background:var(--pad-bg); border:1px solid #2d4650; border-radius:4px; color:var(--text); font-size:0.8rem; }
+#statusLine { margin-bottom:4px; font-size:0.7rem; min-height:1em; }
+#statusLine.ok { color:var(--accent); }
+#statusLine.error { color:var(--danger); }
+#toyCount { color:var(--muted); font-size:0.7rem; }
 .tabs { display:flex; gap:6px; margin-bottom:4px; }
 .tab-row { display:flex; flex-wrap:wrap; gap:2px; }
 .tab-button { padding:2px 6px; background:var(--pad-bg); border:1px solid #2d4650; border-radius:3px; color:var(--muted); cursor:pointer; font-size:0.65rem; }
 .tab-button.active { background:var(--accent); color:#000; border-color:var(--accent); }
-.catalog-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(80px,1fr)); gap:3px; max-height:50vh; overflow-y:auto; }
-.toy-card { display:flex; flex-direction:column; align-items:center; background:var(--pad-bg); border:1px solid #2d4650; border-radius:4px; padding:3px; cursor:pointer; color:var(--text); font-size:0.6rem; text-align:center; }
+.catalog-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:4px; max-height:50vh; overflow-y:auto; }
+.toy-card { display:flex; flex-direction:column; align-items:center; background:var(--pad-bg); border:1px solid #2d4650; border-radius:6px; padding:4px; cursor:pointer; color:var(--text); font-size:0.65rem; text-align:center; }
 .toy-card:hover { border-color:var(--accent); }
-.toy-card img { width:40px; height:40px; object-fit:contain; border-radius:3px; margin-bottom:2px; }
+.toy-card img { width:80px; height:80px; object-fit:contain; border-radius:4px; margin-bottom:2px; }
+.toy-card .toy-card-fallback { width:80px; height:80px; display:flex; align-items:center; justify-content:center; background:#0f1b20; border-radius:4px; color:var(--muted); font-size:1.2rem; font-weight:700; margin-bottom:2px; }
 .toy-card span { line-height:1.1; word-break:break-word; }
 
 h2 { font-size:0.85rem; margin-bottom:3px; }
 
+/* ── Sync button ── */
+.sync-btn { padding:3px 8px; background:var(--pad-bg); border:1px solid #2d4650; border-radius:3px; color:var(--muted); cursor:pointer; font-size:0.65rem; }
+.sync-btn:hover { border-color:var(--accent); color:var(--accent); }
+
 /* ── Placement Modal ── */
-.modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:100; }
+.modal { position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); display:flex; align-items:center; justify-content:center; z-index:1000; }
 .modal[hidden] { display:none; }
 .modal-content { background:var(--panel); border:1px solid #2d4650; border-radius:8px; padding:16px; text-align:center; min-width:200px; }
 .modal-content p { margin-bottom:10px; font-size:0.9rem; }

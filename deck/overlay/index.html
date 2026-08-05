@@ -10,26 +10,36 @@
   <main class="app">
     <header><h1>LD-ToyPad Bridge</h1><p id="meta">Connecting to PS3...</p></header>
 
-    <section class="panel toypad-row">
+    <!-- Sticky ToyPad -->
+    <section class="panel toypad-row zones-strip">
+      <p id="portalTelemetry" class="portal-telemetry">Portal lights: waiting for packet data...</p>
       <div id="toypad" class="toypad">
-        <div class="pad-zone"><h3>Left</h3><div class="pad-slots" data-slots="1,4,5"></div></div>
-        <div class="pad-zone"><h3>Center</h3><div class="pad-slots" data-slots="2"></div></div>
-        <div class="pad-zone"><h3>Right</h3><div class="pad-slots" data-slots="3,6,7"></div></div>
+        <div class="pad-zone" data-zone="left"><h3>Left</h3><div class="pad-slots" data-slots="1,4,5"></div></div>
+        <div class="pad-zone" data-zone="center"><h3>Center</h3><div class="pad-slots" data-slots="2"></div></div>
+        <div class="pad-zone" data-zone="right"><h3>Right</h3><div class="pad-slots" data-slots="3,6,7"></div></div>
       </div>
     </section>
 
+    <!-- Collapsible Toy Box -->
     <section class="panel toybox-row">
-      <h2>Toy Box <span id="toyboxCount"></span></h2>
-      <div id="toybox" class="toybox"></div>
+      <h2 class="toybox-toggle" id="toyboxToggle">▶ Toy Box <span id="toyboxCount"></span></h2>
+      <div id="toyboxWrap">
+        <div id="toybox" class="toybox"></div>
+      </div>
     </section>
 
+    <!-- Catalog -->
     <section class="panel catalog-panel">
-      <h2>Catalog</h2>
-      <div class="row"><input id="toyFilter" type="search" placeholder="Search..."></div>
+      <h2>Catalog <span id="toyCount"></span></h2>
+      <div class="row"><input id="toyFilter" type="search" placeholder="Search by name, world, or id"></div>
       <div class="tabs"><div id="typeTabs" class="tab-row"></div><div id="worldTabs" class="tab-row"></div></div>
+      <p id="statusLine"></p>
+      <div class="row" style="text-align:right"><button id="syncImagesBtn" class="sync-btn">⬇ Sync Missing Images</button></div>
       <div id="catalog" class="catalog-grid"></div>
     </section>
   </main>
+
+  <!-- Place Modal -->
   <div id="placeModal" class="modal" hidden>
     <div class="modal-content">
       <p id="placeModalName"></p>
@@ -39,6 +49,8 @@
       <button class="cancel-btn" onclick="closePlaceModal()">Cancel</button>
     </div>
   </div>
+
+  <!-- Pad Modal -->
   <div id="padModal" class="modal" hidden>
     <div class="modal-content">
       <p id="padModalName"></p>
@@ -49,6 +61,17 @@
       <button class="cancel-btn" onclick="closePadModal()">Cancel</button>
     </div>
   </div>
+
+  <!-- Sync Progress Modal -->
+  <div id="syncModal" class="modal" hidden>
+    <div class="modal-content">
+      <p>Syncing images from Fandom wiki...</p>
+      <p id="syncProgress" style="font-size:0.8rem;color:var(--muted)">Starting...</p>
+      <div id="syncBar" style="width:100%;height:6px;background:var(--pad-bg);border-radius:3px;margin:8px 0;overflow:hidden"><div id="syncBarFill" style="width:0%;height:100%;background:var(--accent);border-radius:3px;transition:width 0.3s"></div></div>
+      <button class="cancel-btn" onclick="document.getElementById('syncModal').hidden=true">Close</button>
+    </div>
+  </div>
+
   <script src="/socket.io/socket.io.js"></script>
   <script src="/scripts/main.js"></script>
 </body>
