@@ -31,6 +31,26 @@ if steamos-readonly status 2>/dev/null | grep -q enabled; then
     steamos-readonly disable
 fi
 
+# ── Ensure base system deps (idempotent, runs once) ────────────
+ensure_base_deps() {
+    # pacman keyring (first-boot issue on vanilla Deck)
+    if ! pacman -Q pacman 2>/dev/null | grep -q pacman; then
+        pacman-key --init 2>/dev/null || true
+        pacman-key --populate archlinux 2>/dev/null || true
+    fi
+    # Python pip (needed for evdev in options 4/5)
+    if ! command -v pip &>/dev/null && ! python3 -m pip --version &>/dev/null 2>&1; then
+        echo "  Installing python-pip..."
+        pacman -Sy --noconfirm python-pip 2>/dev/null || true
+    fi
+    # BlueZ utilities (needed for btmgmt/bluetoothctl in options 4/5)
+    if ! command -v btmgmt &>/dev/null || ! command -v bluetoothctl &>/dev/null; then
+        echo "  Installing bluez-utils..."
+        pacman -Sy --noconfirm bluez-utils 2>/dev/null || true
+    fi
+}
+ensure_base_deps
+
 # ── Display menu ───────────────────────────────────────────────
 show_menu() {
     clear
