@@ -134,13 +134,20 @@ async function placeOnZone(zone) {
   closePlaceModal();
   const slots = PAD[zone];
   let target = slots.find(s => !padSlots[s]);
+
   if (target === undefined) {
+    // Zone is full — FIFO evict oldest toy to Toy Box
     target = PLACE_ORDER[zone].shift();
-    if (target !== undefined && padSlots[target])
-      await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:target,uid:padSlots[target].uid})});
+    if (target !== undefined && padSlots[target]) {
+      const evicted = padSlots[target];
+      await fetch('/remove',{method:'DELETE',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:target,uid:evicted.uid})});
+      // Mark slot empty locally so find() picks it up below
+      padSlots[target] = null;
+      setStatus(`↻ ${evicted.name} moved to Toy Box (zone full)`, 'ok');
+    }
     target = slots.find(s => !padSlots[s]) || slots[0];
   }
-  // 🔴 FIXED: use ZONE_TO_POSITION mapping (was hardcoded position:1)
+
   try {
     await fetch('/place',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({uid:tb.uid,id:tb.id,position:ZONE_TO_POSITION[zone],index:target})});
     setStatus(`Placed ${tb.name} on ${zone.toUpperCase()}`, 'ok');
