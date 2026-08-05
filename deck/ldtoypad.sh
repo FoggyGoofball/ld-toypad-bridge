@@ -15,7 +15,7 @@
 set -e  # exit on error (except menu reads — those use /dev/tty)
 
 DECK_HOME="/home/deck"
-GITHUB_BASE="https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/v9.2.3/deck"
+GITHUB_BASE="https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/v9.3.4/deck"
 LOCAL_DIR="/tmp/ldtoypad"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 BOLD='\033[1m'
@@ -23,15 +23,18 @@ BOLD='\033[1m'
 # ── Pre-download all scripts to a fixed temp directory ─────────
 # This avoids the curl|bash SCRIPT_DIR cascade problem entirely.
 # All scripts live in $LOCAL_DIR with known absolute paths.
-mkdir -p "$LOCAL_DIR"
+# Cache with version stamp — re-download if version changed
+VERSION_STAMP="$LOCAL_DIR/.version"
+EXPECTED_VERSION="v9.3.4"
+if [ ! -f "$VERSION_STAMP" ] || [ "$(cat "$VERSION_STAMP")" != "$EXPECTED_VERSION" ]; then
+    echo "  Downloading scripts ($EXPECTED_VERSION)..."
+    rm -rf "$LOCAL_DIR"
+    mkdir -p "$LOCAL_DIR"
+fi
 fetch() {
     local name="$1"; local dest="$LOCAL_DIR/$name"
     if [ ! -f "$dest" ]; then
-        echo "  Downloading $name..."
-        curl -sSLf "$GITHUB_BASE/$name" -o "$dest" || {
-            echo "  ERROR: Failed to download $name from $GITHUB_BASE/$name"
-            exit 1
-        }
+        curl -sSLf "$GITHUB_BASE/$name" -o "$dest" || { echo "  ERROR: Failed to download $name"; exit 1; }
         chmod +x "$dest"
     fi
 }
@@ -42,6 +45,7 @@ fetch ds3-pair-daemon.c
 fetch bt-connect-ds3.sh
 fetch ds3-gamepad-daemon.py
 fetch run-ui-sync-ds3.sh
+echo "$EXPECTED_VERSION" > "$VERSION_STAMP"
 echo ""
 
 # Ensure root
