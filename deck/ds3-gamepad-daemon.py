@@ -3,8 +3,9 @@
 ds3-gamepad-daemon.py — Steam Deck evdev → DualShock 3 Bluetooth HID
 
 Reads Steam Deck hardware inputs (buttons, joysticks, gyro) via evdev and
-translates them to 49-byte DS3 HID reports.  Sends reports over Bluetooth
-to a previously-paired PS3 (via /dev/hidg1 or directly via L2CAP).
+translates them to 49-byte DS3 HID reports.  Sends reports over raw L2CAP
+Bluetooth sockets (PSM 0x11 control + PSM 0x13 interrupt) to a previously
+FFS-paired PS3.  No BlueZ profiles, no /dev/hidg*, no bluetoothctl.
 
 TOGGLE MODE (L4 + R4):
   - gamepad.grab()   → Deck controls go to PS3 (Desktop cursor locked)
@@ -15,23 +16,25 @@ Usage:
 
 Prerequisites:
   pip install evdev
-  Option 3 (pair DS3) must have been run first.
+  ds3-pair-daemon (FFS pairing) must have been run first.
+  bt-connect-ds3.sh (MAC spoof) must have been run first.
 """
 
 import evdev
-import struct
+import socket
 import time
 import threading
 import os
 import json
-import subprocess
 import sys
-from evdev import InputDevice, ecodes, categorize
+from evdev import InputDevice, ecodes
 
 # ── Configuration ───────────────────────────────────────────────
 PAIRING_FILE = os.path.expanduser("~/.config/ld-toypad/ds3-pairing.json")
-BT_DEVICE = "/dev/hidg1"    # Bluetooth HID gadget device (if using configfs BT HID)
-                            # Set to None to use raw L2CAP socket instead
+
+# L2CAP PSMs for DS3 HID
+PSM_CTRL = 17  # 0x11 — Control channel
+PSM_INTR = 19  # 0x13 — Interrupt channel (HID reports)
 
 # Steam Deck evdev device paths — auto-detected if empty
 PAD_PATH = ""
@@ -229,30 +232,55 @@ def main():
     gamepad = InputDevice(PAD_PATH)
     print(f"  Device:  {gamepad.name}")
 
-    # State
+    # ── L2CAP Bluetooth Connection ──────────────────────────────
+    # Expert confirmed: bluetoothctl and /dev/hidg1 won't work.
+    # PS3 is a passive listener — the controller must initiate raw
+    # L2CAP connections on PSM 0x11 (control) and 0x13 (interrupt).
+    # FFS pairing already registered our MAC → PS3 trusts us.
+
+    # Load pairing data
+    if not os.path.exists(PAIRING_FILE):
+        print("ERROR: Pairing data not found. Run ds3-pair-daemon first.")
+        sys.exit(1)
+    with open(PAIRING_FILE, 'r') as f:
+        pairing = json.load(f)
+
+    PS3_MAC = pairing['ps3_bt_mac']
+    print(f"  PS3 MAC:  {PS3_MAC}")
+
+    sock_ctrl = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_SEQPACKET, socket.BTPROTO_L2CAP)
+    sock_intr = socket.socket(socket.AF_BLUETOOTH, socket.SOCK_SEQPACKET, socket.BTPROTO_L2CAP)
+
+    try:
+        sock_ctrl.connect((PS3_MAC, PSM_CTRL))
+        sock_intr.connect((PS3_MAC, PSM_INTR))
+        print("  L2CAP HID Channels: Connected ✓")
+    except Exception as e:
+        print(f"  L2CAP connection failed: {e}")
+        print("  Ensure: bt-connect-ds3.sh was run (MAC spoofed), PS3 is on, in range.")
+        sys.exit(1)
+
+    # ── State ───────────────────────────────────────────────────
     state = DS3State()
     is_ps3_mode = False
     l4_pressed = False
     r4_pressed = False
 
-    # ── Write thread ────────────────────────────────────────────
+    # ── Write thread (L2CAP — 0xA1 HID header, 100Hz) ──────────
     def write_loop():
-        """Stream DS3 reports to Bluetooth HID device at ~125Hz."""
-        if BT_DEVICE and os.path.exists(BT_DEVICE):
-            fd = open(BT_DEVICE, "wb")
-        else:
-            print("  No BT HID device. Reports not sent (debug mode).")
-            fd = None
-
-        try:
-            while True:
-                if fd:
-                    fd.write(state.bytes())
-                    fd.flush()
-                time.sleep(0.008)  # ~125Hz
-        finally:
-            if fd:
-                fd.close()
+        """Stream DS3 reports over raw L2CAP interrupt channel at 100Hz.
+        Bluetooth HID REQUIRES a 0xA1 header byte (DATA | INPUT) that
+        USB does not need. Total payload = 50 bytes (0xA1 + 49-byte report).
+        Expert confirmed: 100Hz (0.01s) matches PS3 Bluetooth timing."""
+        while True:
+            # 0xA1 = HID Data | Input report type
+            bt_payload = bytearray([0xA1]) + state.data
+            try:
+                sock_intr.send(bytes(bt_payload))
+            except Exception as e:
+                print(f"  L2CAP send failed: {e}")
+                break
+            time.sleep(0.01)  # 100Hz (expert confirmed correct for PS3 BT)
 
     threading.Thread(target=write_loop, daemon=True).start()
 
