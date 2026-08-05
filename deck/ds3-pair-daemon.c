@@ -488,27 +488,31 @@ int main(int argc, char **argv) {
     get_deck_bt_mac(deck_mac);
     printf("Deck BT MAC: %02X:%02X:%02X:%02X:%02X:%02X\n",
            deck_mac[0], deck_mac[1], deck_mac[2], deck_mac[3], deck_mac[4], deck_mac[5]);
+    fflush(stdout);
 
     /* Set MAC in feature reports */
     memcpy(&report_f2[4], deck_mac, 6);
     memcpy(&report_f5[2], deck_mac, 6);
 
     /* Setup ConfigFS + FunctionFS */
-    printf("Setting up USB gadget...\n");
+    printf("Step 1/5: Setting up ConfigFS gadget...\n"); fflush(stdout);
     setup_configfs();
+    printf("Step 2/5: Opening FFS ep0...\n"); fflush(stdout);
 
     /* Open FFS ep0 */
     g_ep0_fd = open(FFS_MOUNT "/ep0", O_RDWR);
     if (g_ep0_fd < 0) { perror("open ep0"); teardown_configfs(); return 1; }
+    printf("Step 3/5: Writing descriptors...\n"); fflush(stdout);
 
     /* Write descriptors */
     write(g_ep0_fd, &ffs_descriptors, sizeof(ffs_descriptors));
     write(g_ep0_fd, &ffs_strings, sizeof(ffs_strings));
 
     /* Bind to UDC */
+    printf("Step 4/5: Finding UDC...\n"); fflush(stdout);
     char *udc = find_udc();
     if (!udc) { fprintf(stderr, "No UDC found!\n"); teardown_configfs(); return 1; }
-    printf("Binding to UDC: %s\n", udc);
+    printf("Step 5/5: Binding to UDC: %s\n", udc); fflush(stdout);
 
     char udc_path[256];
     snprintf(udc_path, sizeof(udc_path), "%s/UDC", GADGET_DIR);
@@ -520,14 +524,15 @@ int main(int argc, char **argv) {
     pthread_create(&in_tid, NULL, input_thread, NULL);
 
     printf("\n========================================\n");
-    printf("  DS3 Pairing Daemon v9.3.4\n");
+    printf("  DS3 Pairing Daemon v9.3.6\n");
     printf("  Descriptor size: %zu bytes\n", sizeof(ffs_descriptors));
     printf("  Plug USB-C cable into PS3 now.\n");
     printf("  Ctrl+C to exit.\n");
     printf("========================================\n\n");
+    fflush(stdout);
 
     /* Wait for FFS_ENABLE (gadget bound to UDC and PS3 enumerated it) */
-    printf("Waiting for PS3 to enumerate device...\n");
+    printf("Waiting for PS3 to enumerate device...\n"); fflush(stdout);
     time_t start = time(NULL);
     while (g_running && !g_usb_enabled && (time(NULL) - start) < 30) {
         usleep(200000);
