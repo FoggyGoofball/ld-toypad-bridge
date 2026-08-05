@@ -16,8 +16,18 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DECK_HOME="/home/deck"
+GITHUB_BASE="https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/v9.2/deck"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 BOLD='\033[1m'
+
+# When piped from curl, sibling scripts don't exist locally. Download to /tmp.
+dl() {
+    local name="$1"
+    if [ -f "$SCRIPT_DIR/$name" ]; then echo "$SCRIPT_DIR/$name"; return; fi
+    local p="/tmp/ldtoypad-$name"
+    if [ ! -f "$p" ]; then echo "  Fetching $name..."; curl -sSL "$GITHUB_BASE/$name" -o "$p"; chmod +x "$p"; fi
+    echo "$p"
+}
 
 # Ensure root
 if [ "$EUID" -ne 0 ]; then
@@ -87,7 +97,7 @@ opt_vanilla() {
     echo "  UI:  Upstream Berny23 (jQuery, drag-and-drop)"
     echo "  URL: http://localhost"
     echo ""
-    exec bash "$SCRIPT_DIR/run.sh"
+    exec bash "$(dl run.sh)"
 }
 
 opt_custom_ui() {
@@ -96,7 +106,7 @@ opt_custom_ui() {
     echo "  UI:  LD-ToyPad Bridge overlay (vanilla JS, touch-optimized)"
     echo "  URL: http://localhost"
     echo ""
-    exec bash "$SCRIPT_DIR/run-ui.sh"
+    exec bash "$(dl run-ui.sh)"
 }
 
 opt_pair_ds3() {
@@ -125,9 +135,10 @@ opt_pair_ds3() {
         pacman -Sy --noconfirm gcc 2>/dev/null
     fi
 
-    # Compile daemon
+    # Compile daemon (fetch source if piped from curl)
+    local daemon_c="$(dl ds3-pair-daemon.c)"
     echo "  Compiling ds3-pair-daemon..."
-    gcc -Wall -O2 -o /tmp/ds3-pair-daemon "$SCRIPT_DIR/ds3-pair-daemon.c"
+    gcc -Wall -O2 -o /tmp/ds3-pair-daemon "$daemon_c"
 
     echo ""
     echo -e "  ${YELLOW}╔══════════════════════════════════════════════╗${NC}"
@@ -168,7 +179,7 @@ opt_gamepad_spoof() {
 
     # 1. Connect Bluetooth
     echo "  Connecting Bluetooth..."
-    bash "$SCRIPT_DIR/bt-connect-ds3.sh"
+    bash "$(dl bt-connect-ds3.sh)"
     local bt_ret=$?
     if [ $bt_ret -ne 0 ]; then
         echo -e "  ${RED}Bluetooth connection failed.${NC}"
@@ -189,7 +200,7 @@ opt_gamepad_spoof() {
     echo "  Hotkey: L4 + R4 to toggle between PS3 mode and Desktop mode."
     echo "  Press Ctrl+C to stop."
     echo ""
-    exec python3 "$SCRIPT_DIR/ds3-gamepad-daemon.py"
+    exec python3 "$(dl ds3-gamepad-daemon.py)"
 }
 
 opt_custom_ds3() {
@@ -209,7 +220,7 @@ opt_custom_ds3() {
         return
     fi
 
-    exec bash "$SCRIPT_DIR/run-ui-sync-ds3.sh"
+    exec bash "$(dl run-ui-sync-ds3.sh)"
 }
 
 # ── Main loop ──────────────────────────────────────────────────
