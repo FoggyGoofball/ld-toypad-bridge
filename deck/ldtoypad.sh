@@ -3,31 +3,46 @@
 # ldtoypad.sh — LD-ToyPad Bridge Unified Launcher
 # =============================================================================
 # Presents a menu to choose:
-#   1. Start vanilla Berny23             (run.sh — upstream UI, single ToyPad)
-#   2. Start Berny23 with custom UI      (run-ui.sh — our overlay, single ToyPad)
-#   3. Pair Steam Deck as DS3 controller (FFS daemon — one-time Bluetooth setup)
-#   4. Start DS3 gamepad spoof           (Bluetooth DS3 + evdev→HID daemon)
-#   5. Custom UI + DS3 controller        (run-ui-sync-ds3.sh — ToyPad + wireless DS3)
+#   1. Start vanilla Berny23             (run.sh)
+#   2. Start Berny23 with custom UI      (run-ui.sh)
+#   3. Pair Steam Deck as DS3 controller (FFS daemon)
+#   4. Start DS3 gamepad spoof           (Bluetooth DS3 + evdev daemon)
+#   5. Custom UI + DS3 controller        (run-ui-sync-ds3.sh)
 #
 # Usage:
-#   sudo ./ldtoypad.sh
+#   curl -sSL https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/v9.2.3/deck/ldtoypad.sh | sudo bash
 # =============================================================================
 set -e
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DECK_HOME="/home/deck"
-GITHUB_BASE="https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/v9.2.2/deck"
+GITHUB_BASE="https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/v9.2.3/deck"
+LOCAL_DIR="/tmp/ldtoypad"
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 BOLD='\033[1m'
 
-# When piped from curl, sibling scripts don't exist locally. Download to /tmp.
-dl() {
-    local name="$1"
-    if [ -f "$SCRIPT_DIR/$name" ]; then echo "$SCRIPT_DIR/$name"; return; fi
-    local p="/tmp/ldtoypad-$name"
-    if [ ! -f "$p" ]; then echo "  Fetching $name..."; curl -sSL "$GITHUB_BASE/$name" -o "$p"; chmod +x "$p"; fi
-    echo "$p"
+# ── Pre-download all scripts to a fixed temp directory ─────────
+# This avoids the curl|bash SCRIPT_DIR cascade problem entirely.
+# All scripts live in $LOCAL_DIR with known absolute paths.
+mkdir -p "$LOCAL_DIR"
+fetch() {
+    local name="$1"; local dest="$LOCAL_DIR/$name"
+    if [ ! -f "$dest" ]; then
+        echo "  Downloading $name..."
+        curl -sSLf "$GITHUB_BASE/$name" -o "$dest" || {
+            echo "  ERROR: Failed to download $name from $GITHUB_BASE/$name"
+            exit 1
+        }
+        chmod +x "$dest"
+    fi
 }
+echo "  Checking scripts..."
+fetch run.sh
+fetch run-ui.sh
+fetch ds3-pair-daemon.c
+fetch bt-connect-ds3.sh
+fetch ds3-gamepad-daemon.py
+fetch run-ui-sync-ds3.sh
+echo ""
 
 # Ensure root
 if [ "$EUID" -ne 0 ]; then
@@ -97,7 +112,7 @@ opt_vanilla() {
     echo "  UI:  Upstream Berny23 (jQuery, drag-and-drop)"
     echo "  URL: http://localhost"
     echo ""
-    exec bash "$(dl run.sh)"
+    exec bash "$LOCAL_DIR/run.sh"
 }
 
 opt_custom_ui() {
@@ -106,7 +121,7 @@ opt_custom_ui() {
     echo "  UI:  LD-ToyPad Bridge overlay (vanilla JS, touch-optimized)"
     echo "  URL: http://localhost"
     echo ""
-    exec bash "$(dl run-ui.sh)"
+    exec bash "$LOCAL_DIR/run-ui.sh"
 }
 
 opt_pair_ds3() {
@@ -136,9 +151,7 @@ opt_pair_ds3() {
     fi
 
     # Compile daemon (fetch source if piped from curl)
-    local daemon_c="$(dl ds3-pair-daemon.c)"
-    echo "  Compiling ds3-pair-daemon..."
-    gcc -Wall -O2 -o /tmp/ds3-pair-daemon "$daemon_c"
+    gcc -Wall -O2 -o /tmp/ds3-pair-daemon "$LOCAL_DIR/ds3-pair-daemon.c"
 
     echo ""
     echo -e "  ${YELLOW}╔══════════════════════════════════════════════╗${NC}"
@@ -179,7 +192,7 @@ opt_gamepad_spoof() {
 
     # 1. Connect Bluetooth
     echo "  Connecting Bluetooth..."
-    bash "$(dl bt-connect-ds3.sh)"
+    bash "$LOCAL_DIR/bt-connect-ds3.sh"
     local bt_ret=$?
     if [ $bt_ret -ne 0 ]; then
         echo -e "  ${RED}Bluetooth connection failed.${NC}"
@@ -200,7 +213,7 @@ opt_gamepad_spoof() {
     echo "  Hotkey: L4 + R4 to toggle between PS3 mode and Desktop mode."
     echo "  Press Ctrl+C to stop."
     echo ""
-    exec python3 "$(dl ds3-gamepad-daemon.py)"
+    exec python3 "$LOCAL_DIR/ds3-gamepad-daemon.py"
 }
 
 opt_custom_ds3() {
@@ -220,7 +233,7 @@ opt_custom_ds3() {
         return
     fi
 
-    exec bash "$(dl run-ui-sync-ds3.sh)"
+    exec bash "$LOCAL_DIR/run-ui-sync-ds3.sh"
 }
 
 # ── Main loop ──────────────────────────────────────────────────
