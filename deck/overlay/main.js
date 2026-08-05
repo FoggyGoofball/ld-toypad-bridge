@@ -95,6 +95,7 @@ async function createToy(toy) {
   try {
     await api('POST', ep, { id: toy.id });
     setStatus(`Created ${safeName(toy)}`, 'ok');
+    socket.emit('syncToyPad'); // Berny23 parity — server re-syncs after create
     setTimeout(syncToyBox, 500);
   } catch(e) { setStatus(`Create failed: ${e.message}`, 'error'); }
 }
@@ -219,10 +220,24 @@ async function removeFromPad() {
   closePadModal(); setTimeout(syncToyBox, 300);
 }
 
+async function deleteToken() {
+  const slot = pendingSlot; if (!slot || !padSlots[slot]) return;
+  const name = safeName(padSlots[slot]);
+  const uid = padSlots[slot].uid;
+  if (!confirm(`Permanently delete ${name}? This cannot be undone.`)) return;
+  try {
+    await api('DELETE', '/remove', { index: slot, uid });
+    socket.emit('deleteToken', uid); // Berny23 parity — permanently remove from toytags.json
+    setStatus(`Deleted ${name}`, 'ok');
+  } catch(e) { setStatus(`Delete failed: ${e.message}`, 'error'); }
+  closePadModal(); setTimeout(syncToyBox, 500);
+}
+
 document.querySelectorAll('#padModal .place-btn').forEach(b => {
   b.onclick = () => moveFromPad(b.dataset.zone);
 });
 document.querySelector('#padModal .remove-btn').onclick = removeFromPad;
+document.querySelector('#padModal .delete-btn').onclick = deleteToken;
 
 // ── ToyPad ────────────────────────────────────────────────────
 function renderPad() {
@@ -275,14 +290,43 @@ function decayGlow() {
   }
 }
 
-// ── LED Socket Handlers (guarded against malformed events) ────
+// ── LED Socket Handlers (1:1 Berny23 parity — actual hex colors on pad zones) ──
+const zoneColorCache = { center: '#ffffff', left: '#ffffff', right: '#ffffff' };
+function setZoneColor(zone, hex) {
+  if (!hex) return;
+  zoneColorCache[zone] = hex;
+  const el = document.querySelector(`.pad-zone[data-zone="${zone}"]`);
+  if (!el) return;
+  el.style.backgroundColor = hex + '40';
+  el.style.borderColor = hex;
+  el.setAttribute('color', hex);
+  applyZoneGlow(zone);
+}
+function fadeZoneColor(zone, hex, speedMs) {
+  if (!hex) return;
+  const el = document.querySelector(`.pad-zone[data-zone="${zone}"]`);
+  if (!el) return;
+  const prevColor = el.getAttribute('color') || zoneColorCache[zone] || '#ffffff';
+  el.style.backgroundColor = hex + '40';
+  el.style.borderColor = hex;
+  el.setAttribute('color', hex);
+  setTimeout(() => {
+    el.style.backgroundColor = prevColor + '40';
+    el.style.borderColor = prevColor;
+    el.setAttribute('color', prevColor);
+  }, speedMs * 100);
+}
 function handleLED(e, handler) {
   try { if (Array.isArray(e)) handler(e); } catch(ex) { /* silently ignore malformed LED events */ }
 }
-socket.on('Color One', (e) => handleLED(e, (e)=>{ if(e[0]>=1&&e[0]<=3) applyZoneGlow(['','center','left','right'][e[0]]); updatePortalTelemetry(); }));
-socket.on('Color All', (e) => handleLED(e, (e)=>{ if(e[0])applyZoneGlow('center'); if(e[1])applyZoneGlow('left'); if(e[2])applyZoneGlow('right'); updatePortalTelemetry(); }));
-socket.on('Fade One', (e) => handleLED(e, (e)=>{ if(e[0]>=1&&e[0]<=3) applyZoneGlow(['','center','left','right'][e[0]]); updatePortalTelemetry(); }));
-socket.on('Fade All', (e) => handleLED(e, (e)=>{ if(e[2])applyZoneGlow('center'); if(e[5])applyZoneGlow('left'); if(e[8])applyZoneGlow('right'); updatePortalTelemetry(); }));
+// Color One: [padNumber, colorHex] — pad 1=center, 2=left, 3=right (Berny23 convention)
+socket.on('Color One', (e) => handleLED(e, (e)=>{ if(e[0]>=1&&e[0]<=3) setZoneColor(['','center','left','right'][e[0]], e[1]); updatePortalTelemetry(); }));
+// Color All: [centerColor, leftColor, rightColor]
+socket.on('Color All', (e) => handleLED(e, (e)=>{ if(e[0])setZoneColor('center',e[0]); if(e[1])setZoneColor('left',e[1]); if(e[2])setZoneColor('right',e[2]); updatePortalTelemetry(); }));
+// Fade One: [padNumber, speed, cycles, colorHex]
+socket.on('Fade One', (e) => handleLED(e, (e)=>{ if(e[0]>=1&&e[0]<=3) fadeZoneColor(['','center','left','right'][e[0]], e[3], e[1]||1); updatePortalTelemetry(); }));
+// Fade All: [topSpeed, topCycles, topColor, leftSpeed, leftCycles, leftColor, rightSpeed, rightCycles, rightColor]
+socket.on('Fade All', (e) => handleLED(e, (e)=>{ if(e[2])fadeZoneColor('center',e[2],e[0]||1); if(e[5])fadeZoneColor('left',e[5],e[3]||1); if(e[8])fadeZoneColor('right',e[8],e[6]||1); updatePortalTelemetry(); }));
 
 function updatePortalTelemetry() {
   const active = [], now = Date.now();
@@ -334,6 +378,13 @@ document.getElementById('syncImagesBtn').addEventListener('click', async () => {
     progress.textContent = 'Sync complete.'; bar.style.width = '100%';
   } catch(e) { progress.textContent = `Sync failed: ${e.message}`; }
   finally { syncRunning = false; btn.disabled = false; btn.textContent = '⬇ Sync Missing Images'; }
+});
+
+// ── Sync Button ──────────────────────────────────────────────────
+document.getElementById('syncBtn').addEventListener('click', () => {
+  socket.emit('syncToyPad');
+  setStatus('Syncing...', 'ok');
+  setTimeout(syncToyBox, 500);
 });
 
 // ── Start ─────────────────────────────────────────────────────

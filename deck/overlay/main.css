@@ -93,3 +93,4 @@ h2 { font-size:0.85rem; margin-bottom:3px; }
 .place-btn:hover { background:var(--accent); color:#000; }
 .cancel-btn { display:block; width:100%; padding:8px; margin-top:8px; background:transparent; border:1px solid #444; border-radius:6px; color:var(--muted); font-size:0.8rem; cursor:pointer; }
 .remove-btn { display:block; width:100%; padding:10px; margin:6px 0; background:var(--danger); border:none; border-radius:6px; color:#fff; font-size:1rem; cursor:pointer; }
+.delete-btn { display:block; width:100%; padding:10px; margin:6px 0; background:#b71c1c; border:none; border-radius:6px; color:#fff; font-size:1rem; cursor:pointer; }

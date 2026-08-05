@@ -30,7 +30,9 @@
 
     <!-- Catalog -->
     <section class="panel catalog-panel">
-      <h2>Catalog <span id="toyCount"></span></h2>
+      <h2>Catalog <span id="toyCount"></span>
+        <button id="syncBtn" class="sync-btn" style="margin-left:8px" title="Resync Toy Pad state">🔄 Sync</button>
+      </h2>
       <div class="row"><input id="toyFilter" type="search" placeholder="Search by name, world, or id"></div>
       <div class="tabs"><div id="typeTabs" class="tab-row"></div><div id="worldTabs" class="tab-row"></div></div>
       <p id="statusLine"></p>
@@ -58,6 +60,7 @@
       <button class="place-btn" data-zone="center">⬆ Move Center</button>
       <button class="place-btn" data-zone="right">➡ Move Right</button>
       <button class="remove-btn">✕ Remove from Pad</button>
+      <button class="delete-btn">🗑 Delete Token</button>
       <button class="cancel-btn" onclick="closePadModal()">Cancel</button>
     </div>
   </div>
