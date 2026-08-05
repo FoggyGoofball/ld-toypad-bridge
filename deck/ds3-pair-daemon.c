@@ -380,14 +380,14 @@ static void *control_thread(void *arg) {
 
         switch (event.type) {
         case FUNCTIONFS_SETUP: {
-            uint8_t  bmRequestType = event.u.setup.bmRequestType;
+            uint8_t  __attribute__((unused)) bmRequestType = event.u.setup.bRequestType;
             uint8_t  bRequest      = event.u.setup.bRequest;
             uint16_t wValue        = event.u.setup.wValue;
             uint16_t wLength       = event.u.setup.wLength;
             uint8_t  report_id     = wValue & 0xFF;
 
-            printf("  ep0: bmReq=0x%02X bReq=0x%02X wVal=0x%04X wLen=%u\n",
-                   bmRequestType, bRequest, wValue, wLength);
+            printf("  ep0: bReq=0x%02X wVal=0x%04X wLen=%u\n",
+                   bRequest, wValue, wLength);
 
             if (bRequest == 0x0A) {
                 /* SET_IDLE — ACK */
