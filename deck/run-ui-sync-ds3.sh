@@ -28,6 +28,16 @@ DECK_HOME=/home/deck
 BERNY_DIR="$DECK_HOME/LD-ToyPad-Emulator-ui"
 OVERLAY_BASE="https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/main/deck/overlay"
 SCRIPTS_BASE="https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/main/deck"
+
+# When piped from curl, sibling scripts don't exist locally
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+dl() {
+    local name="$1"
+    if [ -f "$SCRIPT_DIR/$name" ]; then echo "$SCRIPT_DIR/$name"; return; fi
+    local p="/tmp/ldtoypad-$name"
+    if [ ! -f "$p" ]; then curl -sSL "$SCRIPTS_BASE/$name" -o "$p"; chmod +x "$p"; fi
+    echo "$p"
+}
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
 
 # ── Parse mode ──────────────────────────────────────────────────
@@ -114,7 +124,7 @@ if [ -f "$PAIRING_FILE" ]; then
     echo -e "${YELLOW}[$BT_STEP/5] Bluetooth DS3 connection...${NC}"
     # Auto-connect to PS3 as wireless DS3 (expert confirmed: Deck initiates L2CAP)
     if command -v btmgmt &>/dev/null && command -v bluetoothctl &>/dev/null; then
-        bash "$(dirname "$0")/bt-connect-ds3.sh" 2>/dev/null && \
+        bash "$(dl bt-connect-ds3.sh)" 2>/dev/null && \
             echo -e "  ${GREEN}Wireless DS3 connected${NC}" || \
             echo -e "  ${YELLOW}BT connection skipped (PS3 may be off)${NC}"
     else
