@@ -12,7 +12,7 @@
 # Usage:
 #   curl -sSL https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/v9.2.3/deck/ldtoypad.sh | sudo bash
 # =============================================================================
-set -e
+set -e  # exit on error (except menu reads — those use /dev/tty)
 
 DECK_HOME="/home/deck"
 GITHUB_BASE="https://raw.githubusercontent.com/FoggyGoofball/ld-toypad-bridge/v9.2.3/deck"
@@ -137,7 +137,7 @@ opt_pair_ds3() {
         echo "    PS3 BT:  $(grep -oP '"ps3_bt_mac":\s*"\K[^"]+' "$PAIRING_FILE")"
         echo ""
         echo -ne "  Re-pair? This will overwrite existing pairing. [y/N]: "
-        read -r confirm
+        read -r confirm < /dev/tty
         if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
             echo "  Skipped."
             return
@@ -172,7 +172,7 @@ opt_pair_ds3() {
 
     echo ""
     echo -ne "  Press Enter to return to menu..."
-    read -r
+    read -r < /dev/tty
 }
 
 opt_gamepad_spoof() {
@@ -186,7 +186,7 @@ opt_gamepad_spoof() {
         echo -e "  ${RED}No pairing data found.${NC}"
         echo "  Run option 3 first to pair with PS3."
         echo -ne "  Press Enter to return to menu..."
-        read -r
+        read -r < /dev/tty
         return
     fi
 
@@ -197,7 +197,7 @@ opt_gamepad_spoof() {
     if [ $bt_ret -ne 0 ]; then
         echo -e "  ${RED}Bluetooth connection failed.${NC}"
         echo -ne "  Press Enter to return to menu..."
-        read -r
+        read -r < /dev/tty
         return
     fi
 
@@ -229,7 +229,7 @@ opt_custom_ds3() {
         echo -e "  ${RED}No pairing data found.${NC}"
         echo "  Run option 3 first to pair with PS3."
         echo -ne "  Press Enter to return to menu..."
-        read -r
+        read -r < /dev/tty
         return
     fi
 
@@ -239,7 +239,7 @@ opt_custom_ds3() {
 # ── Main loop ──────────────────────────────────────────────────
 while true; do
     show_menu
-    read -r choice
+    read -r choice < /dev/tty
 
     case "$choice" in
         1) opt_vanilla ;;
@@ -248,6 +248,6 @@ while true; do
         4) opt_gamepad_spoof ;;
         5) opt_custom_ds3 ;;
         0) echo -e "\n${GREEN}Goodbye.${NC}"; exit 0 ;;
-        *) echo -e "${RED}Invalid choice. Press Enter...${NC}"; read -r ;;
+        *) echo -e "${RED}Invalid choice. Press Enter...${NC}"; read -r < /dev/tty ;;
     esac
 done
